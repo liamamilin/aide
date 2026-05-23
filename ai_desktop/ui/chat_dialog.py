@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
+    QSizeGrip,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -20,6 +21,7 @@ from PyQt5.QtWidgets import (
 from ai_desktop import config
 from ai_desktop.config import Agent
 from ai_desktop.ui import markdown, styles
+from ai_desktop.ui.float_button import pin_to_all_spaces
 
 
 class ChatDialog(QWidget):
@@ -30,13 +32,16 @@ class ChatDialog(QWidget):
     closed = pyqtSignal()
 
     def __init__(self, agents: list[Agent], active_agent: Agent,
-                 models: list[str] | None = None, active_model: str = "", parent=None):
+                 models: list[str] | None = None, active_model: str = "",
+                 auto_hide: bool = False, parent=None):
         super().__init__(parent)
         self._agents = agents
         self._active_agent = active_agent
+        self._auto_hide = auto_hide
         self._models = models or [active_model] if active_model else []
         self._active_model = active_model
         self._drag_pos: QPoint | None = None
+        self._user_scrolled_up: bool = False  # 用户手动滚离底部时暂停自动跟随
         self._stream_bubble: QLabel | None = None  # 当前流式输出的气泡
         self._stream_text: str = ""
         self._stream_buffer: str = ""               # 积攒的回复 token
@@ -119,16 +124,17 @@ class ChatDialog(QWidget):
         # 模型选择
         self._model_combo = QComboBox()
         self._model_combo.setFixedHeight(28)
-        self._model_combo.setMinimumWidth(110)
+        self._model_combo.setMinimumWidth(80)
         self._model_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self._model_combo.setStyleSheet(
-            "QComboBox { border: 1px solid #ccc; border-radius: 5px; padding: 2px 6px; font-size: 11px; }"
+            "QComboBox { border: 1px solid #ccc; border-radius: 5px; padding: 2px 4px; font-size: 11px; }"
             "QComboBox::drop-down { border: none; }"
             "QComboBox QAbstractItemView {"
             "  color: #333;"
             "  selection-background-color: #FFD700;"
             "  selection-color: #333;"
             "  outline: none;"
+            "  min-width: 120px;"
             "}"
         )
         self._model_combo.setToolTip("选择模型")
@@ -136,10 +142,18 @@ class ChatDialog(QWidget):
             self._model_combo.addItem(m)
         if self._active_model and self._active_model in self._models:
             self._model_combo.setCurrentText(self._active_model)
-        # 下拉列表宽度适应最长模型名
-        self._model_combo.view().setMinimumWidth(140)
         self._model_combo.currentTextChanged.connect(self._on_model_combo)
         tl.addWidget(self._model_combo)
+
+        # 收起按钮
+        hide_btn = QPushButton("−")
+        hide_btn.setFixedSize(24, 24)
+        hide_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: none; font-size: 16px; color: #999; }"
+            "QPushButton:hover { color: #333; background: #e0e0e0; border-radius: 12px; }"
+        )
+        hide_btn.clicked.connect(self.hide)
+        tl.addWidget(hide_btn)
 
         root.addWidget(title)
 
@@ -162,6 +176,7 @@ class ChatDialog(QWidget):
 
         scroll.setWidget(self._msg_container)
         self._scroll = scroll
+        self._scroll.verticalScrollBar().valueChanged.connect(self._on_scroll_changed)
         root.addWidget(scroll, stretch=1)
 
         # ── 输入区域 ──
@@ -190,6 +205,10 @@ class ChatDialog(QWidget):
         self._send_btn.clicked.connect(self._on_send)
         il.addWidget(self._send_btn)
 
+        grip = QSizeGrip(self)
+        grip.setStyleSheet("QSizeGrip { image: none; width: 14px; height: 14px; }")
+        il.addWidget(grip)
+
         root.addWidget(input_bar)
 
     # ── Agent 切换 ─────────────────────────────────────
@@ -214,6 +233,9 @@ class ChatDialog(QWidget):
         self._agent_combo.blockSignals(True)
         self._agent_combo.setCurrentIndex(idx)
         self._agent_combo.blockSignals(False)
+
+    def set_auto_hide(self, enabled: bool) -> None:
+        self._auto_hide = enabled
 
     # ── 输入 ───────────────────────────────────────────
 
@@ -243,6 +265,7 @@ class ChatDialog(QWidget):
 
     def begin_assistant_stream(self) -> None:
         """创建空的助手气泡，准备接收流式 token"""
+        self._user_scrolled_up = False  # 新回复开始，恢复自动跟随
         self._stream_text = ""
         self._stream_buffer = ""
         self._thinking_text = ""
@@ -284,6 +307,7 @@ class ChatDialog(QWidget):
         display += self._stream_text
         self._stream_bubble.setText(display)
         self._stream_bubble.setTextFormat(Qt.PlainText)
+        self._scroll_to_bottom()
 
     def finalize_assistant_stream(self, text: str, ok: bool) -> None:
         """流式结束，刷新残留并转为 Markdown HTML"""
@@ -313,6 +337,7 @@ class ChatDialog(QWidget):
         elif not ok and self._stream_text:
             self._stream_bubble.setText(f"❌ {self._stream_text}")
             self._stream_bubble.setTextFormat(Qt.PlainText)
+        self._scroll_to_bottom()
         self._stream_bubble = None
         self._stream_text = ""
         self._stream_buffer = ""
@@ -378,16 +403,29 @@ class ChatDialog(QWidget):
     def _insert_widget(self, w: QWidget) -> None:
         idx = self._msg_layout.count() - 1
         self._msg_layout.insertWidget(idx, w)
+        self._scroll_to_bottom()
+
+    def _scroll_to_bottom(self) -> None:
+        if self._user_scrolled_up:
+            return
         QApplication.processEvents()
         sb = self._scroll.verticalScrollBar()
         if sb:
             sb.setValue(sb.maximum())
 
+    def _on_scroll_changed(self, value: int) -> None:
+        sb = self._scroll.verticalScrollBar()
+        if sb and value < sb.maximum() - 10:
+            self._user_scrolled_up = True
+        else:
+            self._user_scrolled_up = False
+
     # ── 定位 ───────────────────────────────────────────
 
     def show_near(self, anchor: QPoint) -> None:
         """在悬浮按钮左侧弹出"""
-        self.adjustSize()
+        if not self.isVisible():
+            self.resize(440, 580)  # 仅首次弹出时使用默认尺寸
         x = anchor.x() - self.width() - 12
         y = anchor.y() - self.height() // 2
         screen = QApplication.primaryScreen()
@@ -401,14 +439,32 @@ class ChatDialog(QWidget):
                 y = geo.bottom() - self.height() - 8
         self.move(x, y)
         self.show()
+        pin_to_all_spaces(self)
         self.activateWindow()
         self.raise_()
         self._input.setFocus()
 
     # ── 事件 ───────────────────────────────────────────
 
+    def _in_title_bar(self, pos: QPoint) -> bool:
+        return pos.y() <= 44
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton and self._in_title_bar(event.pos()):
+            self._drag_pos = event.globalPos() - self.frameGeometry().topLeft()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._drag_pos is not None and event.buttons() == Qt.LeftButton:
+            self.move(event.globalPos() - self._drag_pos)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._drag_pos = None
+        super().mouseReleaseEvent(event)
+
     def changeEvent(self, event) -> None:
-        if event.type() == QEvent.ActivationChange and not self.isActiveWindow():
+        if self._auto_hide and event.type() == QEvent.ActivationChange and not self.isActiveWindow():
             self.hide()
         super().changeEvent(event)
 

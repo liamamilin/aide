@@ -94,6 +94,7 @@ class ChatController(QObject):
                     break
 
         self._model: str = saved_model or config.OLLAMA_MODEL
+        self._auto_hide: bool = get_setting("auto_hide") == "true"  # 默认不收起
         self._convo_id: int = 0
         self._messages: list[Message] = []
         self._worker: Optional[StreamingChatWorker] = None
@@ -105,6 +106,8 @@ class ChatController(QObject):
         self.float_btn.exit_requested.connect(self._on_exit)
         self.float_btn.hide_requested.connect(self.float_btn.hide)
         self.float_btn.about_requested.connect(self._show_about)
+        self.float_btn.auto_hide_toggled.connect(self._on_auto_hide_toggled)
+        self.float_btn.set_auto_hide_state(self._auto_hide)
 
         # 全局快捷键（pynput 后台线程 → 信号桥接到主线程）
         self.hotkey = HotkeyListener()
@@ -155,7 +158,8 @@ class ChatController(QObject):
     def _show_dialog(self) -> None:
         if self._dialog is None:
             models = list_models()
-            self._dialog = ChatDialog(AGENTS, self._active_agent, models, self._model)
+            self._dialog = ChatDialog(AGENTS, self._active_agent, models, self._model,
+                                     auto_hide=self._auto_hide)
             self._dialog.message_sent.connect(self._on_user_message)
             self._dialog.new_convo_requested.connect(self._new_conversation)
             self._dialog.agent_changed.connect(self._on_agent_changed)
@@ -167,6 +171,14 @@ class ChatController(QObject):
         self._dialog.show_near(
             self.float_btn.mapToGlobal(self.float_btn.rect().topLeft())
         )
+
+    def _on_auto_hide_toggled(self, checked: bool) -> None:
+        self._auto_hide = checked
+        save_setting("auto_hide", "true" if checked else "false")
+        self.float_btn.set_auto_hide_state(checked)
+        if self._dialog:
+            self._dialog.set_auto_hide(checked)
+        logger.info("Auto-hide %s", "enabled" if checked else "disabled")
 
     # ── 退出 / 关于 ───────────────────────────────────
 
@@ -183,6 +195,14 @@ class ChatController(QObject):
             "选中文字 → ⌘⌃L → 一键提问<br><br>"
             "基于 Ollama 本地 LLM，数据不上传。",
         )
+
+    def _on_auto_hide_toggled(self, checked: bool) -> None:
+        self._auto_hide = checked
+        save_setting("auto_hide", "true" if checked else "false")
+        self.float_btn.set_auto_hide_state(checked)
+        if self._dialog:
+            self._dialog.set_auto_hide(checked)
+        logger.info("Auto-hide %s", "enabled" if checked else "disabled")
 
     # ── Agent 切换 ─────────────────────────────────────
 

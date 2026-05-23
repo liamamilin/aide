@@ -73,10 +73,12 @@ class FloatButton(QPushButton):
     exit_requested = pyqtSignal()
     hide_requested = pyqtSignal()
     about_requested = pyqtSignal()
+    auto_hide_toggled = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._drag_pos: QPoint | None = None
+        self._auto_hide = False
         self._is_dragging: bool = False
         self._init_ui()
         self._position_initial()
@@ -171,11 +173,18 @@ class FloatButton(QPushButton):
             "QMenu::item { padding: 6px 24px; font-size: 12px; }"
             "QMenu::item:selected { background: #007AFF; color: white; border-radius: 4px; }"
         )
+        auto_hide_action = menu.addAction("自动收起对话框")
+        auto_hide_action.setCheckable(True)
+        auto_hide_action.setChecked(self._auto_hide)
+        auto_hide_action.toggled.connect(self.auto_hide_toggled.emit)
+        menu.addSeparator()
         hide_action = menu.addAction("隐藏悬浮球")
         hide_action.triggered.connect(self.hide_requested.emit)
-        menu.addSeparator()
         about_action = menu.addAction("关于 AI 桌面助手")
         about_action.triggered.connect(self.about_requested.emit)
         exit_action = menu.addAction("退出")
         exit_action.triggered.connect(self.exit_requested.emit)
         menu.exec_(event.globalPos())
+
+    def set_auto_hide_state(self, enabled: bool) -> None:
+        self._auto_hide = enabled
