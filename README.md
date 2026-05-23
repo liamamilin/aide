@@ -1,11 +1,14 @@
-# AI 桌面助手
-
-> macOS 常驻 AI 助手 — 选中文字 → `⌘⌃L` → 一键提问，本地 LLM 零上传。
+<h1 align="center">AI 桌面助手</h1>
+<p align="center"><em>macOS 常驻 AI 助手 — 选中文字 → <code>⌘⌃L</code> → 一键提问，本地 LLM 零上传。</em></p>
 
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![PyQt5](https://img.shields.io/badge/UI-PyQt5-green.svg)](https://pypi.org/project/PyQt5/)
 [![Ollama](https://img.shields.io/badge/LLM-Ollama-orange.svg)](https://ollama.com)
 [![macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
+
+<p align="center">
+  <img src="ai_desktop/无边框图片.png" alt="AI 桌面助手截图" width="600">
+</p>
 
 ---
 
