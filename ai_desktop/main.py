@@ -133,16 +133,28 @@ class ChatController(QObject):
     # ── 快捷键 ─────────────────────────────────────────
 
     def _on_global_hotkey(self) -> None:
-        """pynput 后台线程回调：读取选中文字 → 发射信号到主线程"""
-        text = read_selection()
-        self._hotkey_triggered.emit(text or "")
+        """pynput 后台线程回调：只发射信号，不做任何 I/O（避免 Controller 与 Listener 冲突）"""
+        self._hotkey_triggered.emit("")
 
-    def _on_hotkey_triggered(self, text: str) -> None:
-        """主线程：打开对话窗口，粘贴选中文字"""
+    def _on_hotkey_triggered(self, _text: str) -> None:
+        """主线程：延迟读取选中文字 → 打开对话窗口
+
+        延迟 200ms 确保 pynput Listener 的 event tap 完全空闲后再调用
+        read_selection()，避免 Controller 模拟的 ⌘C 事件与热键事件冲突。
+        """
+        # 延迟到 pynput 事件处理完毕后再读取选中文字
+        QTimer.singleShot(200, self._do_capture_and_show)
+
+    def _do_capture_and_show(self) -> None:
+        """在 Qt 主线程执行：读取选中文字并显示对话窗口"""
+        text = read_selection() or ""
         logger.info("Hotkey triggered, text length=%d", len(text))
         if not self._dialog or not self._dialog.isVisible():
             self._show_dialog()
         if text and self._dialog:
+            self._dialog.show()
+            self._dialog.activateWindow()
+            self._dialog.raise_()
             self._dialog.set_input_text(text)
         elif not text:
             logger.info("No text captured — dialog shown without paste")

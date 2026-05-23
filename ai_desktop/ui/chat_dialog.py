@@ -59,7 +59,7 @@ class ChatDialog(QWidget):
         )
         self.setMinimumSize(420, 500)
         self.resize(440, 580)
-        self.setStyleSheet("QWidget { background: #ffffff; border-radius: 10px; }")
+        self.setStyleSheet("QWidget { background: #ffffff; color: #1a1a1a; border-radius: 10px; }")
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -70,7 +70,7 @@ class ChatDialog(QWidget):
         title = QWidget()
         title.setFixedHeight(44)
         title.setStyleSheet(
-            "background: #f6f6f6; border-top-left-radius: 10px; border-top-right-radius: 10px;"
+            "background: #f6f6f6; border-top-left-radius: 10px; border-top-right-radius: 10px; color: #1a1a1a;"
         )
         tl = QHBoxLayout(title)
         tl.setContentsMargins(12, 0, 8, 0)
@@ -93,7 +93,7 @@ class ChatDialog(QWidget):
         new_btn.setFixedHeight(28)
         new_btn.setStyleSheet(
             "QPushButton { background: #e8e8e8; border: none; border-radius: 5px;"
-            "padding: 2px 10px; font-size: 11px; }"
+            "padding: 2px 10px; font-size: 11px; color: #333; }"
             "QPushButton:hover { background: #d0d0d0; }"
         )
         new_btn.clicked.connect(self.new_convo_requested.emit)
@@ -105,10 +105,12 @@ class ChatDialog(QWidget):
         self._agent_combo.setMinimumWidth(110)
         self._agent_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self._agent_combo.setStyleSheet(
-            "QComboBox { border: 1px solid #ccc; border-radius: 5px; padding: 2px 6px; font-size: 11px; }"
+            "QComboBox { border: 1px solid #ccc; border-radius: 5px; padding: 2px 6px;"
+            "  font-size: 11px; color: #333; background: #ffffff; }"
             "QComboBox::drop-down { border: none; }"
             "QComboBox QAbstractItemView {"
             "  color: #333;"
+            "  background: #ffffff;"
             "  selection-background-color: #FFD700;"
             "  selection-color: #333;"
             "  outline: none;"
@@ -127,10 +129,12 @@ class ChatDialog(QWidget):
         self._model_combo.setMinimumWidth(80)
         self._model_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self._model_combo.setStyleSheet(
-            "QComboBox { border: 1px solid #ccc; border-radius: 5px; padding: 2px 4px; font-size: 11px; }"
+            "QComboBox { border: 1px solid #ccc; border-radius: 5px; padding: 2px 4px;"
+            "  font-size: 11px; color: #333; background: #ffffff; }"
             "QComboBox::drop-down { border: none; }"
             "QComboBox QAbstractItemView {"
             "  color: #333;"
+            "  background: #ffffff;"
             "  selection-background-color: #FFD700;"
             "  selection-color: #333;"
             "  outline: none;"
@@ -193,7 +197,7 @@ class ChatDialog(QWidget):
         self._input.setPlaceholderText("输入消息... (Enter 发送)")
         self._input.setStyleSheet(
             "QLineEdit { border: 1px solid #ddd; border-radius: 6px; padding: 6px 10px;"
-            "font-size: 13px; background: #ffffff; }"
+            "font-size: 13px; background: #ffffff; color: #1a1a1a; }"
             "QLineEdit:focus { border-color: #007AFF; }"
         )
         self._input.returnPressed.connect(self._on_send)

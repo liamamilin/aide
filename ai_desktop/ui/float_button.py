@@ -169,9 +169,10 @@ class FloatButton(QPushButton):
     def contextMenuEvent(self, event) -> None:
         menu = QMenu(self)
         menu.setStyleSheet(
-            "QMenu { background: #ffffff; border: 1px solid #ccc; border-radius: 6px; padding: 4px 0; }"
-            "QMenu::item { padding: 6px 24px; font-size: 12px; }"
+            "QMenu { background: #ffffff; border: 1px solid #ccc; border-radius: 6px; padding: 4px 0; color: #333; }"
+            "QMenu::item { padding: 6px 24px; font-size: 12px; color: #333; }"
             "QMenu::item:selected { background: #007AFF; color: white; border-radius: 4px; }"
+            "QMenu::separator { height: 1px; background: #e0e0e0; margin: 4px 10px; }"
         )
         auto_hide_action = menu.addAction("自动收起对话框")
         auto_hide_action.setCheckable(True)
