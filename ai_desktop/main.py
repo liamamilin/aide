@@ -139,11 +139,11 @@ class ChatController(QObject):
     def _on_hotkey_triggered(self, _text: str) -> None:
         """主线程：延迟读取选中文字 → 打开对话窗口
 
-        延迟 200ms 确保 pynput Listener 的 event tap 完全空闲后再调用
+        延迟 100ms 确保 pynput Listener 的 event tap 完全空闲后再调用
         read_selection()，避免 Controller 模拟的 ⌘C 事件与热键事件冲突。
         """
         # 延迟到 pynput 事件处理完毕后再读取选中文字
-        QTimer.singleShot(200, self._do_capture_and_show)
+        QTimer.singleShot(100, self._do_capture_and_show)
 
     def _do_capture_and_show(self) -> None:
         """在 Qt 主线程执行：读取选中文字并显示对话窗口"""
@@ -208,14 +208,6 @@ class ChatController(QObject):
             "基于 Ollama 本地 LLM，数据不上传。",
         )
 
-    def _on_auto_hide_toggled(self, checked: bool) -> None:
-        self._auto_hide = checked
-        save_setting("auto_hide", "true" if checked else "false")
-        self.float_btn.set_auto_hide_state(checked)
-        if self._dialog:
-            self._dialog.set_auto_hide(checked)
-        logger.info("Auto-hide %s", "enabled" if checked else "disabled")
-
     # ── Agent 切换 ─────────────────────────────────────
 
     def _on_agent_changed(self, agent: Agent) -> None:
@@ -241,6 +233,9 @@ class ChatController(QObject):
 
     def _on_user_message(self, text: str) -> None:
         if self._worker and self._worker.isRunning():
+            if self._dialog:
+                self._dialog.set_input_text(text)
+                self._dialog.flash_busy()
             return
 
         if self._convo_id == 0:

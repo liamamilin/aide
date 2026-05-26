@@ -1,6 +1,7 @@
 """
 对话窗口 —— Agent 多轮对话
 """
+import requests
 from PyQt5.QtCore import Qt, QPoint, QEvent, QTimer, pyqtSignal
 from PyQt5.QtGui import QKeyEvent
 from PyQt5.QtWidgets import (
@@ -12,7 +13,6 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizeGrip,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
     QSizePolicy,
@@ -43,6 +43,7 @@ class ChatDialog(QWidget):
         self._drag_pos: QPoint | None = None
         self._user_scrolled_up: bool = False  # 用户手动滚离底部时暂停自动跟随
         self._stream_bubble: QLabel | None = None  # 当前流式输出的气泡
+        self._stream_copy_btn: QPushButton | None = None  # 当前流式气泡的复制按钮
         self._stream_text: str = ""
         self._stream_buffer: str = ""               # 积攒的回复 token
         self._thinking_text: str = ""               # 完整思考文本
@@ -50,6 +51,9 @@ class ChatDialog(QWidget):
         self._stream_timer = QTimer(self)
         self._stream_timer.setInterval(50)          # 50ms 刷新一次
         self._stream_timer.timeout.connect(self._flush_stream_buffer)
+        self._ollama_timer = QTimer(self)
+        self._ollama_timer.setInterval(30000)       # 每 30 秒探活
+        self._ollama_timer.timeout.connect(self._check_ollama_status)
         self._setup_window()
         self._setup_ui()
 
@@ -201,6 +205,7 @@ class ChatDialog(QWidget):
             "QLineEdit:focus { border-color: #007AFF; }"
         )
         self._input.returnPressed.connect(self._on_send)
+        self._input.installEventFilter(self)
         il.addWidget(self._input)
 
         self._send_btn = QPushButton("发送")
@@ -212,6 +217,13 @@ class ChatDialog(QWidget):
         grip = QSizeGrip(self)
         grip.setStyleSheet("QSizeGrip { image: none; width: 14px; height: 14px; }")
         il.addWidget(grip)
+
+        # Ollama 连接状态
+        self._ollama_status = QLabel("●")
+        self._ollama_status.setFixedWidth(16)
+        self._ollama_status.setStyleSheet("font-size: 8px; color: #ccc; background: none;")
+        self._ollama_status.setToolTip("检测中…")
+        il.addWidget(self._ollama_status)
 
         root.addWidget(input_bar)
 
@@ -249,12 +261,29 @@ class ChatDialog(QWidget):
         self._input.setFocus()
         self._input.selectAll()
 
+    def flash_busy(self) -> None:
+        """短暂提示 worker 正忙，1.5 秒后恢复原 placeholder"""
+        self._input.setPlaceholderText("⏳ 等待回复完成...")
+        QTimer.singleShot(1500, lambda: self._input.setPlaceholderText("输入消息... (Enter 发送)"))
+
     def _on_send(self) -> None:
         text = self._input.text().strip()
         if not text:
             return
         self.message_sent.emit(text)
         self._input.clear()
+
+    def _check_ollama_status(self) -> None:
+        try:
+            r = requests.get(f"{config.OLLAMA_BASE_URL}/api/tags", timeout=1)
+            if r.status_code == 200:
+                self._ollama_status.setStyleSheet("font-size: 8px; color: #4CAF50; background: none;")
+                self._ollama_status.setToolTip("Ollama 已连接")
+                return
+        except Exception:
+            pass
+        self._ollama_status.setStyleSheet("font-size: 8px; color: #F44336; background: none;")
+        self._ollama_status.setToolTip("Ollama 未连接")
 
     def add_user_message(self, text: str) -> None:
         bubble = self._make_bubble(text, is_user=True)
@@ -274,10 +303,14 @@ class ChatDialog(QWidget):
         self._stream_buffer = ""
         self._thinking_text = ""
         self._thinking_buffer = ""
+        self._stream_copy_btn = None
         bubble = self._make_bubble("", is_user=False, is_html=True)
         lbl = bubble.findChild(QLabel)
         if lbl:
             self._stream_bubble = lbl
+        btn = bubble.findChild(QPushButton, "copy_btn_assistant")
+        if btn:
+            self._stream_copy_btn = btn
         self._insert_widget(bubble)
         self._stream_timer.start()
 
@@ -341,12 +374,33 @@ class ChatDialog(QWidget):
         elif not ok and self._stream_text:
             self._stream_bubble.setText(f"❌ {self._stream_text}")
             self._stream_bubble.setTextFormat(Qt.PlainText)
+
+        # 连接复制按钮
+        if self._stream_copy_btn:
+            copy_text = self._stream_text
+            try:
+                self._stream_copy_btn.clicked.disconnect()
+            except TypeError:
+                pass
+            self._stream_copy_btn.clicked.connect(
+                lambda checked, t=copy_text: self._copy_to_clipboard(t)
+            )
+            self._stream_copy_btn.setVisible(True)
+
         self._scroll_to_bottom()
         self._stream_bubble = None
+        self._stream_copy_btn = None
         self._stream_text = ""
         self._stream_buffer = ""
         self._thinking_text = ""
         self._thinking_buffer = ""
+
+    @staticmethod
+    def _copy_to_clipboard(text: str) -> None:
+        try:
+            QApplication.clipboard().setText(text)
+        except Exception:
+            pass
 
     def set_thinking(self, thinking: bool) -> None:
         self._send_btn.setEnabled(not thinking)
@@ -385,8 +439,39 @@ class ChatDialog(QWidget):
                 "QLabel { background: #f0f0f0; color: #1a1a1a; border-radius: 10px;"
                 "padding: 8px 12px; font-size: 13px; }"
             )
-            wl.addWidget(lbl)
+            # 气泡主体 + 复制按钮（hover 显示）
+            v_layout = QVBoxLayout()
+            v_layout.setContentsMargins(0, 0, 0, 0)
+            v_layout.setSpacing(2)
+            v_layout.addWidget(lbl)
+
+            btn_bar = QWidget()
+            btn_bar.setFixedHeight(22)
+            bl = QHBoxLayout(btn_bar)
+            bl.setContentsMargins(4, 0, 8, 0)
+            bl.addStretch()
+
+            copy_btn = QPushButton("📋")
+            copy_btn.setFixedSize(18, 18)
+            copy_btn.setToolTip("复制回复")
+            copy_btn.setObjectName("copy_btn_assistant")
+            copy_btn.setCursor(Qt.PointingHandCursor)
+            copy_btn.setVisible(False)
+            copy_btn.setStyleSheet("""
+                QPushButton {
+                    background: transparent; border: none; font-size: 11px; color: #999;
+                }
+                QPushButton:hover {
+                    color: #333; background: rgba(0,0,0,0.06); border-radius: 3px;
+                }
+            """)
+            bl.addWidget(copy_btn)
+
+            v_layout.addWidget(btn_bar)
+            wl.addLayout(v_layout)
             wl.addStretch()
+
+            wrapper.installEventFilter(self)
 
         if is_html:
             # QLabel doesn't support full HTML with inline styles well;
@@ -403,6 +488,36 @@ class ChatDialog(QWidget):
             lbl.setText(content)
 
         return wrapper
+
+    # ── hover 显示复制按钮 ─────────────────────────────
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Enter:
+            for btn in obj.findChildren(QPushButton, "copy_btn_assistant"):
+                btn.setVisible(True)
+        elif event.type() == QEvent.Leave:
+            for btn in obj.findChildren(QPushButton, "copy_btn_assistant"):
+                btn.setVisible(False)
+
+        # ── 输入框快捷键 ──
+        if obj is self._input and event.type() == QEvent.KeyPress:
+            if event.key() == Qt.Key_Escape:
+                if self._input.text():
+                    self._input.clear()
+                    return True
+                return False  # 已空，放行 Esc 关闭对话框
+            if (event.key() == Qt.Key_Return and
+                    event.modifiers() == Qt.ShiftModifier):
+                # QLineEdit 单行输入，Shift+Enter 暂不换行，仅阻止发送
+                return True
+            if (event.key() == Qt.Key_N and
+                    event.modifiers() == Qt.ControlModifier):
+                self.new_convo_requested.emit()
+                return True
+
+        return super().eventFilter(obj, event)
+
+    # ── 插入气泡 ───────────────────────────────────────
 
     def _insert_widget(self, w: QWidget) -> None:
         idx = self._msg_layout.count() - 1
@@ -447,6 +562,8 @@ class ChatDialog(QWidget):
         self.activateWindow()
         self.raise_()
         self._input.setFocus()
+        self._ollama_timer.start()
+        self._check_ollama_status()  # 打开时立即探活
 
     # ── 事件 ───────────────────────────────────────────
 
@@ -474,9 +591,14 @@ class ChatDialog(QWidget):
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
         if event and event.key() == Qt.Key_Escape:
-            self.hide()
+            if self._input.text():
+                self._input.clear()
+            else:
+                self.hide()
+            return
         super().keyPressEvent(event)
 
     def hideEvent(self, event) -> None:
+        self._ollama_timer.stop()
         self.closed.emit()
         super().hideEvent(event)

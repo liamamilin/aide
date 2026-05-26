@@ -80,42 +80,38 @@ def read_selection() -> Optional[str]:
 
     流程：
     1. 保存当前剪贴板
-    2. 等待修饰键释放
-    3. 模拟 ⌘C（pynput，失败则回退 osascript）
-    4. 等待剪贴板更新
-    5. 读取新剪贴板
-    6. 恢复原剪贴板
+    2. 模拟 ⌘C（pynput，失败则回退 osascript）
+    3. 等待剪贴板更新
+    4. 读取新剪贴板
+    5. 恢复原剪贴板
     """
     # 1. 保存原剪贴板
     saved = _read_clipboard()
 
-    # 2. 等待修饰键释放
-    time.sleep(0.1)
-
-    # 3. 模拟 ⌘C
+    # 2. 模拟 ⌘C（修饰键已由调用方的 QTimer 延迟确保释放）
     if not _try_cmd_c_via_pynput():
         if saved:
             _write_clipboard(saved)
         return None
 
-    # 4. 等待剪贴板更新
-    time.sleep(0.15)
+    # 3. 等待剪贴板更新
+    time.sleep(0.08)
 
-    # 5. 读取新内容
+    # 4. 读取新内容
     selected = _read_clipboard()
 
-    # 6. 如果剪贴板未变化，尝试 osascript 回退
+    # 5. 如果剪贴板未变化，尝试 osascript 回退
     if saved and selected.strip() == saved.strip():
         logger.info("pynput Cmd+C had no effect, trying osascript fallback...")
         if _try_cmd_c_via_osascript():
             time.sleep(0.15)
             selected = _read_clipboard()
 
-    # 7. 恢复原剪贴板
+    # 6. 恢复原剪贴板
     if saved:
         _write_clipboard(saved)
 
-    # 8. 判断是否有效
+    # 7. 判断是否有效
     if not selected:
         logger.info("Clipboard empty after Cmd+C — no text captured")
         return None
