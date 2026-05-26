@@ -36,3 +36,12 @@ class HotkeyListener:
             self._listener.stop()
             self._listener = None
             logger.info("Hotkey listener stopped")
+
+    def reregister(self, new_hotkey: str, callback) -> None:
+        """运行时更换快捷键（停止 → 清空 → 重新注册 → 重启）"""
+        was_running = self._listener is not None
+        self.stop()
+        self._mappings.clear()
+        self._mappings[new_hotkey] = callback
+        if was_running:
+            self.start()

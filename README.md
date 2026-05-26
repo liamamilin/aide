@@ -6,22 +6,15 @@
 [![Ollama](https://img.shields.io/badge/LLM-Ollama-orange.svg)](https://ollama.com)
 [![macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
 
-<p align="center">
-  <img src="ai_desktop/无边框图片.png" alt="AI 桌面助手截图" width="600">
-</p>
-
 ---
 
-## 目录
+## 三入口
 
-- [安装与启动](#安装与启动)
-- [使用方式](#使用方式)
-- [Agent 切换](#agent-切换)
-- [模型选择](#模型选择)
-- [功能特性](#功能特性)
-- [配置](#配置)
-- [故障排除](#故障排除)
-- [项目结构](#项目结构)
+| 入口 | 交互 |
+|------|------|
+| **快捷键** `⌘⌃L` | 任意 App 选中文字 → 按快捷键 → 自动填入对话框 |
+| **悬浮按钮** | 屏幕右侧圆形图标，左键开关对话框，右键菜单 |
+| **菜单栏图标** | macOS 菜单栏常驻，左键开关对话框，右键快速切换 Agent |
 
 ---
 
@@ -30,8 +23,8 @@
 **前置条件**：[Ollama](https://ollama.com) 已安装并拉取模型：
 
 ```bash
-ollama serve              # 启动服务
-ollama pull qwen3:14b     # 拉取模型（一次）
+ollama serve
+ollama pull qwen3:14b
 ```
 
 **安装**：
@@ -47,81 +40,53 @@ pip install -e .
 aide
 ```
 
-启动后，桌面右侧出现圆形悬浮按钮，表示已就绪。
-
----
-
-## 使用方式
-
-| 触发 | 操作 |
-|------|------|
-| **快捷键** | 任意 App 中选中文字 → `⌘⌃L` → 自动弹出对话窗口，文字已粘贴 → `Enter` 发送 |
-| **悬浮按钮** | 点击桌面右侧圆形按钮 → 打开对话窗口 → 输入问题 → `Enter` 发送 |
-
-悬浮按钮支持**拖拽**移动，自动跟随鼠标跨屏幕、跨 Space。
-
----
-
-## Agent 切换
-
-窗口左上角下拉框可随时切换 Agent，仅影响新消息，不影响已有对话：
-
-| Agent | 图标 | 行为 |
-|-------|------|------|
-| **代码专家** | 💻 | 审查代码、debug、重构、写代码 |
-| **翻译** | 🌐 | 中英互译、润色表达 |
-| **通用助手** | 🤖 | 兜底通用问答 |
-
----
-
-## 模型选择
-
-窗口左上角模型下拉框列出本地所有已拉取的 Ollama 模型，随时切换。
-
-
-> 上次选择的 Agent 和模型会自动记住，下次启动恢复。
-
 ---
 
 ## 功能特性
 
-- **全局快捷键** — `⌘⌃L` 跨 App 触发，无需切窗口
-- **思考过程可见** — LLM 推理 token 实时流式显示，最终折叠为 `💭 思考过程` 可展开块
-- **多轮对话** — 支持追问、修正，历史自动存入本地 SQLite
-- **流式输出** — Token 级实时渲染，50ms 批量刷新 UI 无卡顿
+### 对话
+- **流式输出** — token 级实时渲染，50ms 批量刷新
+- **思考过程** — LLM 推理过程实时展示，完成后折叠为 `💭 思考过程`
 - **Markdown 渲染** — 代码块、列表、粗体、标题完整支持
-- **剪贴板安全** — 捕获选中文字时自动保存并恢复原始剪贴板
-- **跨屏幕 / 跨 Space** — 悬浮按钮跟随鼠标所在屏幕和虚拟桌面
-- **右键菜单** — 悬浮按钮右键：隐藏、关于、退出
-- **偏好记忆** — Agent 和模型选择持久化，重启恢复
+- **多轮对话** — 追问、修正，SQLite 持久化
+- **中断 ⏹** — 流式生成时可随时停止
+- **编辑 ✏️** — 用户消息 hover 可见编辑按钮，点击回填输入框重新发送
+- **复制 📋** — 助手回复 hover 可见复制按钮
+- **导出** — 一键复制整段对话为 Markdown
+- **通知** — 回复完成时，若窗口在后台则弹 macOS 通知
+
+### Agent
+- **3 个内置 Agent**：代码专家 💻 / 翻译 🌐 / 通用助手 🤖
+- **自定义 Agent** — 新增/编辑/删除，自定义 emoji 图标和 prompt
+- **菜单栏快速切换** — 菜单栏图标右键菜单直接切换 Agent
+
+### 历史
+- **对话浏览** — 打开历史窗口，显示所有对话及消息数
+- **全文搜索** — 搜索对话标题和消息内容，300ms 防抖
+- **删除/加载** — 从历史加载对话，或删除不需要的
+
+### 设置
+- **运行时配置** — 右键悬浮按钮 → 设置… → 修改 Ollama 地址、超时、上下文窗口、快捷键
+- **持久化** — 所有设置、Agent、模型选择重启后保留
+- **自动恢复** — 启动时自动加载上次对话，保留用户选择的 Agent
 
 ---
 
 ## 配置
 
-编辑 `ai_desktop/config.py`：
+运行时通过**设置面板**修改，或编辑 `ai_desktop/config.py`：
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `OLLAMA_MODEL` | `qwen3:14b` | 默认模型（需先 `ollama pull`） |
+| `OLLAMA_MODEL` | `sorc/qwen3.5-instruct-uncensored:9b` | 默认模型 |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama 服务地址 |
 | `HOTKEY` | `<cmd>+<ctrl>+l` | 全局快捷键 |
-| `OLLAMA_NUM_PREDICT` | `2048` | 最大输出 token |
-| `OLLAMA_NUM_CTX` | `4096` | 上下文窗口 token 数 |
-| `OLLAMA_KEEP_ALIVE` | `30m` | 模型驻留内存时长 |
+| `OLLAMA_NUM_PREDICT` | `20480` | 最大输出 token |
+| `OLLAMA_NUM_CTX` | `40960` | 上下文窗口 |
+| `OLLAMA_KEEP_ALIVE` | `30m` | 模型驻留时长 |
 | `OLLAMA_TIMEOUT` | `120` | HTTP 超时（秒） |
-| `MAX_TEXT_LENGTH` | `12000` | 选中文字最大截取长度 |
 
-### 快捷键格式说明
-
-pynput 格式，修饰键用尖括号：
-
-| 按键 | 写法 | | 按键 | 写法 |
-|------|------|-|------|------|
-| ⌘ Command | `<cmd>` | | ⌃ Control | `<ctrl>` |
-| ⇧ Shift   | `<shift>` | | ⌥ Option | `<alt>` |
-
-> **注意**：macOS 上不要用 `<fn>`、`<option>`、`<command>` 全称，pynput 不支持。
+快捷键格式：`<cmd>`, `<shift>`, `<ctrl>`, `<alt>`。不要用 `<fn>` 或 `<option>`。
 
 ---
 
@@ -131,23 +96,13 @@ pynput 格式，修饰键用尖括号：
 
 日志中出现 `This process is not trusted!` 或 `Clipboard unchanged after Cmd+C`：
 
-**原因**：macOS 辅助功能权限未授权，`pynput` 无法模拟 `⌘C` 按键。
+> macOS 辅助功能权限未授权。
 
-**解决**：
-1. 打开 **系统设置 → 隐私与安全性 → 辅助功能**
-2. 在列表中找到你的终端应用（Terminal.app 或 iTerm.app），确保已勾选
-3. 如已勾选仍无效：**先取消勾选，再重新勾选**（刷新 TCC 权限缓存）
-4. 重启 `aide`
+**解决**：系统设置 → 隐私与安全性 → 辅助功能 → 勾选终端应用，必要时取消重勾刷新缓存。
 
 ### 启动后无响应
 
-检查 Ollama 是否正在运行：
-
-```bash
-curl http://localhost:11434/api/tags
-```
-
-如无响应，先启动 Ollama：`ollama serve`
+检查 Ollama：`curl http://localhost:11434/api/tags`，或输入栏右侧状态灯 🔴 → 🟢。
 
 ---
 
@@ -155,38 +110,36 @@ curl http://localhost:11434/api/tags
 
 ```
 ai_desktop/
-├── main.py                    # 入口 + ChatController（总控）
-├── config.py                  # LLM / 快捷键 / Agent 配置
+├── main.py                     # 入口 + ChatController
+├── config.py                   # LLM/快捷键/Agent 配置
 ├── capture/
-│   ├── hotkey_listener.py     # pynput 全局快捷键监听
-│   ├── clipboard_monitor.py   # ⌘C 模拟 → 读取 → 恢复剪贴板
-│   └── text_normalizer.py     # 文本清洗 + 截断
+│   ├── hotkey_listener.py      # pynput 全局快捷键 + 运行时切换
+│   ├── clipboard_monitor.py    # ⌘C 模拟 → 读取 → 恢复（双回退）
+│   └── text_normalizer.py      # 文本清洗 + 截断
 ├── llm/
-│   └── chat_client.py         # Ollama /api/chat（流式 + thinking）
+│   └── chat_client.py          # Ollama /api/chat（流式 + thinking）
 ├── ui/
-│   ├── float_button.py        # 悬浮圆形按钮（拖拽/跨屏/右键菜单）
-│   ├── chat_dialog.py         # 多轮对话窗口（Agent/模型切换）
-│   ├── markdown.py            # Markdown → HTML 内联渲染
-│   └── styles.py              # 全局 QSS 样式常量
+│   ├── float_button.py         # 悬浮圆形按钮（拖拽/跨屏/右键）
+│   ├── menubar_icon.py         # macOS 菜单栏图标 + Agent 菜单
+│   ├── chat_dialog.py          # 多轮对话 + 快捷键 + 复制/编辑/中断
+│   ├── history_dialog.py       # 历史浏览 + 全文搜索
+│   ├── agent_editor.py         # Agent 管理（增删改 + emoji 选择）
+│   ├── settings_dialog.py      # 运行时设置面板
+│   ├── markdown.py             # Markdown → HTML
+│   └── styles.py               # QSS 常量
 └── utils/
-    ├── logging.py             # 日志配置
-    └── storage.py             # SQLite 持久化（对话 + 设置）
+    ├── logging.py              # 日志配置
+    └── storage.py              # SQLite 持久化（对话/消息/设置/Agent）
+tests/
+├── test_smoke.py               # 文本规范化 + Markdown 渲染测试
+├── test_storage.py             # DB CRUD 测试（13 项）
+└── test_chat_client.py         # 流式解析测试（9 项）
 ```
 
-### 数据流
+---
 
-```
-选中文字 → ⌘⌃L (pynput 后台线程)
-    │
-    ▼
-模拟 ⌘C → 读剪贴板 → 恢复原剪贴板 (text captured)
-    │
-    ▼ pyqtSignal → Qt 主线程
-打开对话窗口 + 粘贴文字到输入框
-    │
-    ▼ Enter
-Ollama /api/chat (stream + thinking tokens)
-    │
-    ▼
-流式渲染 Markdown，thinking 可折叠
+## 测试
+
+```bash
+pytest tests/ -v    # 26 项测试
 ```

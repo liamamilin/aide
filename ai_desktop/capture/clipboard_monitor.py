@@ -90,9 +90,13 @@ def read_selection() -> Optional[str]:
 
     # 2. 模拟 ⌘C（修饰键已由调用方的 QTimer 延迟确保释放）
     if not _try_cmd_c_via_pynput():
-        if saved:
-            _write_clipboard(saved)
-        return None
+        # pynput 失败，尝试 osascript 回退
+        if _try_cmd_c_via_osascript():
+            time.sleep(0.15)
+        else:
+            if saved:
+                _write_clipboard(saved)
+            return None
 
     # 3. 等待剪贴板更新
     time.sleep(0.08)

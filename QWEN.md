@@ -4,7 +4,12 @@
 
 ## Overview
 
-A macOS desktop AI assistant — a floating button + global hotkey (`⌘⌃L`) that captures selected text from any application and sends it to a local LLM (Ollama) via a streaming multi-turn chat window. Supports 3 switchable Agents (Code Expert, Translator, General Assistant) with `thinking` process visualization and Markdown rendering.
+A macOS desktop AI assistant with three entry points:
+1. **Floating button** — circular draggable icon, cross-Space, cross-screen
+2. **Menu bar icon** — macOS NSStatusBar icon with Agent switcher menu
+3. **Global hotkey** (`⌘⌃L`) — captures selected text from any app
+
+Captured text is sent to a local LLM (Ollama) via a streaming multi-turn chat window. Features 3+ custom Agents with `thinking` process visualization and Markdown rendering. Conversations are persisted in SQLite with full-text search.
 
 **v1 Immutable Constraints:**
 1. App-agnostic — works in Terminal, VS Code, browser, PDF, any macOS app
@@ -19,34 +24,41 @@ A macOS desktop AI assistant — a floating button + global hotkey (`⌘⌃L`) t
 | Language | Python ≥ 3.10 |
 | UI | PyQt5 (Qt 5) |
 | Global Hotkey | pynput (`keyboard.GlobalHotKeys`) |
-| Clipboard | pyperclip + `pbpaste`/`pbcopy` (macOS) |
+| Clipboard | pynput Controller + `pbpaste`/`pbcopy` (macOS) |
 | LLM Backend | Ollama `/api/chat` (streaming with `thinking` tokens) |
 | HTTP | `requests` (with `stream=True` for SSE) |
 | Persistence | SQLite via `sqlite3` (WAL mode, thread-local connections) |
 | Markdown | Custom regex-based renderer (no external deps) |
+| Search | SQL LIKE query (titles + message content) |
 
 ## Project Structure
 
 ```
 ai_desktop/
-├── main.py                    # Entry point + ChatController (orchestrator)
-├── config.py                  # LLM/Hotkey/Agent config (module constants + dataclasses)
+├── main.py                      # Entry point + ChatController (orchestrator)
+├── config.py                    # LLM/Hotkey/Agent config (module constants + dataclasses)
 ├── capture/
-│   ├── hotkey_listener.py     # pynput GlobalHotKeys wrapper
-│   ├── clipboard_monitor.py   # ⌘C simulation → read clipboard → restore clipboard
-│   └── text_normalizer.py     # Whitespace normalization + truncation (12K char limit)
+│   ├── hotkey_listener.py       # pynput GlobalHotKeys wrapper + runtime reregister
+│   ├── clipboard_monitor.py     # ⌘C simulation (pynput → osascript fallback)
+│   └── text_normalizer.py       # Whitespace normalization + truncation (12K char limit)
 ├── llm/
-│   └── chat_client.py         # ChatClient (non-streaming) + ChatStream (streaming iterator)
+│   └── chat_client.py           # ChatClient (non-streaming) + ChatStream (streaming iterator)
 ├── ui/
-│   ├── float_button.py        # Circular draggable button, cross-Space/cross-screen tracking
-│   ├── chat_dialog.py         # Frameless multi-turn chat window with streaming display
-│   ├── markdown.py            # Markdown → inline HTML (headings, code blocks, bold, lists)
-│   └── styles.py              # Shared QSS string constants
+│   ├── float_button.py          # Circular draggable button, cross-Space/cross-screen, context menu
+│   ├── menubar_icon.py          # macOS menu bar QSystemTrayIcon with Agent switcher
+│   ├── chat_dialog.py           # Frameless multi-turn chat window with streaming + shortcuts
+│   ├── history_dialog.py        # Conversation history browser with search
+│   ├── agent_editor.py          # Agent management (add/edit/delete) with emoji picker
+│   ├── settings_dialog.py       # Runtime config panel (URL, timeout, tokens, hotkey)
+│   ├── markdown.py              # Markdown → inline HTML (headings, code blocks, bold, lists)
+│   └── styles.py                # Shared QSS string constants
 └── utils/
-    ├── logging.py             # stderr logging setup, suppresses pynput/urllib3 noise
-    └── storage.py             # SQLite CRUD: conversations + messages (thread-local conn)
+    ├── logging.py               # stderr logging setup, suppresses pynput/urllib3 noise
+    └── storage.py               # SQLite CRUD: conversations, messages, settings, custom agents
 tests/
-└── test_smoke.py              # Smoke tests for text_normalizer + markdown renderer
+├── test_smoke.py                # Smoke tests for text_normalizer + markdown renderer
+├── test_storage.py              # DB CRUD tests (temp SQLite)
+└── test_chat_client.py          # ChatStream parsing tests (mocked HTTP)
 ```
 
 ## Architecture & Data Flow
@@ -56,28 +68,38 @@ User selects text → ⌘⌃L (pynput background thread)
     │
     ▼
 clipboard_monitor.read_selection()
-  ├── Save clipboard → simulate ⌘C (pynput CGEvent) → read clipboard → restore clipboard
+  ├── Save clipboard → simulate ⌘C (pynput CGEvent, osascript fallback)
   └── text_normalizer.normalize()
     │
-    ▼ (signal bridge: pynput thread → Qt main thread via pyqtSignal)
+    ▼ (signal bridge: pynput thread → Qt main thread via pyqtSignal, 100ms delay)
 ChatController._on_hotkey_triggered()
-  └── Open ChatDialog, paste text into input, focuses input
+  └── Open / show ChatDialog, paste text into input
     │
     ▼ (user presses Enter)
 ChatController._on_user_message()
-  ├── Save to SQLite (create_conversation + save_message)
-  ├── StreamingChatWorker (QThread) starts
+  ├── Guard: skip if worker already running (restores text + shows busy hint)
+  ├── Save to SQLite (create_conversation + save_message, auto-title from first msg)
+  ├── StreamingChatWorker (QThread) starts (interruptible via ⏹ button)
   │     └── ChatClient.chat_stream() → yields (kind, token) tuples
   │           kind ∈ {"thinking", "response", "error"}
   └── UI updates via signals:
         thinking_chunk → append_thinking_chunk (buffered)
         chunk          → append_stream_chunk (buffered)
         done           → finalize_assistant_stream (thinking folded as <details>)
+                      → macOS notification if dialog in background
     │
     ▼
 50ms QTimer flush: buffers accumulated tokens → QLabel (PlainText during stream)
-  └── On done: convert to Markdown HTML (RichText) with folded thinking block
+  └── On done: convert to Markdown HTML (RichText) + connect copy button
 ```
+
+## Three Entry Points
+
+| Entry | Interaction | Notes |
+|-------|-----------|-------|
+| **Hotkey** `⌘⌃L` | Select text → press → dialog opens with text pasted | Configurable at runtime via Settings |
+| **Float button** | Left-click: toggle dialog. Right-click: context menu | Cross-Space via `NSWindowCollectionBehaviorCanJoinAllSpaces` |
+| **Menu bar icon** | Left-click: toggle dialog. Menu: Agent switch / Settings / Exit | QSystemTrayIcon, macOS native |
 
 ## Thread Safety Pattern
 
@@ -95,14 +117,20 @@ Safe UI operations
 - It emits `_hotkey_triggered` signal; `_on_hotkey_triggered` slot runs on main thread
 - `StreamingChatWorker` is a QThread subclass, communicates only via signals
 - Clipboard save/restore happens on the pynput thread (no Qt dependency)
+- Stream buffer access: written by signal slots, read by QTimer callback — both on main thread (no race)
 
 ## Key Conventions
 
 ### Code Style
-- **Python typing**: Uses `Optional`, `list[Type]`, `|` union syntax throughout
+- **Python typing**: Uses `list[Type]`, `dict`, `|` union syntax (Python 3.10+)
 - **Comments**: Chinese docstrings on modules; inline comments in Chinese; section dividers use `──` and `══` separators
 - **Naming**: `snake_case` for functions/variables; `CamelCase` for classes; private members prefixed with `_`
 - **Config**: Module-level `UPPER_CASE` constants + `@dataclass` for structured config (Agent, Message, Conversation)
+
+### PyQt5 Signal/Slot Safety
+- **Lambda + clicked(bool)**: Always accept `checked` as first param: `lambda checked, t=value: handler(t)`
+- **Exception guard**: Any slot that could throw must wrap in try/except to prevent `qFatal()` → `abort()`
+- **Clipboard access**: Always wrapped in try/except (PyQt5 may abort on clipboard errors)
 
 ### UI Patterns
 - Frameless windows (`Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint`) with custom title bars
@@ -110,24 +138,27 @@ Safe UI operations
 - 50ms batch timer for streaming display to avoid UI stutter
 - `show_near(anchor)` pattern for positioning dialog relative to float button
 - Auto-hide on focus loss (`changeEvent` → `ActivationChange`)
-- Stretch-before-insert layout pattern: `_msg_layout.insertWidget(count-1, widget)` (last item is always a stretch spacer)
+- Stretch-before-insert layout pattern: `_msg_layout.insertWidget(count-1, widget)`
+- Copy button on assistant bubbles: hover-visible `📋`, connected after stream completes
 
 ### Streaming
-- Thinking tokens and response tokens are interleaved in the Ollama stream; `ChatStream.__iter__` demuxes them
-- During stream: displayed as plain text with `💭` prefix for thinking
-- After stream: thinking folded into `<details><summary>💭 思考过程</summary>...</details>`, response body rendered as Markdown HTML
-- Buffer-then-flush pattern: tokens accumulate in `_stream_buffer`/`_thinking_buffer`, flushed every 50ms
+- Thinking/response tokens interleaved; `ChatStream.__iter__` demuxes them
+- During stream: plain text with `💭` prefix for thinking
+- After stream: thinking folded into `<details><summary>💭 思考过程</summary>...</details>`, response as Markdown HTML
+- Buffer-then-flush pattern: 50ms flush timer
 
 ### Selection Capture
+- Two-tier: pynput CGEvent (main) → osascript System Events (fallback)
 - Does NOT use macOS Accessibility API (unreliable for Electron/Chromium apps)
-- Instead: saves clipboard → simulates `⌘C` via pynput CGEvent → waits 150ms → reads `pbpaste` → restores clipboard
-- 50ms pre-delay to avoid modifier key conflict with the hotkey itself
+- Saves clipboard → simulates `⌘C` → waits 80ms → reads `pbpaste` → restores clipboard
+- 100ms pre-delay via QTimer to avoid modifier key conflict with the hotkey
 
 ### Persistence
 - SQLite with WAL journal mode, foreign keys ON
 - Thread-local connections (one per thread via `threading.local()`)
 - Conversation title auto-derived from first user message (first 40 chars)
-- DB file: `chat_history.db` in project root (not in `ai_desktop/`)
+- Custom agents stored as JSON in `settings` table
+- DB file: `chat_history.db` in project root
 
 ## Building, Running & Testing
 
@@ -141,75 +172,83 @@ ai-desktop
 # Or directly
 python -m ai_desktop.main
 
-# Run smoke tests
-pytest tests/
-# or
-python tests/test_smoke.py
+# Run all tests (26 tests)
+pytest tests/ -v
 ```
 
 **Prerequisites:**
 - Ollama must be running (`ollama serve`)
-- Model must be pulled (`ollama pull qwen3:14b` or configure in `config.py`)
-- macOS only (uses `pbpaste`/`pbcopy`, `NSWindow` Objective-C bridging)
+- Model must be pulled (configure in Settings or `config.py`)
+- macOS only (uses `pbpaste`/`pbcopy`, `NSWindow` Objective-C bridging, QSystemTrayIcon)
 
 ## Configuration
 
-Edit `ai_desktop/config.py`:
+Configurable at runtime via **Settings** (float button right-click → 设置…) or directly in `ai_desktop/config.py`:
 
 | Setting | Default | Notes |
 |---------|---------|-------|
-| `OLLAMA_MODEL` | `qwen3:14b` | Must exist locally (`ollama list`) |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | |
-| `HOTKEY` | `<cmd>+<ctrl>+l` | pynput format: `<cmd>`, `<ctrl>`, `<shift>`, `<alt>` — **not** `<fn>` or `<option>` |
-| `OLLAMA_NUM_PREDICT` | 2048 | Max output tokens (includes thinking) |
-| `OLLAMA_NUM_CTX` | 4096 | Context window size |
+| `OLLAMA_MODEL` | `sorc/qwen3.5-instruct-uncensored:9b` | Must exist locally (`ollama list`) |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Changeable at runtime |
+| `HOTKEY` | `<cmd>+<ctrl>+l` | Runtime changeable via Settings |
+| `OLLAMA_NUM_PREDICT` | 20480 | Max output tokens |
+| `OLLAMA_NUM_CTX` | 40960 | Context window size |
 | `OLLAMA_KEEP_ALIVE` | `30m` | Model stays loaded in memory |
 | `OLLAMA_TIMEOUT` | 120 | HTTP request timeout (seconds) |
 | `MAX_TEXT_LENGTH` | 12000 | Input truncation limit |
+
+All settings are persisted in SQLite and survive restarts.
 
 **pynput key names on macOS:** Use `<alt>` not `<option>`; use `<cmd>` not `<command>`. `<fn>` and `<option>` are rejected by `HotKey.parse`.
 
 ## Agents
 
-Defined as `Agent` dataclasses in `config.py`. Each has an `id`, `name`, `icon` (emoji), and `system_prompt`. The default is index 1 (Code Expert). Switching agents only affects new messages; existing conversation content is unchanged.
+Defined as `Agent` dataclasses. Built-in agents in `config.py`. Custom agents created/edited/deleted via **Agent Manager** (⚙ button in chat title bar or float button → 设置… → 管理 Agent). Custom agents stored as JSON in `settings` table, loaded on startup and merged with built-in.
 
-| Agent | ID | Behavior |
-|-------|-----|----------|
-| 💻 Code Expert | `code_expert` | Code review, debugging, writing; structured output format |
-| 🌐 Translator | `translator` | CN↔EN translation; direct output, no thinking |
-| 🤖 General | `general_assistant` | Catch-all; concise Chinese responses |
+| Agent | ID | Icon | Behavior |
+|-------|-----|------|----------|
+| 💻 Code Expert | `code_expert` | 💻 | Code review, debugging, writing; structured output |
+| 🌐 Translator | `translator` | 🌐 | CN↔EN translation; direct output |
+| 🤖 General | `general_assistant` | 🤖 | Catch-all; concise Chinese responses |
+| 📄 Summarizer | `summarizer` | 📄 | 1-3 sentence summary, ≤100 chars, Chinese output |
+| ✍️ Polisher | `polisher` | ✍️ | Improve wording & grammar, keep original meaning |
+| *(custom)* | `custom_N` | user-defined | User-defined via Agent Manager |
 
 ## Memory System Notes
 
 The project has associated memory files at `~/.qwen/projects/-Users-milin-2026-AI----/memory/`:
 - `project_v1_scope.md` — v1 constraints and scope boundaries
-- `reference_macos_accessibility_api.md` — Why AXSelectedText was dropped in favor of ⌘C simulation
-- `user_design_approach.md` — User's design philosophy (constraints-first, macOS-native, minimal viable)
-- `feedback_plan_before_code.md` — User prefers structured plan before implementation
+- `reference_macos_accessibility_api.md` — Why AXSelectedText was dropped
+- `user_design_approach.md` — User's design philosophy
+- `feedback_plan_before_code.md` — Structured plan before implementation
 - `reference_pynput_key_names_macos.md` — pynput key name quirks on macOS
 - `reference_pynput_pyqt5_macos.md` — Thread safety: pynput callbacks → Qt signals
-
-When working on this project, check these memories for context on past decisions and user preferences.
+- `reference_pynput_modifier_conflict.md` — Controller+Listener share CGEventTap
+- `reference_ime_editing_state_hotkey.md` — IME interference hypothesis
+- `reference_pyqt5_slot_gotchas.md` — qFatal on unhandled exceptions + clicked(bool)
 
 ## Edge Cases & Gotchas
 
 - **Empty selection / no change**: If clipboard content unchanged after ⌘C, `read_selection()` returns `None` and no window is opened
-- **Ollama not running**: Warning logged on startup; chat will fail with connection error displayed in the chat bubble
+- **Ollama not running**: Warning logged on startup + red dot in input bar; chat will fail gracefully
 - **Model not pulled**: Will appear in model list (fallback to config default) but API calls will fail
-- **Concurrent sends**: `_on_user_message` guards against multiple simultaneous workers (`if self._worker and self._worker.isRunning(): return`)
-- **Window auto-hide**: Dialog hides on focus loss (clicking outside) — by design for non-intrusive interaction
+- **Concurrent sends**: `_on_user_message` guards against multiple workers; restores text + shows `⏳ 等待回复完成...` hint
+- **Window auto-hide**: Dialog hides on focus loss (clicking outside) — by design; toggle via float button menu
 - **Cross-Space**: Float button uses `NSWindowCollectionBehaviorCanJoinAllSpaces` (value 1) via `objc_msgSend`
 - **Screen tracking**: 500ms timer checks if cursor moved to a different screen and repositions the float button
-- **Accessibility permissions (macOS)**: `pynput` Controller uses `CGEventPost` which requires the running process (Terminal.app / iTerm.app) to be granted Accessibility permission in System Settings → Privacy & Security → Accessibility. Without it, `read_selection()` silently fails (Cmd+C not posted). The code includes an `osascript` fallback, but that also requires the same permission for System Events.
-- **Permission check at startup**: pynput logs `This process is not trusted!` as a warning when accessibility is missing — the app still runs but text capture won't work.
+- **Accessibility permissions (macOS)**: pynput Controller requires Accessibility permission. Two-tier fallback: pynput → osascript, both need the same permission.
+- **Esc behavior**: Two-stage — first Esc clears input, second Esc closes dialog
+- **`init_db()`**: Called at `ChatController.__init__` (before any DB query), idempotent
+- **Copy button**: Connected after stream completes with disconnect guard + try/except on clipboard access
 
 ## Development Roadmap
 
-See `思考与设计.md` for the full prioritized roadmap (P0–P3). Summary:
+Final status as of 2026-05-26 (post-optimization):
 
-| Tier | Status | Focus |
+| Tier | Status | Items |
 |------|--------|-------|
-| P0 | 1/3 done | Bug fixes: model combo ✅, input auto-focus, copy button |
-| P1 | 0/4 done | Core UX: history browser, dark mode, error states, keyboard shortcuts |
-| P2 | 0/4 done | Features: settings UI, custom agents, export, session restore |
-| P3 | 0/4 done | Future: menu bar icon, image input, tests, search |
+| P0 | ✅ 3/3 | Model combo, input auto-focus, copy button |
+| P1 | ⚡ 3/4 | History browser ✅, Ollama status ✅, keyboard shortcuts ✅, ~~dark mode~~ |
+| P2 | ✅ 4/4 | Settings UI, custom agents, export, session restore |
+| P3 | ⚡ 3/4 | Menu bar icon ✅, search ✅, tests ✅, ~~image input~~ |
+| Post | ✅ | Interrupt button ⏹, edit button ✏️, macOS notifications, async HTTP worker, slot error guards, agent persistence fix |
+| | **13/14 + enhancements** | **Project complete** |

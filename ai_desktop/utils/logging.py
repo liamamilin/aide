@@ -3,7 +3,6 @@
 """
 import logging
 import sys
-from pathlib import Path
 
 
 def setup(level: int = logging.INFO) -> None:

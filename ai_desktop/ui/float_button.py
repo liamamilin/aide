@@ -73,6 +73,7 @@ class FloatButton(QPushButton):
     exit_requested = pyqtSignal()
     hide_requested = pyqtSignal()
     about_requested = pyqtSignal()
+    settings_requested = pyqtSignal()
     auto_hide_toggled = pyqtSignal(bool)
 
     def __init__(self, parent=None):
@@ -157,14 +158,8 @@ class FloatButton(QPushButton):
 
     def mouseReleaseEvent(self, event) -> None:
         self._is_dragging = False
-        drag_pos = self._drag_pos
         self._drag_pos = None
-        if drag_pos is not None:
-            delta = event.globalPos() - drag_pos - self.frameGeometry().topLeft()
-            if delta.manhattanLength() < 5:
-                super().mouseReleaseEvent(event)
-        else:
-            super().mouseReleaseEvent(event)
+        super().mouseReleaseEvent(event)
 
     def contextMenuEvent(self, event) -> None:
         menu = QMenu(self)
@@ -179,6 +174,8 @@ class FloatButton(QPushButton):
         auto_hide_action.setChecked(self._auto_hide)
         auto_hide_action.toggled.connect(self.auto_hide_toggled.emit)
         menu.addSeparator()
+        settings_action = menu.addAction("设置…")
+        settings_action.triggered.connect(self.settings_requested.emit)
         hide_action = menu.addAction("隐藏悬浮球")
         hide_action.triggered.connect(self.hide_requested.emit)
         about_action = menu.addAction("关于 AI 桌面助手")

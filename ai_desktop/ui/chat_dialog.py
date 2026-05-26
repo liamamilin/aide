@@ -2,7 +2,7 @@
 对话窗口 —— Agent 多轮对话
 """
 import requests
-from PyQt5.QtCore import Qt, QPoint, QEvent, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QPoint, QEvent, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QKeyEvent
 from PyQt5.QtWidgets import (
     QApplication,
@@ -15,7 +15,6 @@ from PyQt5.QtWidgets import (
     QSizeGrip,
     QVBoxLayout,
     QWidget,
-    QSizePolicy,
 )
 
 from ai_desktop import config
@@ -30,6 +29,7 @@ class ChatDialog(QWidget):
     history_requested = pyqtSignal()  # 打开历史对话框
     export_requested = pyqtSignal()   # 导出当前对话
     manage_agents_requested = pyqtSignal()  # 管理 Agent
+    stop_requested = pyqtSignal()   # 停止流式生成
     agent_changed = pyqtSignal(Agent)
     model_changed = pyqtSignal(str)
     closed = pyqtSignal()
@@ -326,16 +326,18 @@ class ChatDialog(QWidget):
         self._input.clear()
 
     def _check_ollama_status(self) -> None:
-        try:
-            r = requests.get(f"{config.OLLAMA_BASE_URL}/api/tags", timeout=1)
-            if r.status_code == 200:
-                self._ollama_status.setStyleSheet("font-size: 8px; color: #4CAF50; background: none;")
-                self._ollama_status.setToolTip("Ollama 已连接")
-                return
-        except Exception:
-            pass
-        self._ollama_status.setStyleSheet("font-size: 8px; color: #F44336; background: none;")
-        self._ollama_status.setToolTip("Ollama 未连接")
+        """在后台线程探活 Ollama，避免阻塞 UI"""
+        self._ping_worker = _OllamaPingWorker()
+        self._ping_worker.result.connect(self._on_ollama_result)
+        self._ping_worker.start()
+
+    def _on_ollama_result(self, ok: bool) -> None:
+        if ok:
+            self._ollama_status.setStyleSheet("font-size: 8px; color: #4CAF50; background: none;")
+            self._ollama_status.setToolTip("Ollama 已连接")
+        else:
+            self._ollama_status.setStyleSheet("font-size: 8px; color: #F44336; background: none;")
+            self._ollama_status.setToolTip("Ollama 未连接")
 
     def add_user_message(self, text: str) -> None:
         bubble = self._make_bubble(text, is_user=True)
@@ -458,8 +460,25 @@ class ChatDialog(QWidget):
             pass
 
     def set_thinking(self, thinking: bool) -> None:
-        self._send_btn.setEnabled(not thinking)
-        self._send_btn.setText("..." if thinking else "发送")
+        self._send_btn.setEnabled(True)
+        try:
+            self._send_btn.clicked.disconnect()
+        except TypeError:
+            pass
+        if thinking:
+            self._send_btn.setText("⏹")
+            self._send_btn.setToolTip("停止生成")
+            self._send_btn.setStyleSheet(
+                "QPushButton { background: #e02020; color: white; border: none; border-radius: 5px;"
+                "padding: 6px 14px; font-size: 12px; font-weight: bold; }"
+                "QPushButton:hover { background: #c01010; }"
+            )
+            self._send_btn.clicked.connect(self.stop_requested.emit)
+        else:
+            self._send_btn.setText("发送")
+            self._send_btn.setToolTip("")
+            self._send_btn.setStyleSheet(styles.BUTTON_PRIMARY)
+            self._send_btn.clicked.connect(self._on_send)
         self._input.setEnabled(not thinking)
 
     def clear_messages(self) -> None:
@@ -487,8 +506,40 @@ class ChatDialog(QWidget):
                 "QLabel { background: #007AFF; color: white; border-radius: 10px;"
                 "padding: 8px 12px; font-size: 13px; }"
             )
+            # 用户气泡 + 编辑按钮（hover 显示）
+            v_layout = QVBoxLayout()
+            v_layout.setContentsMargins(0, 0, 0, 0)
+            v_layout.setSpacing(2)
+            v_layout.addWidget(lbl)
+
+            btn_bar = QWidget()
+            btn_bar.setFixedHeight(22)
+            bl = QHBoxLayout(btn_bar)
+            bl.setContentsMargins(4, 0, 8, 0)
+            bl.addStretch()
+
+            edit_btn = QPushButton("✏️")
+            edit_btn.setFixedSize(18, 18)
+            edit_btn.setToolTip("编辑消息")
+            edit_btn.setObjectName("edit_btn_user")
+            edit_btn.setCursor(Qt.PointingHandCursor)
+            edit_btn.setVisible(False)
+            edit_btn.setStyleSheet("""
+                QPushButton {
+                    background: transparent; border: none; font-size: 10px; color: rgba(255,255,255,0.7);
+                }
+                QPushButton:hover {
+                    color: white; background: rgba(255,255,255,0.15); border-radius: 3px;
+                }
+            """)
+            edit_btn.clicked.connect(lambda checked, t=content: self.set_input_text(t))
+            bl.addWidget(edit_btn)
+
+            v_layout.addWidget(btn_bar)
             wl.addStretch()
-            wl.addWidget(lbl)
+            wl.addLayout(v_layout)
+
+            wrapper.installEventFilter(self)
         else:
             lbl.setStyleSheet(
                 "QLabel { background: #f0f0f0; color: #1a1a1a; border-radius: 10px;"
@@ -550,8 +601,12 @@ class ChatDialog(QWidget):
         if event.type() == QEvent.Enter:
             for btn in obj.findChildren(QPushButton, "copy_btn_assistant"):
                 btn.setVisible(True)
+            for btn in obj.findChildren(QPushButton, "edit_btn_user"):
+                btn.setVisible(True)
         elif event.type() == QEvent.Leave:
             for btn in obj.findChildren(QPushButton, "copy_btn_assistant"):
+                btn.setVisible(False)
+            for btn in obj.findChildren(QPushButton, "edit_btn_user"):
                 btn.setVisible(False)
 
         # ── 输入框快捷键 ──
@@ -657,3 +712,15 @@ class ChatDialog(QWidget):
         self._ollama_timer.stop()
         self.closed.emit()
         super().hideEvent(event)
+
+
+class _OllamaPingWorker(QThread):
+    """后台线程探活 Ollama"""
+    result = pyqtSignal(bool)
+
+    def run(self) -> None:
+        try:
+            r = requests.get(f"{config.OLLAMA_BASE_URL}/api/tags", timeout=1)
+            self.result.emit(r.status_code == 200)
+        except Exception:
+            self.result.emit(False)

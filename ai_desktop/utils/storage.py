@@ -10,10 +10,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from ai_desktop import config
-
-logger = logging.getLogger(__name__)
-
 DB_PATH = Path(__file__).resolve().parent.parent.parent / "chat_history.db"
 _local = threading.local()
 
@@ -117,6 +113,25 @@ def list_conversations_with_counts(limit: int = 50) -> list[dict]:
         LIMIT ?
         """,
         (limit,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def search_conversations(query: str, limit: int = 20) -> list[dict]:
+    """全文搜索对话标题和消息内容"""
+    db = _conn()
+    pattern = f"%{query}%"
+    rows = db.execute(
+        """
+        SELECT DISTINCT c.id, c.title, c.agent_id, c.created_at,
+               (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id) AS msg_count
+        FROM conversations c
+        LEFT JOIN messages m ON m.conversation_id = c.id
+        WHERE c.title LIKE ? OR m.content LIKE ?
+        ORDER BY c.created_at DESC
+        LIMIT ?
+        """,
+        (pattern, pattern, limit),
     ).fetchall()
     return [dict(r) for r in rows]
 

@@ -2,7 +2,6 @@
 AI 桌面助手 —— 全局配置
 """
 from dataclasses import dataclass
-from typing import List
 
 # ── LLM ──────────────────────────────────────────────
 
@@ -38,7 +37,7 @@ class Agent:
     system_prompt: str
 
 
-AGENTS: List[Agent] = [
+AGENTS: list[Agent] = [
     Agent(
         id="general_assistant",
         name="通用助手",
@@ -78,6 +77,31 @@ AGENTS: List[Agent] = [
 - 如果原文有明显错误，翻译后在括号内简注
 - 总字数 150字以内
 """
+    ),
+    Agent(
+        id="summarizer",
+        name="摘要",
+        icon="📄",
+        system_prompt="""你是一个高效摘要助手。
+
+规则：
+- 用 1-3 句话概括原文核心内容
+- 总字数控制在 100 字以内
+- 抓住关键结论，忽略细节
+- 用中文输出"""
+    ),
+    Agent(
+        id="polisher",
+        name="润色",
+        icon="✍️",
+        system_prompt="""你是一个文字润色助手。
+
+规则：
+- 保持原意不变，优化措辞和节奏
+- 修正语法错误和不通顺的句子
+- 不添加原文没有的内容
+- 如果原文已经很好，直接回复"原文已经很通顺"
+- 用和原文相同的语言输出"""
     ),
 ]
 

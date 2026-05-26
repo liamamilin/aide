@@ -3,11 +3,12 @@
 """
 from datetime import datetime
 
-from PyQt5.QtCore import Qt, QPoint, pyqtSignal
+from PyQt5.QtCore import Qt, QPoint, pyqtSignal, QTimer
 from PyQt5.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -15,7 +16,11 @@ from PyQt5.QtWidgets import (
 )
 
 from ai_desktop.config import AGENTS
-from ai_desktop.utils.storage import delete_conversation, list_conversations_with_counts
+from ai_desktop.utils.storage import (
+    delete_conversation,
+    list_conversations_with_counts,
+    search_conversations,
+)
 
 
 class HistoryDialog(QDialog):
@@ -66,6 +71,24 @@ class HistoryDialog(QDialog):
 
         root.addWidget(title)
 
+        # ── 搜索栏 ──
+        self._search = QLineEdit()
+        self._search.setPlaceholderText("搜索对话…")
+        self._search.setClearButtonEnabled(True)
+        self._search.setStyleSheet(
+            "QLineEdit { border: none; border-bottom: 1px solid #e0e0e0; padding: 6px 12px;"
+            "font-size: 13px; background: #ffffff; }"
+            "QLineEdit:focus { border-bottom-color: #007AFF; }"
+        )
+        self._search.textChanged.connect(self._on_search_changed)
+        root.addWidget(self._search)
+
+        # 防抖定时器（300ms）
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(300)
+        self._search_timer.timeout.connect(self._do_search)
+
         # ── 列表区域 ──
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -84,6 +107,37 @@ class HistoryDialog(QDialog):
         scroll.setWidget(self._list_container)
         root.addWidget(scroll)
 
+    # ── 搜索 ───────────────────────────────────────────
+
+    def _on_search_changed(self) -> None:
+        """输入变化时重置防抖定时器"""
+        self._search_timer.start()
+
+    def _do_search(self) -> None:
+        """执行搜索并刷新列表"""
+        query = self._search.text().strip()
+        self._clear_list()
+        if not query:
+            # 空搜索 → 显示全部
+            self._load()
+            return
+        results = search_conversations(query, limit=50)
+        if not results:
+            empty = QLabel("未找到匹配的对话")
+            empty.setStyleSheet("color: #999; font-size: 13px; padding: 20px;")
+            empty.setAlignment(Qt.AlignCenter)
+            self._list_layout.insertWidget(0, empty)
+            return
+        for convo in results:
+            row = self._make_row(convo)
+            self._list_layout.insertWidget(self._list_layout.count() - 1, row)
+
+    def _clear_list(self) -> None:
+        while self._list_layout.count() > 1:
+            item = self._list_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
     # ── 加载 / 刷新 ────────────────────────────────────
 
     def _load(self) -> None:
@@ -100,11 +154,11 @@ class HistoryDialog(QDialog):
             self._list_layout.insertWidget(self._list_layout.count() - 1, row)
 
     def _refresh(self) -> None:
-        while self._list_layout.count() > 1:
-            item = self._list_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        self._load()
+        self._clear_list()
+        if self._search.text().strip():
+            self._do_search()
+        else:
+            self._load()
 
     def _make_row(self, convo: dict) -> QWidget:
         row = QWidget()
