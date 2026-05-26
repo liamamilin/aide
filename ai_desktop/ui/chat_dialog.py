@@ -27,6 +27,9 @@ from ai_desktop.ui.float_button import pin_to_all_spaces
 class ChatDialog(QWidget):
     message_sent = pyqtSignal(str)  # 用户发送的消息文本
     new_convo_requested = pyqtSignal()
+    history_requested = pyqtSignal()  # 打开历史对话框
+    export_requested = pyqtSignal()   # 导出当前对话
+    manage_agents_requested = pyqtSignal()  # 管理 Agent
     agent_changed = pyqtSignal(Agent)
     model_changed = pyqtSignal(str)
     closed = pyqtSignal()
@@ -103,6 +106,28 @@ class ChatDialog(QWidget):
         new_btn.clicked.connect(self.new_convo_requested.emit)
         tl.addWidget(new_btn)
 
+        # 历史按钮
+        hist_btn = QPushButton("📋 历史")
+        hist_btn.setFixedHeight(28)
+        hist_btn.setStyleSheet(
+            "QPushButton { background: #e8e8e8; border: none; border-radius: 5px;"
+            "padding: 2px 10px; font-size: 11px; color: #333; }"
+            "QPushButton:hover { background: #d0d0d0; }"
+        )
+        hist_btn.clicked.connect(self.history_requested.emit)
+        tl.addWidget(hist_btn)
+
+        # 导出按钮
+        self._export_btn = QPushButton("📤 导出")
+        self._export_btn.setFixedHeight(28)
+        self._export_btn.setStyleSheet(
+            "QPushButton { background: #e8e8e8; border: none; border-radius: 5px;"
+            "padding: 2px 10px; font-size: 11px; color: #333; }"
+            "QPushButton:hover { background: #d0d0d0; }"
+        )
+        self._export_btn.clicked.connect(self.export_requested.emit)
+        tl.addWidget(self._export_btn)
+
         # Agent 切换
         self._agent_combo = QComboBox()
         self._agent_combo.setFixedHeight(28)
@@ -126,6 +151,17 @@ class ChatDialog(QWidget):
         self._agent_combo.setCurrentIndex(idx)
         self._agent_combo.currentIndexChanged.connect(self._on_agent_combo)
         tl.addWidget(self._agent_combo)
+
+        # Agent 管理按钮
+        gear_btn = QPushButton("⚙")
+        gear_btn.setFixedSize(24, 24)
+        gear_btn.setToolTip("管理 Agent")
+        gear_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: none; font-size: 14px; color: #999; }"
+            "QPushButton:hover { color: #333; background: #e0e0e0; border-radius: 12px; }"
+        )
+        gear_btn.clicked.connect(self.manage_agents_requested.emit)
+        tl.addWidget(gear_btn)
 
         # 模型选择
         self._model_combo = QComboBox()
@@ -250,6 +286,17 @@ class ChatDialog(QWidget):
         self._agent_combo.setCurrentIndex(idx)
         self._agent_combo.blockSignals(False)
 
+    def refresh_agents(self, agents: list[Agent]) -> None:
+        """刷新 Agent 下拉列表（自定义 Agent 变更后调用）"""
+        self._agents = agents
+        self._agent_combo.blockSignals(True)
+        self._agent_combo.clear()
+        for ag in agents:
+            self._agent_combo.addItem(f"{ag.icon} {ag.name}", ag.id)
+        idx = next(i for i, ag in enumerate(agents) if ag.id == self._active_agent.id)
+        self._agent_combo.setCurrentIndex(idx)
+        self._agent_combo.blockSignals(False)
+
     def set_auto_hide(self, enabled: bool) -> None:
         self._auto_hide = enabled
 
@@ -265,6 +312,11 @@ class ChatDialog(QWidget):
         """短暂提示 worker 正忙，1.5 秒后恢复原 placeholder"""
         self._input.setPlaceholderText("⏳ 等待回复完成...")
         QTimer.singleShot(1500, lambda: self._input.setPlaceholderText("输入消息... (Enter 发送)"))
+
+    def flash_export_btn(self) -> None:
+        """导出按钮短暂显示 ✅ 表示已复制"""
+        self._export_btn.setText("✅ 已复制")
+        QTimer.singleShot(1500, lambda: self._export_btn.setText("📤 导出"))
 
     def _on_send(self) -> None:
         text = self._input.text().strip()
@@ -292,6 +344,9 @@ class ChatDialog(QWidget):
     def add_assistant_message(self, text: str) -> None:
         html = markdown.to_html(text)
         bubble = self._make_bubble(html, is_user=False, is_html=True)
+        btn = bubble.findChild(QPushButton, "copy_btn_assistant")
+        if btn:
+            btn.clicked.connect(lambda checked, t=text: self._copy_to_clipboard(t))
         self._insert_widget(bubble)
 
     # ── 流式输出 ───────────────────────────────────────

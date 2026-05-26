@@ -20,6 +20,8 @@ from ai_desktop.config import Agent, AGENTS, DEFAULT_AGENT_INDEX
 from ai_desktop.llm.chat_client import ChatClient, list_models
 from ai_desktop.ui.float_button import FloatButton, pin_to_all_spaces
 from ai_desktop.ui.chat_dialog import ChatDialog
+from ai_desktop.ui.history_dialog import HistoryDialog
+from ai_desktop.ui.agent_editor import AgentEditor, AgentDef
 from ai_desktop.utils import logging as log_util
 from ai_desktop.utils.storage import (
     init_db,
@@ -27,6 +29,10 @@ from ai_desktop.utils.storage import (
     save_message,
     save_setting,
     get_setting,
+    get_conversation,
+    list_conversations,
+    load_custom_agents,
+    save_custom_agents,
     Message,
 )
 
@@ -86,9 +92,19 @@ class ChatController(QObject):
         saved_agent_id = get_setting("last_agent_id")
         saved_model = get_setting("last_model")
 
-        self._active_agent: Agent = AGENTS[DEFAULT_AGENT_INDEX]
+        # 合并内置 + 自定义 Agent
+        self._all_agents: list[Agent] = list(AGENTS)
+        self._custom_agents: list[AgentDef] = []
+        for d in load_custom_agents():
+            ag = Agent(id=d["id"], name=d["name"], icon=d["icon"], system_prompt=d["system_prompt"])
+            a_def = AgentDef(id=d["id"], name=d["name"], icon=d["icon"],
+                            system_prompt=d["system_prompt"], builtin=False)
+            self._all_agents.append(ag)
+            self._custom_agents.append(a_def)
+
+        self._active_agent: Agent = self._all_agents[DEFAULT_AGENT_INDEX]
         if saved_agent_id:
-            for ag in AGENTS:
+            for ag in self._all_agents:
                 if ag.id == saved_agent_id:
                     self._active_agent = ag
                     break
@@ -97,6 +113,7 @@ class ChatController(QObject):
         self._auto_hide: bool = get_setting("auto_hide") == "true"  # 默认不收起
         self._convo_id: int = 0
         self._messages: list[Message] = []
+        self._restore_last: bool = True  # 首次打开自动恢复上次对话
         self._worker: Optional[StreamingChatWorker] = None
         self._dialog: Optional[ChatDialog] = None
 
@@ -170,12 +187,21 @@ class ChatController(QObject):
     def _show_dialog(self) -> None:
         if self._dialog is None:
             models = list_models()
-            self._dialog = ChatDialog(AGENTS, self._active_agent, models, self._model,
+            self._dialog = ChatDialog(self._all_agents, self._active_agent, models, self._model,
                                      auto_hide=self._auto_hide)
             self._dialog.message_sent.connect(self._on_user_message)
             self._dialog.new_convo_requested.connect(self._new_conversation)
+            self._dialog.history_requested.connect(self._on_history_requested)
+            self._dialog.export_requested.connect(self._on_export_requested)
+            self._dialog.manage_agents_requested.connect(self._on_manage_agents)
             self._dialog.agent_changed.connect(self._on_agent_changed)
             self._dialog.model_changed.connect(self._on_model_changed)
+            # 首次打开自动恢复上次对话
+            if self._restore_last:
+                self._restore_last = False
+                convs = list_conversations(limit=1)
+                if convs:
+                    self._on_conversation_selected(convs[0].id)
         # 如果悬浮球被隐藏了，重新显示
         if self.float_btn.isHidden():
             self.float_btn.show()
@@ -228,6 +254,94 @@ class ChatController(QObject):
         if self._dialog:
             self._dialog.clear_messages()
         logger.info("New conversation started (agent=%s)", self._active_agent.name)
+
+    # ── 对话历史 ───────────────────────────────────────
+
+    def _on_history_requested(self) -> None:
+        dialog = HistoryDialog(parent=self._dialog)
+        dialog.conversation_selected.connect(self._on_conversation_selected)
+        if self._dialog:
+            p = self._dialog.geometry().center()
+            dialog.move(p.x() - dialog.width() // 2, p.y() - dialog.height() // 2)
+        dialog.exec_()
+
+    def _on_conversation_selected(self, convo_id: int) -> None:
+        conv = get_conversation(convo_id)
+        if conv is None:
+            return
+        # 停止当前 worker
+        if self._worker and self._worker.isRunning():
+            self._worker.requestInterruption()
+            self._worker = None
+        # 恢复对话状态
+        self._convo_id = conv.id
+        self._messages = conv.messages
+        # 切换 Agent
+        for ag in self._all_agents:
+            if ag.id == conv.agent_id:
+                self._active_agent = ag
+                if self._dialog:
+                    self._dialog.set_active_agent(ag)
+                break
+        # 渲染消息
+        if self._dialog:
+            self._dialog.clear_messages()
+            for m in conv.messages:
+                if m.role == "user":
+                    self._dialog.add_user_message(m.content)
+                else:
+                    self._dialog.add_assistant_message(m.content)
+        logger.info("Loaded conversation %d (%d messages)", convo_id, len(conv.messages))
+
+    def _on_export_requested(self) -> None:
+        """将当前对话格式化为 Markdown 并复制到剪贴板"""
+        if not self._messages:
+            return
+        md = "# AI 桌面助手 · 对话记录\n\n"
+        md += f"**{self._active_agent.icon} {self._active_agent.name}**\n\n"
+        md += "---\n\n"
+        for m in self._messages:
+            role = "**用户**" if m.role == "user" else "**助手**"
+            md += f"{role}: {m.content}\n\n"
+        try:
+            QApplication.clipboard().setText(md)
+        except Exception:
+            pass
+        if self._dialog:
+            self._dialog.flash_export_btn()
+        logger.info("Exported %d messages to clipboard", len(self._messages))
+
+    def _on_manage_agents(self) -> None:
+        """打开 Agent 管理对话框"""
+        builtin = [
+            AgentDef(id=ag.id, name=ag.name, icon=ag.icon,
+                     system_prompt=ag.system_prompt, builtin=True)
+            for ag in AGENTS
+        ]
+        editor = AgentEditor(builtin, self._custom_agents, parent=self._dialog)
+        editor.agents_saved.connect(self._on_custom_agents_saved)
+        if self._dialog:
+            p = self._dialog.geometry().center()
+            editor.move(p.x() - editor.width() // 2, p.y() - editor.height() // 2)
+        editor.exec_()
+
+    def _on_custom_agents_saved(self, data: list[dict]) -> None:
+        """自定义 Agent 保存后刷新"""
+        save_custom_agents(data)
+        # 重建合并列表
+        self._all_agents = list(AGENTS)
+        self._custom_agents.clear()
+        for d in data:
+            ag = Agent(id=d["id"], name=d["name"], icon=d["icon"], system_prompt=d["system_prompt"])
+            self._all_agents.append(ag)
+            self._custom_agents.append(AgentDef(id=d["id"], name=d["name"], icon=d["icon"],
+                                                system_prompt=d["system_prompt"], builtin=False))
+        # 确保当前 Agent 仍在列表中
+        if self._active_agent not in self._all_agents:
+            self._active_agent = self._all_agents[DEFAULT_AGENT_INDEX]
+        if self._dialog:
+            self._dialog.refresh_agents(self._all_agents)
+        logger.info("Custom agents saved (%d custom)", len(data))
 
     # ── 发送消息 ───────────────────────────────────────
 

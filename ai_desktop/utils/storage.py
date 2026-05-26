@@ -1,6 +1,7 @@
 """
 SQLite 持久化存储：对话记录
 """
+import json
 import logging
 import sqlite3
 import threading
@@ -104,6 +105,22 @@ def list_conversations(limit: int = 50) -> list[Conversation]:
     ]
 
 
+def list_conversations_with_counts(limit: int = 50) -> list[dict]:
+    """列出对话（含消息数），用于历史浏览"""
+    db = _conn()
+    rows = db.execute(
+        """
+        SELECT c.id, c.title, c.agent_id, c.created_at,
+               (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id) AS msg_count
+        FROM conversations c
+        ORDER BY c.created_at DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_conversation(convo_id: int) -> Optional[Conversation]:
     db = _conn()
     row = db.execute("SELECT id, title, agent_id, created_at FROM conversations WHERE id=?", (convo_id,)).fetchone()
@@ -164,3 +181,19 @@ def get_setting(key: str, default: str = "") -> str:
     db = _conn()
     row = db.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
     return row["value"] if row else default
+
+
+# ── 自定义 Agent ──────────────────────────────────────
+
+def load_custom_agents() -> list[dict]:
+    """加载自定义 Agent 列表"""
+    raw = get_setting("custom_agents", "[]")
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+
+
+def save_custom_agents(agents: list[dict]) -> None:
+    """保存自定义 Agent 列表"""
+    save_setting("custom_agents", json.dumps(agents, ensure_ascii=False))
