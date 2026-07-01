@@ -1,0 +1,17 @@
+* text=auto diff
+
+*.py text diff=python eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.cfg text eol=lf
+*.ini text eol=lf
+*.sh text eol=lf
+
+*.png binary
+*.ico binary
+*.icns binary
+*.db binary
+*.db-shm binary
+*.db-wal binary

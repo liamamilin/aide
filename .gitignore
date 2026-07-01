@@ -34,3 +34,9 @@ htmlcov/
 .env
 .venv/
 venv/
+
+# ── 规划 / 构建产物 ────────────────────────────────
+thoughts/
+build/
+*.dmg
+*.icns
