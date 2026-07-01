@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
+    QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSizeGrip,
@@ -23,15 +23,16 @@ from ai_desktop import config
 from ai_desktop.config import Agent
 from ai_desktop.ui import markdown, styles
 from ai_desktop.ui.float_button import pin_to_all_spaces
+from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 
 
-class ChatDialog(QWidget):
-    message_sent = pyqtSignal(str)  # 用户发送的消息文本
+class ChatDialog(FramelessDragMixin, QWidget):
+    message_sent = pyqtSignal(str)
     new_convo_requested = pyqtSignal()
-    history_requested = pyqtSignal()  # 打开历史对话框
-    export_requested = pyqtSignal()   # 导出当前对话
-    manage_agents_requested = pyqtSignal()  # 管理 Agent
-    stop_requested = pyqtSignal()   # 停止流式生成
+    history_requested = pyqtSignal()
+    export_requested = pyqtSignal()
+    manage_agents_requested = pyqtSignal()
+    stop_requested = pyqtSignal()
     agent_changed = pyqtSignal(Agent)
     model_changed = pyqtSignal(str)
     closed = pyqtSignal()
@@ -40,15 +41,15 @@ class ChatDialog(QWidget):
                  models: list[str] | None = None, active_model: str = "",
                  auto_hide: bool = False, parent=None):
         super().__init__(parent)
+        self._setup_drag(40)
         self._agents = agents
         self._active_agent = active_agent
         self._auto_hide = auto_hide
         self._models = models or [active_model] if active_model else []
         self._active_model = active_model
-        self._drag_pos: QPoint | None = None
-        self._user_scrolled_up: bool = False  # 用户手动滚离底部时暂停自动跟随
-        self._stream_bubble: QLabel | None = None  # 当前流式输出的气泡
-        self._stream_copy_btn: QPushButton | None = None  # 当前流式气泡的复制按钮
+        self._user_scrolled_up: bool = False
+        self._stream_bubble: QLabel | None = None
+        self._stream_copy_btn: QPushButton | None = None
         self._stream_text: str = ""
         self._stream_buffer: str = ""               # 积攒的回复 token
         self._thinking_text: str = ""               # 完整思考文本
@@ -86,12 +87,12 @@ class ChatDialog(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── 标题栏 ──
+        # ── Row 1: 标题栏 (40px) ──
         title = QWidget()
-        title.setFixedHeight(44)
+        title.setFixedHeight(40)
         title.setStyleSheet(styles.TITLE_BAR)
         tl = QHBoxLayout(title)
-        tl.setContentsMargins(12, 0, 8, 0)
+        tl.setContentsMargins(12, 0, 4, 0)
         tl.setSpacing(6)
 
         icon_lbl = QLabel(self._active_agent.icon)
@@ -106,31 +107,26 @@ class ChatDialog(QWidget):
 
         tl.addStretch()
 
-        # 新建对话按钮
-        new_btn = QPushButton("＋ 新对话")
-        new_btn.setFixedHeight(28)
-        new_btn.setStyleSheet(styles.SECONDARY_BUTTON)
-        new_btn.clicked.connect(self.new_convo_requested.emit)
-        tl.addWidget(new_btn)
+        hide_btn = QPushButton("−")
+        hide_btn.setFixedSize(24, 24)
+        hide_btn.setStyleSheet(styles.ICON_BUTTON)
+        hide_btn.clicked.connect(self.hide)
+        tl.addWidget(hide_btn)
 
-        # 历史按钮
-        hist_btn = QPushButton("📋 历史")
-        hist_btn.setFixedHeight(28)
-        hist_btn.setStyleSheet(styles.SECONDARY_BUTTON)
-        hist_btn.clicked.connect(self.history_requested.emit)
-        tl.addWidget(hist_btn)
+        root.addWidget(title)
 
-        # 导出按钮
-        self._export_btn = QPushButton("📤 导出")
-        self._export_btn.setFixedHeight(28)
-        self._export_btn.setStyleSheet(styles.SECONDARY_BUTTON)
-        self._export_btn.clicked.connect(self.export_requested.emit)
-        tl.addWidget(self._export_btn)
+        # ── Row 2: 工具栏 (36px, 可折叠) ──
+        self._toolbar = QWidget()
+        self._toolbar.setFixedHeight(36)
+        self._toolbar.setStyleSheet(styles.TOOLBAR)
+        tb = QHBoxLayout(self._toolbar)
+        tb.setContentsMargins(8, 0, 8, 0)
+        tb.setSpacing(6)
 
         # Agent 切换
         self._agent_combo = QComboBox()
-        self._agent_combo.setFixedHeight(28)
-        self._agent_combo.setMinimumWidth(110)
+        self._agent_combo.setFixedHeight(26)
+        self._agent_combo.setMinimumWidth(100)
         self._agent_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self._agent_combo.setStyleSheet(styles.COMBO_BOX)
         for ag in self._agents:
@@ -138,19 +134,11 @@ class ChatDialog(QWidget):
         idx = next(i for i, ag in enumerate(self._agents) if ag.id == self._active_agent.id)
         self._agent_combo.setCurrentIndex(idx)
         self._agent_combo.currentIndexChanged.connect(self._on_agent_combo)
-        tl.addWidget(self._agent_combo)
-
-        # Agent 管理按钮
-        gear_btn = QPushButton("⚙")
-        gear_btn.setFixedSize(24, 24)
-        gear_btn.setToolTip("管理 Agent")
-        gear_btn.setStyleSheet(styles.ICON_BUTTON)
-        gear_btn.clicked.connect(self.manage_agents_requested.emit)
-        tl.addWidget(gear_btn)
+        tb.addWidget(self._agent_combo)
 
         # 模型选择
         self._model_combo = QComboBox()
-        self._model_combo.setFixedHeight(28)
+        self._model_combo.setFixedHeight(26)
         self._model_combo.setMinimumWidth(80)
         self._model_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self._model_combo.setStyleSheet(styles.MODEL_COMBO_BOX)
@@ -160,16 +148,36 @@ class ChatDialog(QWidget):
         if self._active_model and self._active_model in self._models:
             self._model_combo.setCurrentText(self._active_model)
         self._model_combo.currentTextChanged.connect(self._on_model_combo)
-        tl.addWidget(self._model_combo)
+        tb.addWidget(self._model_combo)
 
-        # 收起按钮
-        hide_btn = QPushButton("−")
-        hide_btn.setFixedSize(24, 24)
-        hide_btn.setStyleSheet(styles.ICON_BUTTON)
-        hide_btn.clicked.connect(self.hide)
-        tl.addWidget(hide_btn)
+        tb.addStretch()
 
-        root.addWidget(title)
+        new_btn = QPushButton("＋ 新对话")
+        new_btn.setFixedHeight(26)
+        new_btn.setStyleSheet(styles.SECONDARY_BUTTON)
+        new_btn.clicked.connect(self.new_convo_requested.emit)
+        tb.addWidget(new_btn)
+
+        hist_btn = QPushButton("📋 历史")
+        hist_btn.setFixedHeight(26)
+        hist_btn.setStyleSheet(styles.SECONDARY_BUTTON)
+        hist_btn.clicked.connect(self.history_requested.emit)
+        tb.addWidget(hist_btn)
+
+        self._export_btn = QPushButton("📤 导出")
+        self._export_btn.setFixedHeight(26)
+        self._export_btn.setStyleSheet(styles.SECONDARY_BUTTON)
+        self._export_btn.clicked.connect(self.export_requested.emit)
+        tb.addWidget(self._export_btn)
+
+        gear_btn = QPushButton("⚙")
+        gear_btn.setFixedSize(24, 24)
+        gear_btn.setToolTip("管理 Agent")
+        gear_btn.setStyleSheet(styles.ICON_BUTTON)
+        gear_btn.clicked.connect(self.manage_agents_requested.emit)
+        tb.addWidget(gear_btn)
+
+        root.addWidget(self._toolbar)
 
         # ── 消息区域 ──
         scroll = QScrollArea()
@@ -190,19 +198,23 @@ class ChatDialog(QWidget):
         root.addWidget(scroll, stretch=1)
 
         # ── 输入区域 ──
+        input_row = QHBoxLayout()
+        input_row.setContentsMargins(0, 0, 0, 0)
+        input_row.setSpacing(0)
+
         input_bar = QWidget()
-        input_bar.setFixedHeight(56)
         input_bar.setStyleSheet(styles.INPUT_BAR)
         il = QHBoxLayout(input_bar)
-        il.setContentsMargins(10, 8, 10, 8)
-        il.setSpacing(8)
+        il.setContentsMargins(8, 6, 8, 6)
+        il.setSpacing(6)
 
-        self._input = QLineEdit()
-        self._input.setPlaceholderText("输入消息... (Enter 发送)")
-        self._input.setStyleSheet(styles.INPUT_FIELD)
-        self._input.returnPressed.connect(self._on_send)
+        self._input = QPlainTextEdit()
+        self._input.setPlaceholderText("输入消息... (Enter 发送, Shift+Enter 换行)")
+        self._input.setFixedHeight(36)
+        self._input.setMaximumBlockCount(8)
+        self._input.setStyleSheet(styles.INPUT_AREA)
         self._input.installEventFilter(self)
-        il.addWidget(self._input)
+        il.addWidget(self._input, stretch=1)
 
         self._send_btn = QPushButton("发送")
         self._send_btn.setFixedSize(56, 36)
@@ -210,18 +222,21 @@ class ChatDialog(QWidget):
         self._send_btn.clicked.connect(self._on_send)
         il.addWidget(self._send_btn)
 
+        # Ollama 状态指示器（10px 圆形）
+        self._ollama_dot = QWidget()
+        self._ollama_dot.setFixedSize(10, 10)
+        self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS)
+        self._ollama_dot.setToolTip("检测中…")
+        il.addWidget(self._ollama_dot)
+
+        input_row.addWidget(input_bar, stretch=1)
+
         grip = QSizeGrip(self)
-        grip.setStyleSheet("QSizeGrip { image: none; width: 14px; height: 14px; }")
-        il.addWidget(grip)
+        grip.setFixedSize(14, 14)
+        grip.setStyleSheet("QSizeGrip { image: none; }")
+        input_row.addWidget(grip, alignment=Qt.AlignBottom | Qt.AlignRight)
 
-        # Ollama 连接状态
-        self._ollama_status = QLabel("●")
-        self._ollama_status.setFixedWidth(16)
-        self._ollama_status.setStyleSheet(styles.OLLAMA_STATUS)
-        self._ollama_status.setToolTip("检测中…")
-        il.addWidget(self._ollama_status)
-
-        root.addWidget(input_bar)
+        root.addLayout(input_row)
 
     # ── Agent 切换 ─────────────────────────────────────
 
@@ -263,49 +278,45 @@ class ChatDialog(QWidget):
     # ── 输入 ───────────────────────────────────────────
 
     def set_input_text(self, text: str) -> None:
-        """设置输入框文本并聚焦"""
-        self._input.setText(text)
+        self._input.setPlainText(text)
         self._input.setFocus()
         self._input.selectAll()
 
     def flash_busy(self) -> None:
-        """短暂提示 worker 正忙，1.5 秒后恢复原 placeholder"""
         self._input.setPlaceholderText("⏳ 等待回复完成...")
-        QTimer.singleShot(1500, lambda: self._input.setPlaceholderText("输入消息... (Enter 发送)"))
+        QTimer.singleShot(1500, lambda: self._input.setPlaceholderText("输入消息... (Enter 发送, Shift+Enter 换行)"))
 
     def flash_export_btn(self) -> None:
-        """导出按钮短暂显示 ✅ 表示已复制"""
         self._export_btn.setText("✅ 已复制")
         QTimer.singleShot(1500, lambda: self._export_btn.setText("📤 导出"))
 
     def _on_send(self) -> None:
-        text = self._input.text().strip()
+        text = self._input.toPlainText().strip()
         if not text:
             return
         self.message_sent.emit(text)
         self._input.clear()
 
     def _check_ollama_status(self) -> None:
-        """在后台线程探活 Ollama，避免阻塞 UI"""
         self._ping_worker = _OllamaPingWorker()
         self._ping_worker.result.connect(self._on_ollama_result)
         self._ping_worker.start()
 
     def _on_ollama_result(self, ok: bool) -> None:
         if ok:
-            self._ollama_status.setStyleSheet(styles.OLLAMA_STATUS_OK)
-            self._ollama_status.setToolTip("Ollama 已连接")
+            self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_OK)
+            self._ollama_dot.setToolTip("Ollama 已连接")
         else:
-            self._ollama_status.setStyleSheet(styles.OLLAMA_STATUS_ERR)
-            self._ollama_status.setToolTip("Ollama 未连接")
+            self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_ERR)
+            self._ollama_dot.setToolTip("Ollama 未连接")
 
     def add_user_message(self, text: str) -> None:
         bubble = self._make_bubble(text, is_user=True)
         self._insert_widget(bubble)
 
     def add_assistant_message(self, text: str) -> None:
-        html = markdown.to_html(text)
-        bubble = self._make_bubble(html, is_user=False, is_html=True)
+        html, code_map = markdown.to_html(text)
+        bubble = self._make_bubble(html, is_user=False, is_html=True, code_map=code_map)
         btn = bubble.findChild(QPushButton, "copy_btn_assistant")
         if btn:
             btn.clicked.connect(lambda checked, t=text: self._copy_to_clipboard(t))
@@ -370,7 +381,7 @@ class ChatDialog(QWidget):
         if self._stream_bubble is None:
             return
         if ok and self._stream_text:
-            body = markdown.to_html(self._stream_text)
+            body, code_map = markdown.to_html(self._stream_text)
             if self._thinking_text.strip():
                 thinking = html.escape(self._thinking_text, quote=False)
                 thinking_html = (
@@ -389,6 +400,9 @@ class ChatDialog(QWidget):
             )
             self._stream_bubble.setText(full_html)
             self._stream_bubble.setTextFormat(Qt.RichText)
+            if code_map:
+                self._stream_bubble.code_map = code_map
+                self._stream_bubble.linkActivated.connect(self._on_link_activated)
         elif not ok and self._stream_text:
             self._stream_bubble.setText(f"❌ {self._stream_text}")
             self._stream_bubble.setTextFormat(Qt.PlainText)
@@ -446,7 +460,10 @@ class ChatDialog(QWidget):
 
     # ── 气泡 ───────────────────────────────────────────
 
-    def _make_bubble(self, content: str, is_user: bool, is_html: bool = False) -> QWidget:
+    def _make_bubble(
+        self, content: str, is_user: bool, is_html: bool = False,
+        code_map: dict[str, str] | None = None,
+    ) -> QWidget:
         wrapper = QWidget()
         wrapper.setStyleSheet("background: transparent;")
         wl = QHBoxLayout(wrapper)
@@ -456,7 +473,11 @@ class ChatDialog(QWidget):
         lbl.setWordWrap(True)
         lbl.setMaximumWidth(340)
         lbl.setTextFormat(Qt.RichText if is_html else Qt.PlainText)
-        lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        lbl.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse)
+
+        if is_html and code_map:
+            lbl.linkActivated.connect(self._on_link_activated)
+            lbl.code_map = code_map
 
         if is_user:
             lbl.setStyleSheet(styles.USER_BUBBLE)
@@ -549,13 +570,14 @@ class ChatDialog(QWidget):
         # ── 输入框快捷键 ──
         if obj is self._input and event.type() == QEvent.KeyPress:
             if event.key() == Qt.Key_Escape:
-                if self._input.text():
+                if self._input.toPlainText().strip():
                     self._input.clear()
                     return True
-                return False  # 已空，放行 Esc 关闭对话框
-            if (event.key() == Qt.Key_Return and
-                    event.modifiers() == Qt.ShiftModifier):
-                # QLineEdit 单行输入，Shift+Enter 暂不换行，仅阻止发送
+                return False
+            # Enter 发送（无修饰键时），Shift+Enter 换行由 QPlainTextEdit 默认处理
+            if (event.key() == Qt.Key_Return
+                    and event.modifiers() == Qt.NoModifier):
+                self._on_send()
                 return True
             if (event.key() == Qt.Key_N and
                     event.modifiers() == Qt.ControlModifier):
@@ -618,22 +640,12 @@ class ChatDialog(QWidget):
 
     # ── 事件 ───────────────────────────────────────────
 
-    def _in_title_bar(self, pos: QPoint) -> bool:
-        return pos.y() <= 44
-
-    def mousePressEvent(self, event) -> None:
-        if event.button() == Qt.LeftButton and self._in_title_bar(event.pos()):
-            self._drag_pos = event.globalPos() - self.frameGeometry().topLeft()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event) -> None:
-        if self._drag_pos is not None and event.buttons() == Qt.LeftButton:
-            self.move(event.globalPos() - self._drag_pos)
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event) -> None:
-        self._drag_pos = None
-        super().mouseReleaseEvent(event)
+    def _on_link_activated(self, url: str) -> None:
+        lbl = self.sender()
+        code_map = getattr(lbl, "code_map", {})
+        code = code_map.get(url, "")
+        if code:
+            self._copy_to_clipboard(code)
 
     def changeEvent(self, event) -> None:
         if self._auto_hide and event.type() == QEvent.ActivationChange and not self.isActiveWindow():
@@ -642,7 +654,7 @@ class ChatDialog(QWidget):
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
         if event and event.key() == Qt.Key_Escape:
-            if self._input.text():
+            if self._input.toPlainText().strip():
                 self._input.clear()
             else:
                 self.hide()

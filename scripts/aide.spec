@@ -17,6 +17,14 @@ a = Analysis(
         'pynput.mouse._darwin',
         'pynput.keyboard._base',
         'pynput.mouse._base',
+        # PyObjC — NSEvent 全局监听 + 权限请求所需
+        'AppKit',
+        'Foundation',
+        'CoreFoundation',
+        'HIServices',
+        'objc',
+        'Quartz',
+        'PyObjCTools',
     ],
     hookspath=[],
     hooksconfig={},
@@ -61,7 +69,7 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=True,
     target_arch=None,
-    codesign_identity=None,
+    codesign_identity="AI Desktop Assistant",
     entitlements_file=None,
     icon=[os.path.join(ROOT, "ai_desktop", "图标.icns")],
 )
@@ -86,5 +94,8 @@ app = BUNDLE(
         'CFBundleDisplayName': 'AI 桌面助手',
         'NSHighResolutionCapable': True,
         'NSSupportsAutomaticGraphicsSwitching': True,
+        # 隐私权限声明（macOS 10.14+ 需要用途说明）
+        'NSAppleEventsUsageDescription': '用于读取选中文字和模拟快捷键。',
+        'NSAccessibilityUsageDescription': '全局快捷键 ⌘⌃L 需要辅助功能权限来监听键盘事件。',
     },
 )

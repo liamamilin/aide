@@ -1,7 +1,7 @@
 """
 设置面板
 """
-from PyQt5.QtCore import QPoint, Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QDialog,
     QDoubleSpinBox,
@@ -18,13 +18,13 @@ from PyQt5.QtWidgets import (
 )
 
 from ai_desktop.ui import styles
+from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 
 
-class SettingsDialog(QDialog):
-    settings_applied = pyqtSignal(dict)  # 保存后发射所有配置项
+class SettingsDialog(FramelessDragMixin, QDialog):
+    settings_applied = pyqtSignal(dict)
 
     FIELDS = [
-        # (key, label, type, default)
         ("base_url",    "Ollama 服务地址",   str,   ""),
         ("timeout",     "超时 (秒)",         int,   10),
         ("num_ctx",     "上下文窗口",        int,   2048),
@@ -39,8 +39,8 @@ class SettingsDialog(QDialog):
 
     def __init__(self, current: dict, parent=None):
         super().__init__(parent)
+        self._setup_drag(40)
         self._current = current
-        self._drag_pos: QPoint | None = None
         self._setup_window()
         self._setup_ui()
         self._load()
@@ -190,23 +190,6 @@ class SettingsDialog(QDialog):
         self.settings_applied.emit(data)
         self.accept()
 
-    # ── 拖拽 / Esc ─────────────────────────────────────
-
-    def mousePressEvent(self, event) -> None:
-        if event.button() == Qt.LeftButton and event.pos().y() <= 40:
-            self._drag_pos = event.globalPos() - self.frameGeometry().topLeft()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event) -> None:
-        if self._drag_pos is not None and event.buttons() == Qt.LeftButton:
-            self.move(event.globalPos() - self._drag_pos)
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event) -> None:
-        self._drag_pos = None
-        super().mouseReleaseEvent(event)
-
-    def keyPressEvent(self, event) -> None:
-        if event.key() == Qt.Key_Escape:
-            self.reject()
-        super().keyPressEvent(event)
+    # ── 拖拽 / Esc ──（由 FramelessDragMixin 处理）──
+    # mousePressEvent / mouseMoveEvent / mouseReleaseEvent / keyPressEvent
+    # 已由 mixin 统一管理，此处不再重复

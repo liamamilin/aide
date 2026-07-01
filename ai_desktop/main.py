@@ -17,7 +17,6 @@ from PyQt5.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 from ai_desktop import config
 from ai_desktop.agent_manager import AgentManager
 from ai_desktop.capture.clipboard_monitor import read_selection
-from ai_desktop.capture.hotkey_listener import HotkeyListener
 from ai_desktop.config import Agent
 from ai_desktop.llm.chat_client import ChatClient, list_models
 from ai_desktop.settings_manager import SettingsManager
@@ -146,14 +145,27 @@ class ChatController(QObject):
         self._tray.about_clicked.connect(self._show_about)
         self._tray.exit_clicked.connect(self._on_exit)
 
-        # 全局快捷键（pynput 后台线程 → 信号桥接到主线程）
-        self.hotkey = HotkeyListener()
-        self.hotkey.register(config.HOTKEY, self._on_global_hotkey)
+        # 全局快捷键
+        if getattr(sys, "frozen", False):
+            # 冻结模式（.app）：用 NSEvent 全局监听（主线程，无 dispatch 断言）
+            from ai_desktop.capture.nsevent_monitor import NSEventMonitor
+            self.hotkey = NSEventMonitor()
+            self.hotkey.register(config.HOTKEY, self._on_global_hotkey)
+            logger.info("Using NSEventMonitor hotkey backend")
+        else:
+            # 开发模式（aide）：用 pynput（终端已有 AX 权限）
+            from ai_desktop.capture.hotkey_listener import HotkeyListener
+            self.hotkey = HotkeyListener()
+            self.hotkey.register(config.HOTKEY, self._on_global_hotkey)
+            logger.info("Using pynput hotkey backend")
         self._hotkey_triggered.connect(self._on_hotkey_triggered)
 
     def start(self) -> None:
         init_db()
-        self.hotkey.start()
+        try:
+            self.hotkey.start()
+        except Exception as e:
+            logger.warning("Failed to start hotkey listener: %s", e)
         self.float_btn.show()
         pin_to_all_spaces(self.float_btn)
         self._tray.show()
@@ -172,16 +184,15 @@ class ChatController(QObject):
     # ── 快捷键 ─────────────────────────────────────────
 
     def _on_global_hotkey(self) -> None:
-        """pynput 后台线程回调：只发射信号，不做任何 I/O（避免 Controller 与 Listener 冲突）"""
+        """热键回调：发射信号到主线程（pynput 后台线程 / NSEvent 主线程均适用）"""
         self._hotkey_triggered.emit("")
 
     def _on_hotkey_triggered(self, _text: str) -> None:
         """主线程：延迟读取选中文字 → 打开对话窗口
 
-        延迟 100ms 确保 pynput Listener 的 event tap 完全空闲后再调用
-        read_selection()，避免 Controller 模拟的 ⌘C 事件与热键事件冲突。
+        延迟 100ms 等待热键修饰键释放后再调用 read_selection()，
+        避免 Controller 模拟的 ⌘C 事件与仍按住的热键修饰键冲突。
         """
-        # 延迟到 pynput 事件处理完毕后再读取选中文字
         QTimer.singleShot(100, self._do_capture_and_show)
 
     def _do_capture_and_show(self) -> None:
@@ -488,6 +499,7 @@ class ChatController(QObject):
             self._worker.chunk.connect(self._on_stream_chunk)
             self._worker.done.connect(self._on_stream_done)
             self._worker.start()
+            self.float_btn.set_responding(True)
         except Exception:
             logger.exception("Failed to send message")
             if self._dialog:
@@ -505,6 +517,7 @@ class ChatController(QObject):
 
     @_safe_slot
     def _on_stream_done(self, text: str, ok: bool) -> None:
+        self.float_btn.set_responding(False)
         if self._dialog:
             self._dialog.set_thinking(False)
 
@@ -536,18 +549,35 @@ class ChatController(QObject):
 # ═══════════════════════════════════════════════════════
 
 
-def _is_accessibility_enabled() -> bool:
-    """检测 macOS 辅助功能权限是否已授予本进程"""
-    try:
-        import ctypes
-        import ctypes.util
-        lib_path = ctypes.util.find_library("ApplicationServices")
-        if lib_path is None:
-            return True
-        lib = ctypes.cdll.LoadLibrary(lib_path)
-        return bool(lib.AXIsProcessTrusted())
-    except Exception:
-        return True
+def _check_permissions():
+    """检测辅助功能 + 输入监听权限"""
+    from ai_desktop.utils.permissions import check_all
+    return check_all()
+
+
+def _request_permissions(ax: bool, im: bool) -> None:
+    """触发 macOS 系统标准授权弹窗（已授权则静默返回）
+
+    用 AXIsProcessTrustedWithOptions(prompt=True) 和 CGRequestListenEventAccess()
+    替代自定义弹窗 —— 这是 macOS 推荐的标准 UX。
+    """
+    from ai_desktop.utils.permissions import request_accessibility, request_input_monitoring
+    if not ax:
+        logger.info("请求辅助功能权限（系统弹窗）")
+        request_accessibility()
+    if not im:
+        logger.info("请求输入监听权限（系统弹窗）")
+        request_input_monitoring()
+
+
+def _open_accessibility_prefs() -> None:
+    import subprocess
+    subprocess.Popen(["open", "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"])
+
+
+def _open_input_monitoring_prefs() -> None:
+    import subprocess
+    subprocess.Popen(["open", "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"])
 
 
 def main() -> None:
@@ -581,6 +611,58 @@ def main() -> None:
     poll_timer = QTimer()
     poll_timer.timeout.connect(_poll_quit)
     poll_timer.start(200)
+
+    # 权限检查（辅助功能 + 输入监听）
+    # 已授权 → 静默跳过；缺失 → 触发 macOS 系统标准授权弹窗
+    perm = _check_permissions()
+    logger.info("权限状态: AX=%s, InputMonitoring=%s", perm.accessibility, perm.input_monitoring)
+    _perm_requested = False
+    if not perm.all_granted:
+        # 触发系统标准弹窗（非阻塞，用户在系统设置中授权后自动检测到）
+        _request_permissions(perm.accessibility, perm.input_monitoring)
+        _perm_requested = True
+
+    # 权限重检定时器：用户在系统设置中授权后自动检测到，自动启动热键
+    def _hotkey_running() -> bool:
+        """检测热键是否已运行（兼容 NSEventMonitor / HotkeyListener）"""
+        h = controller.hotkey
+        if hasattr(h, "_monitor"):
+            return h._monitor is not None
+        if hasattr(h, "_listener"):
+            return h._listener is not None
+        return True
+
+    _perm_recheck = QTimer()
+    _recheck_count = 0
+
+    def _recheck_permissions() -> None:
+        nonlocal _perm_requested, _recheck_count
+        _recheck_count += 1
+        cur = _check_permissions()
+        if cur.all_granted:
+            if not _hotkey_running():
+                # 权限刚授予，热键尚未启动 → 启动热键
+                logger.info("权限已授予，启动热键监听")
+                try:
+                    controller.hotkey.start()
+                except Exception as e:
+                    logger.warning("热键启动失败: %s", e)
+            _perm_recheck.stop()
+            _perm_requested = False
+        else:
+            # 每 5 次（~15 秒）记录一次状态，避免日志刷屏
+            if _recheck_count % 5 == 1:
+                logger.info(
+                    "等待授权中... (AX=%s, IM=%s, 第%d次检查)",
+                    cur.accessibility, cur.input_monitoring, _recheck_count,
+                )
+            if not _perm_requested:
+                # 权限被撤销或仍未授权 → 重新触发系统弹窗
+                _request_permissions(cur.accessibility, cur.input_monitoring)
+                _perm_requested = True
+
+    _perm_recheck.timeout.connect(_recheck_permissions)
+    _perm_recheck.start(3000)  # 每 3 秒重检一次
 
     controller.start()
 
@@ -641,19 +723,6 @@ def main() -> None:
                         )
             except Exception:
                 pass
-
-        # 辅助功能权限检查（每次启动检测，未授权才提示）
-        if not _is_accessibility_enabled():
-            QMessageBox.warning(
-                None, "需要辅助功能权限",
-                "AI 桌面助手需要<b>辅助功能权限</b>才能使用全局快捷键 ⌘⌃L 读取选中文字。<br><br>"
-                "请前往：<br>"
-                "系统设置 → 隐私与安全性 → 辅助功能 → 勾选本应用（或终端）<br><br>"
-                "如不使用快捷键，可忽略此提示。",
-            )
-            import subprocess
-            url = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-            subprocess.Popen(["open", url])
 
         # 版本更新检查（启动后 3s）
         from ai_desktop.utils.update_checker import check_for_update

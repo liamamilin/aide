@@ -34,21 +34,18 @@ class TestChatDialogSignals:
     """Verify signals are correctly connected and emitted."""
 
     def test_send_emits_message_sent(self, qtbot, dialog):
-        """Typing text and clicking send → message_sent signal with correct text."""
-        dialog._input.setText("Hello world")
+        dialog._input.setPlainText("Hello world")
         with qtbot.waitSignal(dialog.message_sent, timeout=1000) as spy:
             dialog._on_send()
         assert spy.args == ["Hello world"]
 
     def test_send_clears_input(self, qtbot, dialog):
-        """After sending, the input field should be cleared."""
-        dialog._input.setText("Hello")
+        dialog._input.setPlainText("Hello")
         dialog._on_send()
-        assert dialog._input.text() == ""
+        assert dialog._input.toPlainText() == ""
 
     def test_send_empty_does_not_emit(self, qtbot, dialog):
-        """Pressing send with empty input should not emit message_sent."""
-        dialog._input.setText("")
+        dialog._input.setPlainText("")
         with qtbot.assertNotEmitted(dialog.message_sent, wait=200):
             dialog._on_send()
 
@@ -205,7 +202,7 @@ class TestChatDialogState:
     def test_set_input_text(self, qtbot, dialog):
         """set_input_text() → input field has text and is selected."""
         dialog.set_input_text("test query")
-        assert dialog._input.text() == "test query"
+        assert dialog._input.toPlainText() == "test query"
 
 
 # ── L3: Data Flow Tests ────────────────────────────────

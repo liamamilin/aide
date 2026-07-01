@@ -3,7 +3,7 @@ Agent 管理窗口 —— 新增 / 编辑 / 删除自定义 Agent
 """
 from dataclasses import dataclass
 
-from PyQt5.QtCore import QPoint, Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QDialog,
     QGridLayout,
@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
 )
 
 from ai_desktop.ui import styles
+from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 
 
 @dataclass
@@ -29,17 +30,16 @@ class AgentDef:
     builtin: bool = False
 
 
-class AgentEditor(QDialog):
-    """管理 Agent 列表"""
+class AgentEditor(FramelessDragMixin, QDialog):
 
-    agents_saved = pyqtSignal(list)  # 保存后发射新的自定义 Agent 列表
+    agents_saved = pyqtSignal(list)
 
     def __init__(self, builtin_agents: list[AgentDef], custom_agents: list[AgentDef],
                  parent=None):
         super().__init__(parent)
+        self._setup_drag(40)
         self._builtin = builtin_agents
         self._custom = list(custom_agents)
-        self._drag_pos: QPoint | None = None
         self._setup_window()
         self._setup_ui()
         self._load()
@@ -201,30 +201,10 @@ class AgentEditor(QDialog):
             i += 1
         return f"custom_{i}"
 
-    # ── 拖拽 / Esc ─────────────────────────────────────
-
-    def mousePressEvent(self, event) -> None:
-        if event.button() == Qt.LeftButton and event.pos().y() <= 40:
-            self._drag_pos = event.globalPos() - self.frameGeometry().topLeft()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event) -> None:
-        if self._drag_pos is not None and event.buttons() == Qt.LeftButton:
-            self.move(event.globalPos() - self._drag_pos)
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event) -> None:
-        self._drag_pos = None
-        super().mouseReleaseEvent(event)
-
-    def keyPressEvent(self, event) -> None:
-        if event.key() == Qt.Key_Escape:
-            self.close()
-        super().keyPressEvent(event)
+    # ── 拖拽 / Esc ──（由 FramelessDragMixin 处理）──
 
 
-class _AgentEditDialog(QDialog):
-    """单个 Agent 编辑表单"""
+class _AgentEditDialog(FramelessDragMixin, QDialog):
 
     def __init__(self, title: str, agent: AgentDef, parent=None):
         super().__init__(parent)
@@ -234,7 +214,7 @@ class _AgentEditDialog(QDialog):
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setStyleSheet(styles.DIALOG_BASE)
-        self._drag_pos: QPoint | None = None
+        self._setup_drag(36)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -328,27 +308,8 @@ class _AgentEditDialog(QDialog):
         if dlg.exec_() == QDialog.Accepted:
             self._icon.setText(dlg.selected_emoji)
 
-    def mousePressEvent(self, event) -> None:
-        if event.button() == Qt.LeftButton and event.pos().y() <= 36:
-            self._drag_pos = event.globalPos() - self.frameGeometry().topLeft()
-        super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event) -> None:
-        if self._drag_pos is not None and event.buttons() == Qt.LeftButton:
-            self.move(event.globalPos() - self._drag_pos)
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event) -> None:
-        self._drag_pos = None
-        super().mouseReleaseEvent(event)
-
-    def keyPressEvent(self, event) -> None:
-        if event.key() == Qt.Key_Escape:
-            self.reject()
-        super().keyPressEvent(event)
-
-
-class _EmojiPicker(QDialog):
+class _EmojiPicker(FramelessDragMixin, QDialog):
     """Emoji 分类选择面板"""
 
     CATEGORIES = [
@@ -368,7 +329,7 @@ class _EmojiPicker(QDialog):
         self.setMinimumSize(370, 300)
         self.resize(370, 320)
         self.setStyleSheet(styles.DIALOG_BASE)
-        self._drag_pos: QPoint | None = None
+        self._setup_drag(36)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -418,21 +379,4 @@ class _EmojiPicker(QDialog):
         self.selected_emoji = emoji
         self.accept()
 
-    def mousePressEvent(self, event) -> None:
-        if event.button() == Qt.LeftButton and event.pos().y() <= 36:
-            self._drag_pos = event.globalPos() - self.frameGeometry().topLeft()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event) -> None:
-        if self._drag_pos is not None and event.buttons() == Qt.LeftButton:
-            self.move(event.globalPos() - self._drag_pos)
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event) -> None:
-        self._drag_pos = None
-        super().mouseReleaseEvent(event)
-
-    def keyPressEvent(self, event) -> None:
-        if event.key() == Qt.Key_Escape:
-            self.reject()
-        super().keyPressEvent(event)
+    # ── 拖拽 / Esc ──（由 FramelessDragMixin 处理）──

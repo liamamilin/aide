@@ -18,7 +18,7 @@ _ICON_PATH = next(
     resource_path("ai_desktop", "图标.png"),
 )
 
-_SIZE = 32
+_SIZE = 44
 
 
 def _make_circular_icon(path: str, size: int) -> QIcon:
@@ -59,8 +59,6 @@ def pin_to_all_spaces(widget) -> None:
         sel_window = objc.sel_registerName(b"window")
         sel_behavior = objc.sel_registerName(b"setCollectionBehavior:")
 
-        # Two typed wrappers around the same objc_msgSend, avoiding runtime
-        # argtypes switching which crashes on ARM64 macOS.
         SendId = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)
         SendBeh = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong)
 
@@ -69,8 +67,6 @@ def pin_to_all_spaces(widget) -> None:
 
         ns_win = msg_send_id(view_ptr, sel_window)
         if ns_win:
-            # NSWindowCollectionBehaviorCanJoinAllSpaces = 1
-            # (visible on all Spaces — mutually exclusive with MoveToActiveSpace)
             msg_send_beh(ns_win, sel_behavior, 1)
     except Exception:
         pass
@@ -88,6 +84,8 @@ class FloatButton(QPushButton):
         self._drag_pos: QPoint | None = None
         self._auto_hide = False
         self._is_dragging: bool = False
+        self._responding: bool = False
+        self._pulse_on: bool = False
         self._init_ui()
         self._position_initial()
         self._start_screen_tracking()
@@ -113,6 +111,27 @@ class FloatButton(QPushButton):
                 f"QPushButton {{ background: rgba(0,122,255,0.85); border-radius: {_SIZE // 2}px; }}"
             )
             self.setText("AI")
+
+    # ── 响应状态脉冲 ───────────────────────────────────
+
+    def set_responding(self, responding: bool) -> None:
+        """设置 AI 响应状态：true 时启动脉冲动画，false 时停止"""
+        self._responding = responding
+        if responding:
+            if not hasattr(self, "_pulse_timer"):
+                self._pulse_timer = QTimer(self)
+                self._pulse_timer.setInterval(600)
+                self._pulse_timer.timeout.connect(self._toggle_pulse)
+            self._pulse_timer.start()
+        else:
+            if hasattr(self, "_pulse_timer"):
+                self._pulse_timer.stop()
+            self._pulse_on = False
+            self.setWindowOpacity(1.0)
+
+    def _toggle_pulse(self) -> None:
+        self._pulse_on = not self._pulse_on
+        self.setWindowOpacity(0.5 if self._pulse_on else 1.0)
 
     # ── 屏幕跟随 ───────────────────────────────────────
 

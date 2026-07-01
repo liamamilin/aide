@@ -3,7 +3,7 @@
 """
 from datetime import datetime
 
-from PyQt5.QtCore import QPoint, Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
 
 from ai_desktop.config import AGENTS
 from ai_desktop.ui import styles
+from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 from ai_desktop.utils.storage import (
     delete_conversation,
     list_conversations_with_counts,
@@ -25,12 +26,12 @@ from ai_desktop.utils.storage import (
 )
 
 
-class HistoryDialog(QDialog):
-    conversation_selected = pyqtSignal(int)  # emits conversation id
+class HistoryDialog(FramelessDragMixin, QDialog):
+    conversation_selected = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._drag_pos: QPoint | None = None
+        self._setup_drag(40)
         self._setup_window()
         self._setup_ui()
         self._load()
@@ -208,23 +209,4 @@ class HistoryDialog(QDialog):
         delete_conversation(convo_id)
         self._refresh()
 
-    # ── 拖拽 / Esc ─────────────────────────────────────
-
-    def mousePressEvent(self, event) -> None:
-        if event.button() == Qt.LeftButton and event.pos().y() <= 40:
-            self._drag_pos = event.globalPos() - self.frameGeometry().topLeft()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event) -> None:
-        if self._drag_pos is not None and event.buttons() == Qt.LeftButton:
-            self.move(event.globalPos() - self._drag_pos)
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event) -> None:
-        self._drag_pos = None
-        super().mouseReleaseEvent(event)
-
-    def keyPressEvent(self, event) -> None:
-        if event.key() == Qt.Key_Escape:
-            self.close()
-        super().keyPressEvent(event)
+    # ── 拖拽 / Esc ──（由 FramelessDragMixin 处理）──
