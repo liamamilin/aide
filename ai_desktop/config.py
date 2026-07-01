@@ -10,7 +10,12 @@ OLLAMA_MODEL: str = "sorc/qwen3.5-instruct-uncensored:9b"
 OLLAMA_TIMEOUT: int = 120
 OLLAMA_KEEP_ALIVE: str = "30m"     # 模型保持加载，避免重复加载开销
 OLLAMA_NUM_PREDICT: int = 20480     # 限制最大输出 token（含思考 token）
-OLLAMA_NUM_CTX: int = 40960         # 上下文窗口大小
+OLLAMA_NUM_CTX: int = 8192         # 上下文窗口大小
+OLLAMA_TEMPERATURE: float = 0.7     # 生成温度（0.0 ~ 2.0）
+OLLAMA_TOP_P: float = 0.9           # 核采样阈值（0.0 ~ 1.0）
+OLLAMA_TOP_K: int = 40              # Top-K 采样
+OLLAMA_REPEAT_PENALTY: float = 1.1  # 重复惩罚系数
+OLLAMA_MAX_ROUNDS: int = 10         # 发送时保留的最大对话轮次（超出的历史将被截断）
 
 # ── 快捷键 ───────────────────────────────────────────
 
@@ -69,7 +74,7 @@ AGENTS: list[Agent] = [
         id="translator",
         name="翻译",
         icon="🌐",
-        system_prompt="""你是一个中英翻译专家。  
+        system_prompt="""你是一个中英翻译专家。
 
 规则：
 - 首先给出翻译结果

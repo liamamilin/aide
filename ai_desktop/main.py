@@ -2,43 +2,55 @@
 AI 桌面助手 —— 主入口
 
 单模式：悬浮按钮 + 全局快捷键 → Agent 多轮对话
-  选中文字 → ⌘⇧J → 自动打开对话窗口并粘贴选中文字
+  选中文字 → ⌘⌃L → 自动打开对话窗口并粘贴选中文字
 """
+import functools
 import logging
 import signal
 import sys
 from typing import Optional
 
 import requests
-from PyQt5.QtCore import QObject, QTimer, QThread, pyqtSignal
+from PyQt5.QtCore import QObject, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 
 from ai_desktop import config
-from ai_desktop.capture.hotkey_listener import HotkeyListener
+from ai_desktop.agent_manager import AgentManager
 from ai_desktop.capture.clipboard_monitor import read_selection
-from ai_desktop.config import Agent, AGENTS, DEFAULT_AGENT_INDEX
+from ai_desktop.capture.hotkey_listener import HotkeyListener
+from ai_desktop.config import Agent
 from ai_desktop.llm.chat_client import ChatClient, list_models
-from ai_desktop.ui.float_button import FloatButton, pin_to_all_spaces
+from ai_desktop.settings_manager import SettingsManager
+from ai_desktop.ui.agent_editor import AgentDef, AgentEditor
 from ai_desktop.ui.chat_dialog import ChatDialog
+from ai_desktop.ui.float_button import FloatButton, pin_to_all_spaces
 from ai_desktop.ui.history_dialog import HistoryDialog
-from ai_desktop.ui.agent_editor import AgentEditor, AgentDef
-from ai_desktop.ui.settings_dialog import SettingsDialog
 from ai_desktop.ui.menubar_icon import MenuBarIcon
+from ai_desktop.ui.settings_dialog import SettingsDialog
 from ai_desktop.utils import logging as log_util
 from ai_desktop.utils.storage import (
-    init_db,
+    Message,
     create_conversation,
+    get_conversation,
+    get_setting,
+    init_db,
+    list_conversations,
     save_message,
     save_setting,
-    get_setting,
-    get_conversation,
-    list_conversations,
-    load_custom_agents,
-    save_custom_agents,
-    Message,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_slot(fn):
+    """Decorator: catch all exceptions in Qt slots to prevent qFatal abort"""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception:
+            logger.exception("Unhandled exception in %s", fn.__name__)
+    return wrapper
 
 
 # ═══════════════════════════════════════════════════════
@@ -73,7 +85,9 @@ class StreamingChatWorker(QThread):
                 self.chunk.emit(token)
                 full_response = token
                 break
-        is_error = full_response.startswith("HTTP ") or full_response.startswith("无法") or full_response.startswith("响应超时")
+        is_error = (full_response.startswith("HTTP ")
+                     or full_response.startswith("无法")
+                     or full_response.startswith("响应超时"))
         self.done.emit(full_response, not is_error)
 
 
@@ -91,37 +105,27 @@ class ChatController(QObject):
         super().__init__(parent)
         init_db()  # 确保表结构存在，必须在任何 DB 查询之前
 
-        # 读取上次使用的 Agent 和模型
-        saved_agent_id = get_setting("last_agent_id")
+        # 加载持久化配置
+        self._settings = SettingsManager()
+        self._settings.load()
+
+        # 加载 Agent 列表
+        self._agent_mgr = AgentManager()
+        self._all_agents = self._agent_mgr.all_agents
+        self._active_agent = self._agent_mgr.active_agent
+        self._custom_agents = self._agent_mgr.custom_agents
+
+        # 读取上次使用的模型
         saved_model = get_setting("last_model")
-
-        # 合并内置 + 自定义 Agent
-        self._all_agents: list[Agent] = list(AGENTS)
-        self._custom_agents: list[AgentDef] = []
-        for d in load_custom_agents():
-            ag = Agent(id=d["id"], name=d["name"], icon=d["icon"], system_prompt=d["system_prompt"])
-            a_def = AgentDef(id=d["id"], name=d["name"], icon=d["icon"],
-                            system_prompt=d["system_prompt"], builtin=False)
-            self._all_agents.append(ag)
-            self._custom_agents.append(a_def)
-
-        self._active_agent: Agent = self._all_agents[DEFAULT_AGENT_INDEX]
-        if saved_agent_id:
-            for ag in self._all_agents:
-                if ag.id == saved_agent_id:
-                    self._active_agent = ag
-                    break
 
         self._model: str = saved_model or config.OLLAMA_MODEL
         self._auto_hide: bool = get_setting("auto_hide") == "true"  # 默认不收起
-
-        # 加载持久化配置（覆盖 config.py 默认值）
-        self._load_persisted_config()
 
         self._convo_id: int = 0
         self._messages: list[Message] = []
         self._restore_last: bool = True  # 首次打开自动恢复上次对话
         self._worker: Optional[StreamingChatWorker] = None
+        self._stale_workers: list[StreamingChatWorker] = []
         self._dialog: Optional[ChatDialog] = None
 
         # 悬浮按钮
@@ -154,22 +158,6 @@ class ChatController(QObject):
         pin_to_all_spaces(self.float_btn)
         self._tray.show()
         logger.info("ChatController 已就绪（快捷键 %s）", config.HOTKEY)
-
-    def _load_persisted_config(self) -> None:
-        """从设置表加载持久化配置，覆盖 config.py 默认值"""
-        for key, attr, conv in [
-            ("ollama_base_url",   "OLLAMA_BASE_URL",   str),
-            ("ollama_timeout",    "OLLAMA_TIMEOUT",    int),
-            ("ollama_num_ctx",    "OLLAMA_NUM_CTX",    int),
-            ("ollama_num_predict","OLLAMA_NUM_PREDICT",int),
-            ("hotkey",            "HOTKEY",            str),
-        ]:
-            val = get_setting(key)
-            if val:
-                try:
-                    setattr(config, attr, conv(val))
-                except (ValueError, TypeError):
-                    pass
 
     def stop(self) -> None:
         self._tray.hide()
@@ -244,10 +232,9 @@ class ChatController(QObject):
                     self._on_conversation_selected(convs[0].id)
                     # 不覆盖用户手动选择的 Agent
                     if self._active_agent != prev_agent:
-                        self._active_agent = prev_agent
-                        self._dialog.set_active_agent(prev_agent)
-                        self._tray.set_active_agent(prev_agent)
-                        save_setting("last_agent_id", prev_agent.id)
+                        self._active_agent = self._agent_mgr.switch(prev_agent)
+                        self._dialog.set_active_agent(self._active_agent)
+                        self._tray.set_active_agent(self._active_agent)
         # 如果悬浮球被隐藏了，重新显示
         if self.float_btn.isHidden():
             self.float_btn.show()
@@ -256,6 +243,7 @@ class ChatController(QObject):
             self.float_btn.mapToGlobal(self.float_btn.rect().topLeft())
         )
 
+    @_safe_slot
     def _on_auto_hide_toggled(self, checked: bool) -> None:
         self._auto_hide = checked
         save_setting("auto_hide", "true" if checked else "false")
@@ -270,6 +258,7 @@ class ChatController(QObject):
         self.stop()
         QApplication.instance().quit()
 
+    @_safe_slot
     def _on_settings_requested(self) -> None:
         """打开设置面板"""
         current = {
@@ -277,41 +266,27 @@ class ChatController(QObject):
             "timeout": config.OLLAMA_TIMEOUT,
             "num_ctx": config.OLLAMA_NUM_CTX,
             "num_predict": config.OLLAMA_NUM_PREDICT,
+            "temperature": config.OLLAMA_TEMPERATURE,
+            "top_p": config.OLLAMA_TOP_P,
+            "top_k": config.OLLAMA_TOP_K,
+            "repeat_penalty": config.OLLAMA_REPEAT_PENALTY,
+            "max_rounds": config.OLLAMA_MAX_ROUNDS,
             "hotkey": config.HOTKEY,
         }
         dlg = SettingsDialog(current, parent=self._dialog)
         dlg.settings_applied.connect(self._on_settings_applied)
         dlg.exec_()
 
+    @_safe_slot
     def _on_settings_applied(self, data: dict) -> None:
         """应用设置变更"""
-        changed = False
-        if data.get("base_url") != config.OLLAMA_BASE_URL:
-            config.OLLAMA_BASE_URL = data["base_url"]
-            save_setting("ollama_base_url", data["base_url"])
-            changed = True
-        if data.get("timeout") != config.OLLAMA_TIMEOUT:
-            config.OLLAMA_TIMEOUT = int(data["timeout"])
-            save_setting("ollama_timeout", str(data["timeout"]))
-            changed = True
-        if data.get("num_ctx") != config.OLLAMA_NUM_CTX:
-            config.OLLAMA_NUM_CTX = int(data["num_ctx"])
-            save_setting("ollama_num_ctx", str(data["num_ctx"]))
-            changed = True
-        if data.get("num_predict") != config.OLLAMA_NUM_PREDICT:
-            config.OLLAMA_NUM_PREDICT = int(data["num_predict"])
-            save_setting("ollama_num_predict", str(data["num_predict"]))
-            changed = True
-        new_hotkey = data.get("hotkey", "")
-        if new_hotkey and new_hotkey != config.HOTKEY:
-            config.HOTKEY = new_hotkey
-            save_setting("hotkey", new_hotkey)
+        changed = self._settings.apply(data)
+        if "hotkey" in changed:
             try:
-                self.hotkey.reregister(new_hotkey, self._on_global_hotkey)
-                logger.info("Hotkey changed to %s", new_hotkey)
+                self.hotkey.reregister(config.HOTKEY, self._on_global_hotkey)
+                logger.info("Hotkey changed to %s", config.HOTKEY)
             except Exception as e:
                 logger.warning("Failed to change hotkey: %s", e)
-            changed = True
         if changed:
             logger.info("Settings applied")
 
@@ -327,20 +302,20 @@ class ChatController(QObject):
 
     # ── Agent 切换 ─────────────────────────────────────
 
+    @_safe_slot
     def _on_agent_changed(self, agent: Agent) -> None:
-        self._active_agent = agent
-        save_setting("last_agent_id", agent.id)
-        self._tray.set_active_agent(agent)
-        logger.info("Agent switched: %s", agent.name)
+        self._active_agent = self._agent_mgr.switch(agent)
+        self._tray.set_active_agent(self._active_agent)
+        logger.info("Agent switched: %s", self._active_agent.name)
 
+    @_safe_slot
     def _on_tray_agent(self, agent: Agent) -> None:
         """菜单栏切换 Agent"""
-        self._active_agent = agent
-        save_setting("last_agent_id", agent.id)
+        self._active_agent = self._agent_mgr.switch(agent)
         if self._dialog:
-            self._dialog.set_active_agent(agent)
-        self._tray.set_active_agent(agent)
-        logger.info("Agent switched via tray: %s", agent.name)
+            self._dialog.set_active_agent(self._active_agent)
+        self._tray.set_active_agent(self._active_agent)
+        logger.info("Agent switched via tray: %s", self._active_agent.name)
 
     def _on_model_changed(self, model: str) -> None:
         self._model = model
@@ -349,6 +324,7 @@ class ChatController(QObject):
 
     # ── 新建对话 ───────────────────────────────────────
 
+    @_safe_slot
     def _new_conversation(self) -> None:
         self._convo_id = 0
         self._messages = []
@@ -356,8 +332,39 @@ class ChatController(QObject):
             self._dialog.clear_messages()
         logger.info("New conversation started (agent=%s)", self._active_agent.name)
 
+    # ── 工作线程管理 ───────────────────────────────────
+
+    def _stop_worker(self) -> None:
+        """安全停止当前流式 worker：发送中断信号 + 等待退出 + 清理"""
+        if self._worker is None:
+            return
+        if not self._worker.isRunning():
+            self._worker = None
+            return
+        w = self._worker
+        w.requestInterruption()
+        if w.wait(5000):
+            self._worker = None
+            return
+        logger.warning("Worker did not stop within 5s, keeping reference for cleanup")
+        try:
+            w.thinking_chunk.disconnect()
+            w.chunk.disconnect()
+            w.done.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        self._worker = None
+        self._stale_workers.append(w)
+        w.finished.connect(lambda w=w: self._prune_worker(w))
+
+    def _prune_worker(self, w: StreamingChatWorker) -> None:
+        """从遗留队列中移除已完成的 worker"""
+        if w in self._stale_workers:
+            self._stale_workers.remove(w)
+
     # ── 对话历史 ───────────────────────────────────────
 
+    @_safe_slot
     def _on_history_requested(self) -> None:
         dialog = HistoryDialog(parent=self._dialog)
         dialog.conversation_selected.connect(self._on_conversation_selected)
@@ -372,20 +379,17 @@ class ChatController(QObject):
             if conv is None:
                 return
             # 停止当前 worker
-            if self._worker and self._worker.isRunning():
-                self._worker.requestInterruption()
-                self._worker = None
+            self._stop_worker()
             # 恢复对话状态
             self._convo_id = conv.id
             self._messages = conv.messages
             # 切换 Agent
             for ag in self._all_agents:
                 if ag.id == conv.agent_id:
-                    self._active_agent = ag
-                    save_setting("last_agent_id", ag.id)
+                    self._active_agent = self._agent_mgr.switch(ag)
                     if self._dialog:
-                        self._dialog.set_active_agent(ag)
-                    self._tray.set_active_agent(ag)
+                        self._dialog.set_active_agent(self._active_agent)
+                    self._tray.set_active_agent(self._active_agent)
                     break
             # 渲染消息
             if self._dialog:
@@ -399,6 +403,7 @@ class ChatController(QObject):
         except Exception:
             logger.exception("Failed to load conversation %d", convo_id)
 
+    @_safe_slot
     def _on_export_requested(self) -> None:
         """将当前对话格式化为 Markdown 并复制到剪贴板"""
         if not self._messages:
@@ -417,12 +422,13 @@ class ChatController(QObject):
             self._dialog.flash_export_btn()
         logger.info("Exported %d messages to clipboard", len(self._messages))
 
+    @_safe_slot
     def _on_manage_agents(self) -> None:
         """打开 Agent 管理对话框"""
         builtin = [
             AgentDef(id=ag.id, name=ag.name, icon=ag.icon,
                      system_prompt=ag.system_prompt, builtin=True)
-            for ag in AGENTS
+            for ag in self._agent_mgr.builtin_agents
         ]
         editor = AgentEditor(builtin, self._custom_agents, parent=self._dialog)
         editor.agents_saved.connect(self._on_custom_agents_saved)
@@ -431,20 +437,13 @@ class ChatController(QObject):
             editor.move(p.x() - editor.width() // 2, p.y() - editor.height() // 2)
         editor.exec_()
 
+    @_safe_slot
     def _on_custom_agents_saved(self, data: list[dict]) -> None:
         """自定义 Agent 保存后刷新"""
-        save_custom_agents(data)
-        # 重建合并列表
-        self._all_agents = list(AGENTS)
-        self._custom_agents.clear()
-        for d in data:
-            ag = Agent(id=d["id"], name=d["name"], icon=d["icon"], system_prompt=d["system_prompt"])
-            self._all_agents.append(ag)
-            self._custom_agents.append(AgentDef(id=d["id"], name=d["name"], icon=d["icon"],
-                                                system_prompt=d["system_prompt"], builtin=False))
-        # 确保当前 Agent 仍在列表中
-        if self._active_agent not in self._all_agents:
-            self._active_agent = self._all_agents[DEFAULT_AGENT_INDEX]
+        self._agent_mgr.save_custom(data)
+        self._all_agents = self._agent_mgr.all_agents
+        self._custom_agents = self._agent_mgr.custom_agents
+        self._active_agent = self._agent_mgr.active_agent
         if self._dialog:
             self._dialog.refresh_agents(self._all_agents)
         self._tray.refresh_agents(self._all_agents)
@@ -455,9 +454,8 @@ class ChatController(QObject):
 
     def _on_stop_requested(self) -> None:
         """中断当前流式生成"""
-        if self._worker and self._worker.isRunning():
-            self._worker.requestInterruption()
-            logger.info("Streaming interrupted by user")
+        self._stop_worker()
+        logger.info("Streaming interrupted by user")
 
     def _on_user_message(self, text: str) -> None:
         if self._worker and self._worker.isRunning():
@@ -479,7 +477,13 @@ class ChatController(QObject):
                 self._dialog.begin_assistant_stream()
                 self._dialog.set_thinking(True)
 
-            self._worker = StreamingChatWorker(list(self._messages), self._active_agent.system_prompt, self._model, self)
+            # 截断过长的历史，只保留最近 N 轮
+            recent = list(self._messages)
+            max_msgs = config.OLLAMA_MAX_ROUNDS * 2
+            if len(recent) > max_msgs:
+                recent = recent[-max_msgs:]
+
+            self._worker = StreamingChatWorker(recent, self._active_agent.system_prompt, self._model, self)
             self._worker.thinking_chunk.connect(self._on_thinking_chunk)
             self._worker.chunk.connect(self._on_stream_chunk)
             self._worker.done.connect(self._on_stream_done)
@@ -489,14 +493,17 @@ class ChatController(QObject):
             if self._dialog:
                 self._dialog.set_input_text(text)  # restore input so user can retry
 
+    @_safe_slot
     def _on_thinking_chunk(self, token: str) -> None:
         if self._dialog:
             self._dialog.append_thinking_chunk(token)
 
+    @_safe_slot
     def _on_stream_chunk(self, token: str) -> None:
         if self._dialog:
             self._dialog.append_stream_chunk(token)
 
+    @_safe_slot
     def _on_stream_done(self, text: str, ok: bool) -> None:
         if self._dialog:
             self._dialog.set_thinking(False)
@@ -558,17 +565,65 @@ def main() -> None:
 
     controller.start()
 
-    def _check_ollama() -> None:
+    # ── 启动检查 ────────────────────────────────────────
+
+    def _startup_check() -> None:
+        """启动时检查：首次引导、Ollama 连通性、模型状态"""
+
+        # 首次运行欢迎
+        if not get_setting("startup_welcome_shown"):
+            QMessageBox.information(
+                None, "欢迎使用 AI 桌面助手",
+                "<b>AI 桌面助手</b><br><br>"
+                "三种打开方式：<br>"
+                "1. 选中文字 → 按 <b>⌘⌃L</b> → 自动填入对话框<br>"
+                "2. 点击屏幕右侧 <b>悬浮按钮</b><br>"
+                "3. 点击菜单栏 <b>图标</b><br><br>"
+                "需要 <b>Ollama</b> 本地模型服务，数据不上传。<br>"
+                "首次使用请确保 Ollama 已启动。",
+            )
+            save_setting("startup_welcome_shown", "1")
+
+        # Ollama 连通性检查
+        ollama_ok = False
         try:
             r = requests.get(f"{config.OLLAMA_BASE_URL}/api/tags", timeout=5)
             if r.status_code == 200:
+                ollama_ok = True
                 logger.info("Ollama 连接正常 (model=%s)", config.OLLAMA_MODEL)
             else:
-                logger.warning("⚠️ 无法连接 Ollama，请确认服务已启动")
+                logger.warning("Ollama 返回 %d", r.status_code)
         except Exception:
-            logger.warning("⚠️ 无法连接 Ollama，请确认服务已启动")
+            logger.warning("无法连接 Ollama (%s)", config.OLLAMA_BASE_URL)
 
-    QTimer.singleShot(1000, _check_ollama)
+        if not ollama_ok:
+            QMessageBox.warning(
+                None, "Ollama 未运行",
+                "未检测到 Ollama 服务。<br><br>"
+                "请打开终端执行：<br>"
+                "<tt>ollama serve</tt><br><br>"
+                "安装地址：<a href='https://ollama.com'>https://ollama.com</a><br><br>"
+                "启动后可点击右下角状态灯查看连接状态。",
+            )
+        else:
+            # 检查模型是否存在
+            try:
+                r = requests.get(f"{config.OLLAMA_BASE_URL}/api/tags", timeout=5)
+                if r.status_code == 200:
+                    installed = {m["name"] for m in r.json().get("models", [])}
+                    model = config.OLLAMA_MODEL
+                    if model not in installed:
+                        QMessageBox.information(
+                            None, "模型未安装",
+                            f"默认模型 <b>{model}</b> 未找到。<br><br>"
+                            "请打开终端执行：<br>"
+                            f"<tt>ollama pull {model}</tt><br><br>"
+                            "或启动后在设置面板中切换已安装的模型。",
+                        )
+            except Exception:
+                pass
+
+    QTimer.singleShot(1500, _startup_check)
 
     sys.exit(app.exec_())
 
