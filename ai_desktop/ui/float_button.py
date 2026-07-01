@@ -5,11 +5,17 @@ import ctypes
 import ctypes.util
 import os
 
-from PyQt5.QtCore import Qt, QPoint, QRectF, QTimer, pyqtSignal
-from PyQt5.QtGui import QIcon, QPixmap, QPainter, QPainterPath, QCursor
-from PyQt5.QtWidgets import QPushButton, QApplication, QMenu
+from PyQt5.QtCore import QPoint, QRectF, Qt, QTimer, pyqtSignal
+from PyQt5.QtGui import QCursor, QIcon, QPainter, QPainterPath, QPixmap
+from PyQt5.QtWidgets import QApplication, QMenu, QPushButton
 
-_ICON_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "图标.png")
+from ai_desktop.ui import styles
+
+_ICON_ROOT = os.path.dirname(os.path.dirname(__file__))
+_ICON_PATH = next(
+    (os.path.join(_ICON_ROOT, f) for f in ("图标.icns", "图标.png") if os.path.exists(os.path.join(_ICON_ROOT, f))),
+    os.path.join(_ICON_ROOT, "图标.png"),
+)
 
 _SIZE = 32
 
@@ -163,12 +169,7 @@ class FloatButton(QPushButton):
 
     def contextMenuEvent(self, event) -> None:
         menu = QMenu(self)
-        menu.setStyleSheet(
-            "QMenu { background: #ffffff; border: 1px solid #ccc; border-radius: 6px; padding: 4px 0; color: #333; }"
-            "QMenu::item { padding: 6px 24px; font-size: 12px; color: #333; }"
-            "QMenu::item:selected { background: #007AFF; color: white; border-radius: 4px; }"
-            "QMenu::separator { height: 1px; background: #e0e0e0; margin: 4px 10px; }"
-        )
+        menu.setStyleSheet(styles.MENU)
         auto_hide_action = menu.addAction("自动收起对话框")
         auto_hide_action.setCheckable(True)
         auto_hide_action.setChecked(self._auto_hide)

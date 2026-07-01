@@ -3,12 +3,13 @@
 """
 from datetime import datetime
 
-from PyQt5.QtCore import Qt, QPoint, pyqtSignal, QTimer
+from PyQt5.QtCore import QPoint, Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -16,6 +17,7 @@ from PyQt5.QtWidgets import (
 )
 
 from ai_desktop.config import AGENTS
+from ai_desktop.ui import styles
 from ai_desktop.utils.storage import (
     delete_conversation,
     list_conversations_with_counts,
@@ -35,11 +37,10 @@ class HistoryDialog(QDialog):
 
     def _setup_window(self):
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
         self.setMinimumSize(380, 300)
         self.resize(400, 420)
-        self.setStyleSheet(
-            "QDialog { background: #ffffff; border-radius: 10px; }"
-        )
+        self.setStyleSheet(styles.DIALOG_BASE)
 
     def _setup_ui(self):
         root = QVBoxLayout(self)
@@ -49,23 +50,18 @@ class HistoryDialog(QDialog):
         # ── 标题栏 ──
         title = QWidget()
         title.setFixedHeight(40)
-        title.setStyleSheet(
-            "background: #f6f6f6; border-top-left-radius: 10px; border-top-right-radius: 10px;"
-        )
+        title.setStyleSheet(styles.TITLE_BAR)
         tl = QHBoxLayout(title)
         tl.setContentsMargins(12, 0, 8, 0)
 
         title_lbl = QLabel("对话历史")
-        title_lbl.setStyleSheet("font-weight: bold; font-size: 13px; background: none; color: #1a1a1a;")
+        title_lbl.setStyleSheet(styles.LABEL_BOLD)
         tl.addWidget(title_lbl)
         tl.addStretch()
 
         close_btn = QPushButton("×")
         close_btn.setFixedSize(24, 24)
-        close_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: none; font-size: 16px; color: #999; }"
-            "QPushButton:hover { color: #333; }"
-        )
+        close_btn.setStyleSheet(styles.CLOSE_BUTTON)
         close_btn.clicked.connect(self.close)
         tl.addWidget(close_btn)
 
@@ -75,11 +71,7 @@ class HistoryDialog(QDialog):
         self._search = QLineEdit()
         self._search.setPlaceholderText("搜索对话…")
         self._search.setClearButtonEnabled(True)
-        self._search.setStyleSheet(
-            "QLineEdit { border: none; border-bottom: 1px solid #e0e0e0; padding: 6px 12px;"
-            "font-size: 13px; background: #ffffff; }"
-            "QLineEdit:focus { border-bottom-color: #007AFF; }"
-        )
+        self._search.setStyleSheet(styles.SEARCH_FIELD)
         self._search.textChanged.connect(self._on_search_changed)
         root.addWidget(self._search)
 
@@ -92,11 +84,7 @@ class HistoryDialog(QDialog):
         # ── 列表区域 ──
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(
-            "QScrollArea { border: none; background: #ffffff; }"
-            "QScrollBar:vertical { width: 6px; }"
-            "QScrollBar::handle:vertical { background: #ccc; border-radius: 3px; }"
-        )
+        scroll.setStyleSheet(styles.SCROLL_AREA)
 
         self._list_container = QWidget()
         self._list_layout = QVBoxLayout(self._list_container)
@@ -163,10 +151,7 @@ class HistoryDialog(QDialog):
     def _make_row(self, convo: dict) -> QWidget:
         row = QWidget()
         row.setCursor(Qt.PointingHandCursor)
-        row.setStyleSheet(
-            "QWidget { background: transparent; border-radius: 6px; }"
-            "QWidget:hover { background: #f0f0f0; }"
-        )
+        row.setStyleSheet(styles.HISTORY_ROW)
 
         rl = QHBoxLayout(row)
         rl.setContentsMargins(8, 6, 8, 6)
@@ -177,7 +162,7 @@ class HistoryDialog(QDialog):
         icon_text = agent.icon if agent else "💬"
         icon = QLabel(icon_text)
         icon.setFixedWidth(24)
-        icon.setStyleSheet("font-size: 16px; background: none;")
+        icon.setStyleSheet(styles.TITLE_ICON)
         rl.addWidget(icon)
 
         # 标题 + 副标题
@@ -185,13 +170,13 @@ class HistoryDialog(QDialog):
         text_col.setSpacing(2)
 
         title_lbl = QLabel(convo["title"] or "(空对话)")
-        title_lbl.setStyleSheet("font-size: 13px; color: #1a1a1a; background: none;")
+        title_lbl.setStyleSheet(styles.LABEL)
         text_col.addWidget(title_lbl)
 
         dt = datetime.fromtimestamp(convo["created_at"])
         subtitle = f"{dt.month}月{dt.day}日 · {convo['msg_count']}条消息"
         sub_lbl = QLabel(subtitle)
-        sub_lbl.setStyleSheet("font-size: 11px; color: #999; background: none;")
+        sub_lbl.setStyleSheet(styles.LABEL_SECONDARY)
         text_col.addWidget(sub_lbl)
 
         rl.addLayout(text_col, stretch=1)
@@ -200,10 +185,7 @@ class HistoryDialog(QDialog):
         del_btn = QPushButton("🗑")
         del_btn.setFixedSize(24, 24)
         del_btn.setToolTip("删除对话")
-        del_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: none; font-size: 12px; }"
-            "QPushButton:hover { background: rgba(0,0,0,0.08); border-radius: 12px; }"
-        )
+        del_btn.setStyleSheet(styles.HISTORY_DELETE_BUTTON)
         del_btn.clicked.connect(lambda checked, cid=convo["id"]: self._on_delete(cid))
         rl.addWidget(del_btn)
 
@@ -218,6 +200,12 @@ class HistoryDialog(QDialog):
         self.close()
 
     def _on_delete(self, convo_id: int) -> None:
+        reply = QMessageBox.question(
+            self, "删除对话", "确定删除该对话？此操作不可撤销。",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
         delete_conversation(convo_id)
         self._refresh()
 

@@ -1,8 +1,10 @@
 """
 对话窗口 —— Agent 多轮对话
 """
+import html
+
 import requests
-from PyQt5.QtCore import Qt, QPoint, QEvent, QThread, QTimer, pyqtSignal
+from PyQt5.QtCore import QEvent, QPoint, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QKeyEvent
 from PyQt5.QtWidgets import (
     QApplication,
@@ -60,13 +62,24 @@ class ChatDialog(QWidget):
         self._setup_window()
         self._setup_ui()
 
+    def _default_size(self) -> tuple[int, int]:
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return (440, 580)
+        geo = screen.availableGeometry()
+        w = max(400, min(int(geo.width() * 0.30), 520))
+        h = max(500, min(int(geo.height() * 0.60), 800))
+        return (w, h)
+
     def _setup_window(self) -> None:
         self.setWindowFlags(
             Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
         )
-        self.setMinimumSize(420, 500)
-        self.resize(440, 580)
-        self.setStyleSheet("QWidget { background: #ffffff; color: #1a1a1a; border-radius: 10px; }")
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        w, h = self._default_size()
+        self.setMinimumSize(400, 460)
+        self.resize(w, h)
+        self.setStyleSheet(styles.CHAT_DIALOG_ROOT)
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -76,20 +89,18 @@ class ChatDialog(QWidget):
         # ── 标题栏 ──
         title = QWidget()
         title.setFixedHeight(44)
-        title.setStyleSheet(
-            "background: #f6f6f6; border-top-left-radius: 10px; border-top-right-radius: 10px; color: #1a1a1a;"
-        )
+        title.setStyleSheet(styles.TITLE_BAR)
         tl = QHBoxLayout(title)
         tl.setContentsMargins(12, 0, 8, 0)
         tl.setSpacing(6)
 
         icon_lbl = QLabel(self._active_agent.icon)
-        icon_lbl.setStyleSheet("font-size: 18px; background: none;")
+        icon_lbl.setStyleSheet(styles.TITLE_ICON)
         tl.addWidget(icon_lbl)
         self._title_icon = icon_lbl
 
         name_lbl = QLabel(self._active_agent.name)
-        name_lbl.setStyleSheet("font-weight: bold; font-size: 13px; background: none;")
+        name_lbl.setStyleSheet(styles.TITLE_NAME)
         tl.addWidget(name_lbl)
         self._title_name = name_lbl
 
@@ -98,33 +109,21 @@ class ChatDialog(QWidget):
         # 新建对话按钮
         new_btn = QPushButton("＋ 新对话")
         new_btn.setFixedHeight(28)
-        new_btn.setStyleSheet(
-            "QPushButton { background: #e8e8e8; border: none; border-radius: 5px;"
-            "padding: 2px 10px; font-size: 11px; color: #333; }"
-            "QPushButton:hover { background: #d0d0d0; }"
-        )
+        new_btn.setStyleSheet(styles.SECONDARY_BUTTON)
         new_btn.clicked.connect(self.new_convo_requested.emit)
         tl.addWidget(new_btn)
 
         # 历史按钮
         hist_btn = QPushButton("📋 历史")
         hist_btn.setFixedHeight(28)
-        hist_btn.setStyleSheet(
-            "QPushButton { background: #e8e8e8; border: none; border-radius: 5px;"
-            "padding: 2px 10px; font-size: 11px; color: #333; }"
-            "QPushButton:hover { background: #d0d0d0; }"
-        )
+        hist_btn.setStyleSheet(styles.SECONDARY_BUTTON)
         hist_btn.clicked.connect(self.history_requested.emit)
         tl.addWidget(hist_btn)
 
         # 导出按钮
         self._export_btn = QPushButton("📤 导出")
         self._export_btn.setFixedHeight(28)
-        self._export_btn.setStyleSheet(
-            "QPushButton { background: #e8e8e8; border: none; border-radius: 5px;"
-            "padding: 2px 10px; font-size: 11px; color: #333; }"
-            "QPushButton:hover { background: #d0d0d0; }"
-        )
+        self._export_btn.setStyleSheet(styles.SECONDARY_BUTTON)
         self._export_btn.clicked.connect(self.export_requested.emit)
         tl.addWidget(self._export_btn)
 
@@ -133,18 +132,7 @@ class ChatDialog(QWidget):
         self._agent_combo.setFixedHeight(28)
         self._agent_combo.setMinimumWidth(110)
         self._agent_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        self._agent_combo.setStyleSheet(
-            "QComboBox { border: 1px solid #ccc; border-radius: 5px; padding: 2px 6px;"
-            "  font-size: 11px; color: #333; background: #ffffff; }"
-            "QComboBox::drop-down { border: none; }"
-            "QComboBox QAbstractItemView {"
-            "  color: #333;"
-            "  background: #ffffff;"
-            "  selection-background-color: #FFD700;"
-            "  selection-color: #333;"
-            "  outline: none;"
-            "}"
-        )
+        self._agent_combo.setStyleSheet(styles.COMBO_BOX)
         for ag in self._agents:
             self._agent_combo.addItem(f"{ag.icon} {ag.name}", ag.id)
         idx = next(i for i, ag in enumerate(self._agents) if ag.id == self._active_agent.id)
@@ -156,10 +144,7 @@ class ChatDialog(QWidget):
         gear_btn = QPushButton("⚙")
         gear_btn.setFixedSize(24, 24)
         gear_btn.setToolTip("管理 Agent")
-        gear_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: none; font-size: 14px; color: #999; }"
-            "QPushButton:hover { color: #333; background: #e0e0e0; border-radius: 12px; }"
-        )
+        gear_btn.setStyleSheet(styles.ICON_BUTTON)
         gear_btn.clicked.connect(self.manage_agents_requested.emit)
         tl.addWidget(gear_btn)
 
@@ -168,19 +153,7 @@ class ChatDialog(QWidget):
         self._model_combo.setFixedHeight(28)
         self._model_combo.setMinimumWidth(80)
         self._model_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        self._model_combo.setStyleSheet(
-            "QComboBox { border: 1px solid #ccc; border-radius: 5px; padding: 2px 4px;"
-            "  font-size: 11px; color: #333; background: #ffffff; }"
-            "QComboBox::drop-down { border: none; }"
-            "QComboBox QAbstractItemView {"
-            "  color: #333;"
-            "  background: #ffffff;"
-            "  selection-background-color: #FFD700;"
-            "  selection-color: #333;"
-            "  outline: none;"
-            "  min-width: 120px;"
-            "}"
-        )
+        self._model_combo.setStyleSheet(styles.MODEL_COMBO_BOX)
         self._model_combo.setToolTip("选择模型")
         for m in self._models:
             self._model_combo.addItem(m)
@@ -192,10 +165,7 @@ class ChatDialog(QWidget):
         # 收起按钮
         hide_btn = QPushButton("−")
         hide_btn.setFixedSize(24, 24)
-        hide_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: none; font-size: 16px; color: #999; }"
-            "QPushButton:hover { color: #333; background: #e0e0e0; border-radius: 12px; }"
-        )
+        hide_btn.setStyleSheet(styles.ICON_BUTTON)
         hide_btn.clicked.connect(self.hide)
         tl.addWidget(hide_btn)
 
@@ -205,14 +175,10 @@ class ChatDialog(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(
-            "QScrollArea { border: none; background: #ffffff; }"
-            "QScrollBar:vertical { width: 6px; }"
-            "QScrollBar::handle:vertical { background: #ccc; border-radius: 3px; }"
-        )
+        scroll.setStyleSheet(styles.SCROLL_AREA)
 
         self._msg_container = QWidget()
-        self._msg_container.setStyleSheet("background: #ffffff;")
+        self._msg_container.setStyleSheet(styles.MESSAGE_LIST)
         self._msg_layout = QVBoxLayout(self._msg_container)
         self._msg_layout.setContentsMargins(12, 8, 12, 8)
         self._msg_layout.setSpacing(10)
@@ -226,20 +192,14 @@ class ChatDialog(QWidget):
         # ── 输入区域 ──
         input_bar = QWidget()
         input_bar.setFixedHeight(56)
-        input_bar.setStyleSheet(
-            "background: #fafafa; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px;"
-        )
+        input_bar.setStyleSheet(styles.INPUT_BAR)
         il = QHBoxLayout(input_bar)
         il.setContentsMargins(10, 8, 10, 8)
         il.setSpacing(8)
 
         self._input = QLineEdit()
         self._input.setPlaceholderText("输入消息... (Enter 发送)")
-        self._input.setStyleSheet(
-            "QLineEdit { border: 1px solid #ddd; border-radius: 6px; padding: 6px 10px;"
-            "font-size: 13px; background: #ffffff; color: #1a1a1a; }"
-            "QLineEdit:focus { border-color: #007AFF; }"
-        )
+        self._input.setStyleSheet(styles.INPUT_FIELD)
         self._input.returnPressed.connect(self._on_send)
         self._input.installEventFilter(self)
         il.addWidget(self._input)
@@ -257,7 +217,7 @@ class ChatDialog(QWidget):
         # Ollama 连接状态
         self._ollama_status = QLabel("●")
         self._ollama_status.setFixedWidth(16)
-        self._ollama_status.setStyleSheet("font-size: 8px; color: #ccc; background: none;")
+        self._ollama_status.setStyleSheet(styles.OLLAMA_STATUS)
         self._ollama_status.setToolTip("检测中…")
         il.addWidget(self._ollama_status)
 
@@ -333,10 +293,10 @@ class ChatDialog(QWidget):
 
     def _on_ollama_result(self, ok: bool) -> None:
         if ok:
-            self._ollama_status.setStyleSheet("font-size: 8px; color: #4CAF50; background: none;")
+            self._ollama_status.setStyleSheet(styles.OLLAMA_STATUS_OK)
             self._ollama_status.setToolTip("Ollama 已连接")
         else:
-            self._ollama_status.setStyleSheet("font-size: 8px; color: #F44336; background: none;")
+            self._ollama_status.setStyleSheet(styles.OLLAMA_STATUS_ERR)
             self._ollama_status.setToolTip("Ollama 未连接")
 
     def add_user_message(self, text: str) -> None:
@@ -412,10 +372,11 @@ class ChatDialog(QWidget):
         if ok and self._stream_text:
             body = markdown.to_html(self._stream_text)
             if self._thinking_text.strip():
+                thinking = html.escape(self._thinking_text, quote=False)
                 thinking_html = (
                     '<details style="margin-bottom:10px;color:#888;font-size:12px;">'
                     '<summary style="cursor:pointer;color:#666;">💭 思考过程</summary>'
-                    f'<pre style="white-space:pre-wrap;word-break:break-word;margin-top:4px;">{self._thinking_text}</pre>'
+                    f'<pre style="white-space:pre-wrap;word-break:break-word;margin-top:4px;">{thinking}</pre>'
                     '</details>'
                 )
                 body = thinking_html + body
@@ -468,11 +429,7 @@ class ChatDialog(QWidget):
         if thinking:
             self._send_btn.setText("⏹")
             self._send_btn.setToolTip("停止生成")
-            self._send_btn.setStyleSheet(
-                "QPushButton { background: #e02020; color: white; border: none; border-radius: 5px;"
-                "padding: 6px 14px; font-size: 12px; font-weight: bold; }"
-                "QPushButton:hover { background: #c01010; }"
-            )
+            self._send_btn.setStyleSheet(styles.STOP_BUTTON)
             self._send_btn.clicked.connect(self.stop_requested.emit)
         else:
             self._send_btn.setText("发送")
@@ -502,10 +459,7 @@ class ChatDialog(QWidget):
         lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         if is_user:
-            lbl.setStyleSheet(
-                "QLabel { background: #007AFF; color: white; border-radius: 10px;"
-                "padding: 8px 12px; font-size: 13px; }"
-            )
+            lbl.setStyleSheet(styles.USER_BUBBLE)
             # 用户气泡 + 编辑按钮（hover 显示）
             v_layout = QVBoxLayout()
             v_layout.setContentsMargins(0, 0, 0, 0)
@@ -524,14 +478,7 @@ class ChatDialog(QWidget):
             edit_btn.setObjectName("edit_btn_user")
             edit_btn.setCursor(Qt.PointingHandCursor)
             edit_btn.setVisible(False)
-            edit_btn.setStyleSheet("""
-                QPushButton {
-                    background: transparent; border: none; font-size: 10px; color: rgba(255,255,255,0.7);
-                }
-                QPushButton:hover {
-                    color: white; background: rgba(255,255,255,0.15); border-radius: 3px;
-                }
-            """)
+            edit_btn.setStyleSheet(styles.EDIT_BUTTON)
             edit_btn.clicked.connect(lambda checked, t=content: self.set_input_text(t))
             bl.addWidget(edit_btn)
 
@@ -541,10 +488,7 @@ class ChatDialog(QWidget):
 
             wrapper.installEventFilter(self)
         else:
-            lbl.setStyleSheet(
-                "QLabel { background: #f0f0f0; color: #1a1a1a; border-radius: 10px;"
-                "padding: 8px 12px; font-size: 13px; }"
-            )
+            lbl.setStyleSheet(styles.ASSISTANT_BUBBLE)
             # 气泡主体 + 复制按钮（hover 显示）
             v_layout = QVBoxLayout()
             v_layout.setContentsMargins(0, 0, 0, 0)
@@ -563,14 +507,7 @@ class ChatDialog(QWidget):
             copy_btn.setObjectName("copy_btn_assistant")
             copy_btn.setCursor(Qt.PointingHandCursor)
             copy_btn.setVisible(False)
-            copy_btn.setStyleSheet("""
-                QPushButton {
-                    background: transparent; border: none; font-size: 11px; color: #999;
-                }
-                QPushButton:hover {
-                    color: #333; background: rgba(0,0,0,0.06); border-radius: 3px;
-                }
-            """)
+            copy_btn.setStyleSheet(styles.COPY_BUTTON)
             bl.addWidget(copy_btn)
 
             v_layout.addWidget(btn_bar)
@@ -654,7 +591,8 @@ class ChatDialog(QWidget):
     def show_near(self, anchor: QPoint) -> None:
         """在悬浮按钮左侧弹出"""
         if not self.isVisible():
-            self.resize(440, 580)  # 仅首次弹出时使用默认尺寸
+            w, h = self._default_size()
+            self.resize(w, h)
         x = anchor.x() - self.width() - 12
         y = anchor.y() - self.height() // 2
         screen = QApplication.primaryScreen()
@@ -672,6 +610,9 @@ class ChatDialog(QWidget):
         self.activateWindow()
         self.raise_()
         self._input.setFocus()
+        # 重新打开时滚动到底部显示最新消息
+        self._user_scrolled_up = False
+        self._scroll_to_bottom()
         self._ollama_timer.start()
         self._check_ollama_status()  # 打开时立即探活
 

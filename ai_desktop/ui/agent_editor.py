@@ -3,7 +3,7 @@ Agent 管理窗口 —— 新增 / 编辑 / 删除自定义 Agent
 """
 from dataclasses import dataclass
 
-from PyQt5.QtCore import Qt, QPoint, pyqtSignal
+from PyQt5.QtCore import QPoint, Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QDialog,
     QGridLayout,
@@ -16,6 +16,8 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from ai_desktop.ui import styles
 
 
 @dataclass
@@ -44,9 +46,10 @@ class AgentEditor(QDialog):
 
     def _setup_window(self):
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
         self.setMinimumSize(420, 340)
         self.resize(440, 400)
-        self.setStyleSheet("QDialog { background: #ffffff; border-radius: 10px; }")
+        self.setStyleSheet(styles.DIALOG_BASE)
 
     def _setup_ui(self):
         root = QVBoxLayout(self)
@@ -56,23 +59,18 @@ class AgentEditor(QDialog):
         # ── 标题栏 ──
         title = QWidget()
         title.setFixedHeight(40)
-        title.setStyleSheet(
-            "background: #f6f6f6; border-top-left-radius: 10px; border-top-right-radius: 10px;"
-        )
+        title.setStyleSheet(styles.TITLE_BAR)
         tl = QHBoxLayout(title)
         tl.setContentsMargins(12, 0, 8, 0)
 
         title_lbl = QLabel("管理 Agent")
-        title_lbl.setStyleSheet("font-weight: bold; font-size: 13px; background: none; color: #1a1a1a;")
+        title_lbl.setStyleSheet(styles.LABEL_BOLD)
         tl.addWidget(title_lbl)
         tl.addStretch()
 
         close_btn = QPushButton("×")
         close_btn.setFixedSize(24, 24)
-        close_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: none; font-size: 16px; color: #999; }"
-            "QPushButton:hover { color: #333; }"
-        )
+        close_btn.setStyleSheet(styles.CLOSE_BUTTON)
         close_btn.clicked.connect(self.close)
         tl.addWidget(close_btn)
 
@@ -81,11 +79,7 @@ class AgentEditor(QDialog):
         # ── 列表区域 ──
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(
-            "QScrollArea { border: none; background: #ffffff; }"
-            "QScrollBar:vertical { width: 6px; }"
-            "QScrollBar::handle:vertical { background: #ccc; border-radius: 3px; }"
-        )
+        scroll.setStyleSheet(styles.SCROLL_AREA)
 
         self._list_container = QWidget()
         self._list_layout = QVBoxLayout(self._list_container)
@@ -99,17 +93,13 @@ class AgentEditor(QDialog):
         # ── 新增按钮 ──
         add_bar = QWidget()
         add_bar.setFixedHeight(44)
-        add_bar.setStyleSheet("background: #fafafa; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px;")
+        add_bar.setStyleSheet(styles.AGENT_LIST_BAR)
         al = QHBoxLayout(add_bar)
         al.setContentsMargins(12, 0, 12, 0)
 
         add_btn = QPushButton("＋ 新增 Agent")
         add_btn.setFixedHeight(28)
-        add_btn.setStyleSheet(
-            "QPushButton { background: #007AFF; color: white; border: none; border-radius: 5px;"
-            "padding: 2px 14px; font-size: 12px; }"
-            "QPushButton:hover { background: #0066d6; }"
-        )
+        add_btn.setStyleSheet(styles.ADD_AGENT_BUTTON)
         add_btn.clicked.connect(self._on_add)
         al.addWidget(add_btn)
 
@@ -134,42 +124,34 @@ class AgentEditor(QDialog):
 
     def _make_row(self, agent: AgentDef) -> QWidget:
         row = QWidget()
-        row.setStyleSheet("QWidget { background: transparent; }")
+        row.setStyleSheet(styles.TRANSPARENT)
         rl = QHBoxLayout(row)
         rl.setContentsMargins(8, 4, 8, 4)
         rl.setSpacing(8)
 
         icon = QLabel(agent.icon)
         icon.setFixedWidth(24)
-        icon.setStyleSheet("font-size: 16px; background: none;")
+        icon.setStyleSheet(styles.TITLE_ICON)
         rl.addWidget(icon)
 
         name = QLabel(agent.name)
-        name.setStyleSheet("font-size: 13px; color: #1a1a1a; background: none;")
+        name.setStyleSheet(styles.LABEL)
         rl.addWidget(name, stretch=1)
 
         if agent.builtin:
             tag = QLabel("内置")
-            tag.setStyleSheet("font-size: 11px; color: #999; background: none;")
+            tag.setStyleSheet(styles.LABEL_SECONDARY)
             rl.addWidget(tag)
         else:
             edit_btn = QPushButton("编辑")
             edit_btn.setFixedHeight(24)
-            edit_btn.setStyleSheet(
-                "QPushButton { background: #e8e8e8; border: none; border-radius: 4px;"
-                "padding: 2px 8px; font-size: 11px; color: #333; }"
-                "QPushButton:hover { background: #d0d0d0; }"
-            )
+            edit_btn.setStyleSheet(styles.AGENT_EDIT_BUTTON)
             edit_btn.clicked.connect(lambda checked, a=agent: self._on_edit(a))
             rl.addWidget(edit_btn)
 
             del_btn = QPushButton("删除")
             del_btn.setFixedHeight(24)
-            del_btn.setStyleSheet(
-                "QPushButton { background: #e8e8e8; border: none; border-radius: 4px;"
-                "padding: 2px 8px; font-size: 11px; color: #c00; }"
-                "QPushButton:hover { background: #fdd; }"
-            )
+            del_btn.setStyleSheet(styles.DELETE_BUTTON)
             del_btn.clicked.connect(lambda checked, a=agent: self._on_delete(a))
             rl.addWidget(del_btn)
 
@@ -250,7 +232,8 @@ class _AgentEditDialog(QDialog):
         self.setMinimumSize(360, 300)
         self.resize(380, 360)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        self.setStyleSheet("QDialog { background: #ffffff; border-radius: 10px; }")
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setStyleSheet(styles.DIALOG_BASE)
         self._drag_pos: QPoint | None = None
 
         root = QVBoxLayout(self)
@@ -260,15 +243,14 @@ class _AgentEditDialog(QDialog):
         # 标题栏
         tbar = QWidget()
         tbar.setFixedHeight(36)
-        tbar.setStyleSheet("background: #f6f6f6; border-top-left-radius: 10px; border-top-right-radius: 10px;")
+        tbar.setStyleSheet(styles.TITLE_BAR)
         tl2 = QHBoxLayout(tbar)
         tl2.setContentsMargins(12, 0, 8, 0)
         tl2.addWidget(QLabel(title))
         tl2.addStretch()
         cb = QPushButton("×")
         cb.setFixedSize(24, 24)
-        cb.setStyleSheet("QPushButton { background: transparent; border: none; font-size: 16px; color: #999; }"
-                         "QPushButton:hover { color: #333; }")
+        cb.setStyleSheet(styles.CLOSE_BUTTON)
         cb.clicked.connect(self.reject)
         tl2.addWidget(cb)
         root.addWidget(tbar)
@@ -280,8 +262,7 @@ class _AgentEditDialog(QDialog):
 
         form.addWidget(QLabel("名称"))
         self._name = QLineEdit(agent.name)
-        self._name.setStyleSheet("QLineEdit { border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; }"
-                                  "QLineEdit:focus { border-color: #007AFF; }")
+        self._name.setStyleSheet(styles.FORM_INPUT)
         form.addWidget(self._name)
 
         form.addWidget(QLabel("图标 (emoji)"))
@@ -290,18 +271,13 @@ class _AgentEditDialog(QDialog):
         icon_row.setSpacing(6)
         self._icon = QLineEdit(agent.icon)
         self._icon.setFixedWidth(50)
-        self._icon.setStyleSheet("QLineEdit { border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; font-size: 18px; }"
-                                  "QLineEdit:focus { border-color: #007AFF; }")
+        self._icon.setStyleSheet(styles.FORM_INPUT)
         icon_row.addWidget(self._icon)
 
         pick_btn = QPushButton("…")
         pick_btn.setFixedSize(28, 28)
         pick_btn.setToolTip("选择图标")
-        pick_btn.setStyleSheet(
-            "QPushButton { background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px;"
-            "font-size: 14px; color: #333; }"
-            "QPushButton:hover { background: #e0e0e0; }"
-        )
+        pick_btn.setStyleSheet(styles.EMOJI_PICK_BUTTON)
         pick_btn.clicked.connect(self._pick_emoji)
         icon_row.addWidget(pick_btn)
         icon_row.addStretch()
@@ -310,9 +286,7 @@ class _AgentEditDialog(QDialog):
         form.addWidget(QLabel("System Prompt"))
         self._prompt = QPlainTextEdit()
         self._prompt.setPlainText(agent.system_prompt)
-        self._prompt.setStyleSheet("QPlainTextEdit { border: 1px solid #ddd; border-radius: 4px; padding: 6px 8px;"
-                                    "font-size: 12px; font-family: Menlo, monospace; }"
-                                    "QPlainTextEdit:focus { border-color: #007AFF; }")
+        self._prompt.setStyleSheet(styles.FORM_TEXTAREA)
         form.addWidget(self._prompt, stretch=1)
 
         root.addLayout(form)
@@ -323,14 +297,12 @@ class _AgentEditDialog(QDialog):
         bb.addStretch()
 
         cancel = QPushButton("取消")
-        cancel.setStyleSheet("QPushButton { background: #e8e8e8; border: none; border-radius: 4px; padding: 6px 16px; }"
-                             "QPushButton:hover { background: #d0d0d0; }")
+        cancel.setStyleSheet(styles.CANCEL_BUTTON)
         cancel.clicked.connect(self.reject)
         bb.addWidget(cancel)
 
         save = QPushButton("保存")
-        save.setStyleSheet("QPushButton { background: #007AFF; color: white; border: none; border-radius: 4px; padding: 6px 16px; }"
-                           "QPushButton:hover { background: #0066d6; }")
+        save.setStyleSheet(styles.SAVE_BUTTON)
         save.clicked.connect(self._on_save)
         bb.addWidget(save)
 
@@ -392,9 +364,10 @@ class _EmojiPicker(QDialog):
         super().__init__(parent)
         self.selected_emoji = "🤖"
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
         self.setMinimumSize(370, 300)
         self.resize(370, 320)
-        self.setStyleSheet("QDialog { background: #ffffff; border-radius: 10px; }")
+        self.setStyleSheet(styles.DIALOG_BASE)
         self._drag_pos: QPoint | None = None
 
         root = QVBoxLayout(self)
@@ -404,15 +377,14 @@ class _EmojiPicker(QDialog):
         # 标题栏
         tbar = QWidget()
         tbar.setFixedHeight(36)
-        tbar.setStyleSheet("background: #f6f6f6; border-top-left-radius: 10px; border-top-right-radius: 10px;")
+        tbar.setStyleSheet(styles.TITLE_BAR)
         tl2 = QHBoxLayout(tbar)
         tl2.setContentsMargins(12, 0, 8, 0)
         tl2.addWidget(QLabel("选择图标"))
         tl2.addStretch()
         cb = QPushButton("×")
         cb.setFixedSize(24, 24)
-        cb.setStyleSheet("QPushButton { background: transparent; border: none; font-size: 16px; color: #999; }"
-                         "QPushButton:hover { color: #333; }")
+        cb.setStyleSheet(styles.CLOSE_BUTTON)
         cb.clicked.connect(self.reject)
         tl2.addWidget(cb)
         root.addWidget(tbar)
@@ -420,7 +392,7 @@ class _EmojiPicker(QDialog):
         # 分类区
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; background: #ffffff; }")
+        scroll.setStyleSheet(styles.SCROLL_AREA)
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(12, 8, 12, 8)
@@ -433,10 +405,7 @@ class _EmojiPicker(QDialog):
             for i, emoji in enumerate(emojis):
                 btn = QPushButton(emoji)
                 btn.setFixedSize(34, 34)
-                btn.setStyleSheet(
-                    "QPushButton { font-size: 17px; border: 1px solid #ddd; border-radius: 4px; background: #fff; }"
-                    "QPushButton:hover { background: #f0f0f0; border-color: #007AFF; }"
-                )
+                btn.setStyleSheet(styles.EMOJI_GRID_BUTTON)
                 btn.clicked.connect(lambda checked, e=emoji: self._select(e))
                 grid.addWidget(btn, 0, i)
             layout.addLayout(grid)

@@ -3,14 +3,51 @@ SQLite 持久化存储：对话记录
 """
 import json
 import logging
+import shutil
 import sqlite3
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-DB_PATH = Path(__file__).resolve().parent.parent.parent / "chat_history.db"
+logger = logging.getLogger(__name__)
+
+
+def _resolve_db_path() -> Path:
+    """Resolve database path: use Application Support dir, with dev-mode fallback"""
+    dev_path = Path(__file__).resolve().parent.parent.parent / "chat_history.db"
+
+    # Production: use ~/Library/Application Support/ai-desktop-assistant/
+    if sys.platform == "darwin":
+        app_support = Path.home() / "Library" / "Application Support" / "ai-desktop-assistant"
+    else:
+        app_support = Path.home() / ".local" / "share" / "ai-desktop-assistant"
+
+    app_support.mkdir(parents=True, exist_ok=True)
+    prod_path = app_support / "chat_history.db"
+
+    # Migrate from old dev path if it exists and prod path doesn't yet
+    if dev_path.exists() and not prod_path.exists():
+        try:
+            shutil.copy2(str(dev_path), str(prod_path))
+            logger.info("Migrated DB from %s to %s", dev_path, prod_path)
+        except Exception:
+            logger.exception("Failed to migrate DB, falling back to dev path")
+            return dev_path
+
+    # Use prod path if it exists (or was just migrated);
+    # fall back to dev path only if prod doesn't exist and migration failed
+    if prod_path.exists():
+        return prod_path
+
+    # Dev-mode fallback: neither prod nor dev DB exists yet
+    # (first launch, no data to migrate — use prod path going forward)
+    return prod_path
+
+
+DB_PATH = _resolve_db_path()
 _local = threading.local()
 
 
@@ -45,6 +82,12 @@ def init_db() -> None:
             created_at      REAL    NOT NULL,
             FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
         )
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_messages_conversation
+            ON messages(conversation_id, created_at)
         """
     )
     db.execute(
@@ -117,17 +160,17 @@ def list_conversations_with_counts(limit: int = 50) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def search_conversations(query: str, limit: int = 20) -> list[dict]:
+def search_conversations(query: str, limit: int = 50) -> list[dict]:
     """全文搜索对话标题和消息内容"""
     db = _conn()
     pattern = f"%{query}%"
     rows = db.execute(
         """
-        SELECT DISTINCT c.id, c.title, c.agent_id, c.created_at,
+        SELECT c.id, c.title, c.agent_id, c.created_at,
                (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id) AS msg_count
         FROM conversations c
-        LEFT JOIN messages m ON m.conversation_id = c.id
-        WHERE c.title LIKE ? OR m.content LIKE ?
+        WHERE c.title LIKE ?
+           OR EXISTS (SELECT 1 FROM messages WHERE conversation_id = c.id AND content LIKE ?)
         ORDER BY c.created_at DESC
         LIMIT ?
         """,

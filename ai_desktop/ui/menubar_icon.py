@@ -3,13 +3,18 @@ macOS 菜单栏图标
 """
 import os
 
-from PyQt5.QtCore import Qt, QRectF, pyqtSignal
-from PyQt5.QtGui import QIcon, QPixmap, QPainter, QPainterPath
-from PyQt5.QtWidgets import QMenu, QSystemTrayIcon, QAction
+from PyQt5.QtCore import QRectF, Qt, pyqtSignal
+from PyQt5.QtGui import QIcon, QPainter, QPainterPath, QPixmap
+from PyQt5.QtWidgets import QAction, QMenu, QSystemTrayIcon
 
 from ai_desktop.config import Agent
+from ai_desktop.ui import styles
 
-_ICON_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "图标.png")
+_ICON_ROOT = os.path.dirname(os.path.dirname(__file__))
+_ICON_PATH = next(
+    (os.path.join(_ICON_ROOT, f) for f in ("图标.icns", "图标.png") if os.path.exists(os.path.join(_ICON_ROOT, f))),
+    os.path.join(_ICON_ROOT, "图标.png"),
+)
 _SIZE = 18
 
 
@@ -67,12 +72,7 @@ class MenuBarIcon(QSystemTrayIcon):
 
     def _build_menu(self) -> None:
         menu = QMenu()
-        menu.setStyleSheet(
-            "QMenu { background: #ffffff; border: 1px solid #ccc; border-radius: 6px; padding: 4px 0; color: #333; }"
-            "QMenu::item { padding: 6px 24px; font-size: 12px; color: #333; }"
-            "QMenu::item:selected { background: #007AFF; color: white; border-radius: 4px; }"
-            "QMenu::separator { height: 1px; background: #e0e0e0; margin: 4px 10px; }"
-        )
+        menu.setStyleSheet(styles.MENU)
 
         show_action = menu.addAction("打开对话")
         show_action.triggered.connect(self.dialog_toggle.emit)
@@ -84,6 +84,7 @@ class MenuBarIcon(QSystemTrayIcon):
         for ag in self._agents:
             act = menu.addAction(f"{ag.icon}  {ag.name}")
             act.setCheckable(True)
+            act.setData(ag.id)
             if ag.id == self._active_agent.id:
                 act.setChecked(True)
             act.triggered.connect(lambda checked, a=ag: self.agent_selected.emit(a))
@@ -105,7 +106,7 @@ class MenuBarIcon(QSystemTrayIcon):
     def set_active_agent(self, agent: Agent) -> None:
         self._active_agent = agent
         for act in self._agent_actions:
-            act.setChecked(act.text().endswith(agent.name))
+            act.setChecked(act.data() == agent.id)
 
     def refresh_agents(self, agents: list[Agent]) -> None:
         """自定义 Agent 变更后重建菜单"""
