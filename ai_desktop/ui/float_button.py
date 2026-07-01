@@ -10,11 +10,12 @@ from PyQt5.QtGui import QCursor, QIcon, QPainter, QPainterPath, QPixmap
 from PyQt5.QtWidgets import QApplication, QMenu, QPushButton
 
 from ai_desktop.ui import styles
+from ai_desktop.utils.paths import resource_path
 
-_ICON_ROOT = os.path.dirname(os.path.dirname(__file__))
 _ICON_PATH = next(
-    (os.path.join(_ICON_ROOT, f) for f in ("图标.icns", "图标.png") if os.path.exists(os.path.join(_ICON_ROOT, f))),
-    os.path.join(_ICON_ROOT, "图标.png"),
+    (resource_path("ai_desktop", f) for f in ("图标.icns", "图标.png")
+     if os.path.exists(resource_path("ai_desktop", f))),
+    resource_path("ai_desktop", "图标.png"),
 )
 
 _SIZE = 32
