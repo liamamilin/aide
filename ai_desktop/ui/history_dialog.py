@@ -37,7 +37,6 @@ class HistoryDialog(QDialog):
 
     def _setup_window(self):
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
         self.setMinimumSize(380, 300)
         self.resize(400, 420)
         self.setStyleSheet(styles.DIALOG_BASE)

@@ -642,20 +642,18 @@ def main() -> None:
             except Exception:
                 pass
 
-        # 辅助功能权限检查（仅首次提示）
-        if not get_setting("accessibility_prompted"):
-            if not _is_accessibility_enabled():
-                QMessageBox.warning(
-                    None, "需要辅助功能权限",
-                    "AI 桌面助手需要<b>辅助功能权限</b>才能使用全局快捷键 ⌘⌃L 读取选中文字。<br><br>"
-                    "请前往：<br>"
-                    "系统设置 → 隐私与安全性 → 辅助功能 → 勾选本应用（或终端）<br><br>"
-                    "如不使用快捷键，可忽略此提示。",
-                )
-                import subprocess
-                url = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-                subprocess.Popen(["open", url])
-            save_setting("accessibility_prompted", "1")
+        # 辅助功能权限检查（每次启动检测，未授权才提示）
+        if not _is_accessibility_enabled():
+            QMessageBox.warning(
+                None, "需要辅助功能权限",
+                "AI 桌面助手需要<b>辅助功能权限</b>才能使用全局快捷键 ⌘⌃L 读取选中文字。<br><br>"
+                "请前往：<br>"
+                "系统设置 → 隐私与安全性 → 辅助功能 → 勾选本应用（或终端）<br><br>"
+                "如不使用快捷键，可忽略此提示。",
+            )
+            import subprocess
+            url = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            subprocess.Popen(["open", url])
 
         # 版本更新检查（启动后 3s）
         from ai_desktop.utils.update_checker import check_for_update
