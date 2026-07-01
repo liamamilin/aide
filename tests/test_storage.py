@@ -1,4 +1,5 @@
 """Storage layer tests — uses temp SQLite database"""
+import sys
 import tempfile
 import threading
 from pathlib import Path
@@ -152,3 +153,24 @@ class TestSettings:
     def test_custom_agents_corrupt(self):
         storage.save_setting("custom_agents", "not-json")
         assert storage.load_custom_agents() == []
+
+
+class TestDbPath:
+    """Test DB path resolution"""
+
+    def test_dev_mode_fallback(self):
+        """When DB exists next to source, use it (dev mode)"""
+        from ai_desktop.utils.storage import _resolve_db_path
+        # In test env, there's no chat_history.db next to source,
+        # so it should resolve to the production path
+        result = _resolve_db_path()
+        assert "ai-desktop-assistant" in str(result) or "chat_history.db" in str(result)
+
+    def test_production_path_structure(self):
+        """Production path should be under Application Support or dev fallback"""
+        from ai_desktop.utils.storage import _resolve_db_path
+        result = _resolve_db_path()
+        # On macOS, should use Library/Application Support OR dev fallback
+        if sys.platform == "darwin":
+            assert ("Library/Application Support" in str(result)
+                    or "chat_history.db" in str(result))

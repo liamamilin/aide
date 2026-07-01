@@ -21,6 +21,10 @@ def test_markdown():
     safe = to_html("print({1: 2})")
     assert "1: 2" in safe
 
+    escaped = to_html("<script>alert(1)</script> & text")
+    assert "&lt;script&gt;alert(1)&lt;/script&gt; &amp; text" in escaped
+    assert "<script>" not in escaped
+
 
 def test_markdown_heading():
     html = to_html("## Title\n\nbody")

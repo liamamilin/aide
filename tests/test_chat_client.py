@@ -1,9 +1,8 @@
 """LLM chat client tests — mock HTTP responses"""
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from ai_desktop.llm.chat_client import ChatStream, ChatClient, list_models
-from ai_desktop.utils.storage import Message
+from ai_desktop.llm.chat_client import ChatStream, list_models
 
 
 def _fake_stream_response(lines: list[str]):
