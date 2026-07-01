@@ -34,6 +34,12 @@ cd /path/to/AI桌面助手
 pip install -e .
 ```
 
+**开发**（运行测试需要）：
+
+```bash
+pip install -r requirements-dev.txt
+```
+
 **启动**：
 
 ```bash
@@ -56,7 +62,7 @@ aide
 - **通知** — 回复完成时，若窗口在后台则弹 macOS 通知
 
 ### Agent
-- **3 个内置 Agent**：代码专家 💻 / 翻译 🌐 / 通用助手 🤖
+- **5 个内置 Agent**：代码专家 💻 / 翻译 🌐 / 通用助手 🤖 / 摘要 📄 / 润色 ✍️
 - **自定义 Agent** — 新增/编辑/删除，自定义 emoji 图标和 prompt
 - **菜单栏快速切换** — 菜单栏图标右键菜单直接切换 Agent
 
@@ -82,7 +88,12 @@ aide
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama 服务地址 |
 | `HOTKEY` | `<cmd>+<ctrl>+l` | 全局快捷键 |
 | `OLLAMA_NUM_PREDICT` | `20480` | 最大输出 token |
-| `OLLAMA_NUM_CTX` | `40960` | 上下文窗口 |
+| `OLLAMA_NUM_CTX` | `8192` | 上下文窗口 |
+| `OLLAMA_TEMPERATURE` | `0.7` | 生成温度（0.0 ~ 2.0） |
+| `OLLAMA_TOP_P` | `0.9` | 核采样阈值 |
+| `OLLAMA_TOP_K` | `40` | Top-K 采样 |
+| `OLLAMA_REPEAT_PENALTY` | `1.1` | 重复惩罚系数 |
+| `OLLAMA_MAX_ROUNDS` | `10` | 保留的最大对话轮次 |
 | `OLLAMA_KEEP_ALIVE` | `30m` | 模型驻留时长 |
 | `OLLAMA_TIMEOUT` | `120` | HTTP 超时（秒） |
 
@@ -112,6 +123,9 @@ aide
 ai_desktop/
 ├── main.py                     # 入口 + ChatController
 ├── config.py                   # LLM/快捷键/Agent 配置
+├── __main__.py                 # python -m ai_desktop 支持
+├── settings_manager.py         # 配置持久化加载/应用
+├── agent_manager.py            # Agent 列表管理/切换/保存
 ├── capture/
 │   ├── hotkey_listener.py      # pynput 全局快捷键 + 运行时切换
 │   ├── clipboard_monitor.py    # ⌘C 模拟 → 读取 → 恢复（双回退）
@@ -126,20 +140,52 @@ ai_desktop/
 │   ├── agent_editor.py         # Agent 管理（增删改 + emoji 选择）
 │   ├── settings_dialog.py      # 运行时设置面板
 │   ├── markdown.py             # Markdown → HTML
-│   └── styles.py               # QSS 常量
+│   └── styles.py               # QSS 常量（43 条集中管理）
 └── utils/
     ├── logging.py              # 日志配置
     └── storage.py              # SQLite 持久化（对话/消息/设置/Agent）
 tests/
-├── test_smoke.py               # 文本规范化 + Markdown 渲染测试
-├── test_storage.py             # DB CRUD 测试（13 项）
-└── test_chat_client.py         # 流式解析测试（9 项）
+├── conftest.py                 # 共享 fixture（qapp, mocker）
+├── test_smoke.py               # 文本规范化 + Markdown 渲染（5 项）
+├── test_storage.py             # DB CRUD 测试（12 项）
+├── test_chat_client.py         # 流式解析测试（9 项）
+├── test_main_entry.py          # python -m 入口测试（1 项）
+├── test_settings_manager.py    # 配置加载/应用/验证（8 项）
+├── test_agent_manager.py       # Agent 初始化/切换/保存（7 项）
+├── test_chat_dialog.py         # 对话窗口信号/状态/数据流（19 项）
+├── test_settings_dialog.py     # 设置面板验证/信号（6 项）
+├── test_history_dialog.py      # 历史加载/搜索/删除（6 项）
+├── test_agent_editor.py        # Agent 编辑器 CRUD（8 项）
+├── test_float_button.py        # 悬浮按钮菜单/信号（8 项）
+└── test_menubar_icon.py        # 菜单栏 Agent 菜单/信号（8 项）
 ```
 
 ---
 
 ## 测试
 
+项目包含 **110 项自动化测试**，覆盖 UI 信号/状态、数据层、工具函数和入口：
+
 ```bash
-pytest tests/ -v    # 26 项测试
+# 安装开发依赖
+pip install -r requirements-dev.txt
+
+# 运行全部测试
+pytest tests/ -v    # 110 项测试
+
+# 按类别运行
+pytest tests/test_chat_dialog.py -v        # 对话窗口（19 项）
+pytest tests/test_storage.py -v            # 数据库（12 项）
+pytest tests/test_settings_manager.py -v   # 配置管理（8 项）
+pytest tests/test_agent_manager.py -v      # Agent 管理（7 项）
+pytest tests/test_settings_dialog.py -v    # 设置面板（6 项）
+pytest tests/test_history_dialog.py -v     # 历史浏览（6 项）
+pytest tests/test_agent_editor.py -v       # Agent 编辑器（8 项）
+pytest tests/test_float_button.py -v       # 悬浮按钮（8 项）
+pytest tests/test_menubar_icon.py -v       # 菜单栏图标（8 项）
+pytest tests/test_chat_client.py -v        # LLM 流式解析（9 项）
+pytest tests/test_main_entry.py -v         # 入口点（1 项）
+pytest tests/test_smoke.py -v              # 工具函数（5 项）
 ```
+
+测试使用 `pytest-qt` 进行真实的 PyQt5 窗口渲染，外部依赖（Ollama HTTP、剪贴板、macOS ctypes）均通过 mock 隔离。

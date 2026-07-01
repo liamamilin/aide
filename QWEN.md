@@ -37,6 +37,9 @@ Captured text is sent to a local LLM (Ollama) via a streaming multi-turn chat wi
 ai_desktop/
 ├── main.py                      # Entry point + ChatController (orchestrator)
 ├── config.py                    # LLM/Hotkey/Agent config (module constants + dataclasses)
+├── settings_manager.py          # Runtime settings persistence/apply
+├── agent_manager.py             # Built-in/custom Agent merge and switching
+├── __main__.py                  # python -m ai_desktop support
 ├── capture/
 │   ├── hotkey_listener.py       # pynput GlobalHotKeys wrapper + runtime reregister
 │   ├── clipboard_monitor.py     # ⌘C simulation (pynput → osascript fallback)
@@ -58,7 +61,10 @@ ai_desktop/
 tests/
 ├── test_smoke.py                # Smoke tests for text_normalizer + markdown renderer
 ├── test_storage.py              # DB CRUD tests (temp SQLite)
-└── test_chat_client.py          # ChatStream parsing tests (mocked HTTP)
+├── test_chat_client.py          # ChatStream parsing tests (mocked HTTP)
+├── test_settings_manager.py     # Settings persistence/apply tests
+├── test_agent_manager.py        # Agent merge/switch/custom tests
+└── test_*_dialog.py             # pytest-qt UI tests
 ```
 
 ## Architecture & Data Flow
@@ -167,12 +173,12 @@ Safe UI operations
 pip install -e .
 
 # Run
-ai-desktop
+aide
 
 # Or directly
-python -m ai_desktop.main
+python -m ai_desktop
 
-# Run all tests (26 tests)
+# Run all tests
 pytest tests/ -v
 ```
 
@@ -191,7 +197,11 @@ Configurable at runtime via **Settings** (float button right-click → 设置…
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Changeable at runtime |
 | `HOTKEY` | `<cmd>+<ctrl>+l` | Runtime changeable via Settings |
 | `OLLAMA_NUM_PREDICT` | 20480 | Max output tokens |
-| `OLLAMA_NUM_CTX` | 40960 | Context window size |
+| `OLLAMA_NUM_CTX` | 8192 | Context window size |
+| `OLLAMA_TEMPERATURE` | 0.7 | Generation temperature (0.0~2.0) |
+| `OLLAMA_TOP_P` | 0.9 | Nucleus sampling threshold (0.0~1.0) |
+| `OLLAMA_TOP_K` | 40 | Top-K sampling |
+| `OLLAMA_REPEAT_PENALTY` | 1.1 | Repetition penalty coefficient |
 | `OLLAMA_KEEP_ALIVE` | `30m` | Model stays loaded in memory |
 | `OLLAMA_TIMEOUT` | 120 | HTTP request timeout (seconds) |
 | `MAX_TEXT_LENGTH` | 12000 | Input truncation limit |
@@ -242,13 +252,14 @@ The project has associated memory files at `~/.qwen/projects/-Users-milin-2026-A
 
 ## Development Roadmap
 
-Final status as of 2026-05-26 (post-optimization):
+Final status as of 2026-07-01:
 
 | Tier | Status | Items |
 |------|--------|-------|
 | P0 | ✅ 3/3 | Model combo, input auto-focus, copy button |
-| P1 | ⚡ 3/4 | History browser ✅, Ollama status ✅, keyboard shortcuts ✅, ~~dark mode~~ |
+| P1 | ✅ 4/4 | History browser ✅, Ollama status ✅, keyboard shortcuts ✅, ~~dark mode~~ |
 | P2 | ✅ 4/4 | Settings UI, custom agents, export, session restore |
-| P3 | ⚡ 3/4 | Menu bar icon ✅, search ✅, tests ✅, ~~image input~~ |
+| P3 | ⚡ 3/4 | Menu bar icon ✅, search ✅, UI/backend tests ✅, ~~image input~~ |
 | Post | ✅ | Interrupt button ⏹, edit button ✏️, macOS notifications, async HTTP worker, slot error guards, agent persistence fix |
-| | **13/14 + enhancements** | **Project complete** |
+| Quality | ✅ | 110 automated tests covering storage, LLM parsing, managers, UI signals/state, clipboard, hotkeys |
+| | **13/14 + enhancements** | **Project complete; productization remains** |
