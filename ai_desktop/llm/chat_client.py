@@ -55,6 +55,10 @@ class ChatClient:
                 "options": {
                     "num_predict": config.OLLAMA_NUM_PREDICT,
                     "num_ctx": config.OLLAMA_NUM_CTX,
+                    "temperature": config.OLLAMA_TEMPERATURE,
+                    "top_p": config.OLLAMA_TOP_P,
+                    "top_k": config.OLLAMA_TOP_K,
+                    "repeat_penalty": config.OLLAMA_REPEAT_PENALTY,
                 },
             }
             logger.info("Chat: %d messages → %s", len(ollama_msgs), self.model)
@@ -118,6 +122,10 @@ class ChatStream:
                     "options": {
                         "num_predict": config.OLLAMA_NUM_PREDICT,
                         "num_ctx": config.OLLAMA_NUM_CTX,
+                        "temperature": config.OLLAMA_TEMPERATURE,
+                        "top_p": config.OLLAMA_TOP_P,
+                        "top_k": config.OLLAMA_TOP_K,
+                        "repeat_penalty": config.OLLAMA_REPEAT_PENALTY,
                     },
                 },
                 timeout=self._timeout,

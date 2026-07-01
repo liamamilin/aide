@@ -9,6 +9,7 @@
 - 无序 / 有序列表
 - 分隔线
 """
+import html
 import re
 
 
@@ -136,6 +137,7 @@ def _render_single(line: str) -> str:
 # ── 行内格式 ──────────────────────────────────────────
 
 def _fmt(text: str) -> str:
+    text = html.escape(text, quote=False)
     text = re.sub(
         r"`([^`]+)`",
         r'<code style="background:#f0f0f0;padding:1px 5px;'

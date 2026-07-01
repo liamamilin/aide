@@ -30,8 +30,8 @@ def _read_clipboard() -> str:
         return ""
 
 
-def _write_clipboard(text: str) -> None:
-    """通过 pbcopy 写入剪贴板"""
+def _write_clipboard(text: str) -> bool:
+    """通过 pbcopy 写入剪贴板，成功返回 True"""
     try:
         subprocess.run(
             ["pbcopy"],
@@ -39,8 +39,10 @@ def _write_clipboard(text: str) -> None:
             text=True,
             timeout=2,
         )
+        return True
     except Exception:
-        pass
+        logger.warning("Failed to restore clipboard content via pbcopy", exc_info=True)
+        return False
 
 
 def _try_cmd_c_via_pynput() -> bool:
@@ -94,8 +96,7 @@ def read_selection() -> Optional[str]:
         if _try_cmd_c_via_osascript():
             time.sleep(0.15)
         else:
-            if saved:
-                _write_clipboard(saved)
+            _write_clipboard(saved)
             return None
 
     # 3. 等待剪贴板更新
@@ -112,8 +113,7 @@ def read_selection() -> Optional[str]:
             selected = _read_clipboard()
 
     # 6. 恢复原剪贴板
-    if saved:
-        _write_clipboard(saved)
+    _write_clipboard(saved)
 
     # 7. 判断是否有效
     if not selected:
