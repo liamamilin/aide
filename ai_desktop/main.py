@@ -535,8 +535,27 @@ class ChatController(QObject):
 # 入口
 # ═══════════════════════════════════════════════════════
 
+
+def _is_accessibility_enabled() -> bool:
+    """检测 macOS 辅助功能权限是否已授予本进程"""
+    try:
+        import ctypes
+        import ctypes.util
+        lib_path = ctypes.util.find_library("ApplicationServices")
+        if lib_path is None:
+            return True
+        lib = ctypes.cdll.LoadLibrary(lib_path)
+        return bool(lib.AXIsProcessTrusted())
+    except Exception:
+        return True
+
+
 def main() -> None:
     log_util.setup()
+
+    # 崩溃处理钩子（必须在任何异常可能发生之前安装）
+    from ai_desktop.utils import crash_handler
+    crash_handler.install()
 
     app = QApplication(sys.argv)
     app.setApplicationName("AI 桌面助手")
@@ -622,6 +641,36 @@ def main() -> None:
                         )
             except Exception:
                 pass
+
+        # 辅助功能权限检查（仅首次提示）
+        if not get_setting("accessibility_prompted"):
+            if not _is_accessibility_enabled():
+                QMessageBox.warning(
+                    None, "需要辅助功能权限",
+                    "AI 桌面助手需要<b>辅助功能权限</b>才能使用全局快捷键 ⌘⌃L 读取选中文字。<br><br>"
+                    "请前往：<br>"
+                    "系统设置 → 隐私与安全性 → 辅助功能 → 勾选本应用（或终端）<br><br>"
+                    "如不使用快捷键，可忽略此提示。",
+                )
+                import subprocess
+                url = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+                subprocess.Popen(["open", url])
+            save_setting("accessibility_prompted", "1")
+
+        # 版本更新检查（启动后 3s）
+        from ai_desktop.utils.update_checker import check_for_update
+        update = check_for_update()
+        if update is not None:
+            from PyQt5.QtWidgets import QSystemTrayIcon
+
+            tray = QSystemTrayIcon()
+            if tray.supportsMessages():
+                tray.showMessage(
+                    "AI 桌面助手 — 有更新",
+                    f"新版本 {update.version} 可用\n{update.url}",
+                    QSystemTrayIcon.Information,
+                    5000,
+                )
 
     QTimer.singleShot(1500, _startup_check)
 

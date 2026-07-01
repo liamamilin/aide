@@ -30,6 +30,11 @@ MAX_TEXT_LENGTH: int = 12_000
 FONT_FAMILY: str = "PingFang SC, Helvetica, sans-serif"
 FONT_SIZE: int = 13
 
+# ── 发布 ─────────────────────────────────────────────
+
+GITHUB_REPO: str = "liamamilin/aide"
+UPDATE_CHECK_INTERVAL: int = 86400  # 两次检查间隔（秒），默认 24h
+
 # ── Agent 对话配置 ───────────────────────────────────
 
 
