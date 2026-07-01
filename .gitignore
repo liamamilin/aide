@@ -37,6 +37,9 @@ venv/
 
 # ── 规划 / 构建产物 ────────────────────────────────
 thoughts/
+QWEN.md
+思考与设计.md
+产品化计划.md
 build/
 dist/
 *.dmg
