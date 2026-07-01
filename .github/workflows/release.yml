@@ -37,7 +37,6 @@ jobs:
 
       - name: Build .app
         run: |
-          pyinstaller --version
           pyinstaller --windowed --onedir --argv-emulation \
             --name "AI桌面助手" \
             --icon ai_desktop/图标.icns \
