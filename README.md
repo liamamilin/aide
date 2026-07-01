@@ -18,7 +18,16 @@
 
 ---
 
-## 安装与启动
+## 下载安装
+
+### 方式一：DMG 安装（推荐）
+
+1. 前往 [Releases](https://github.com/liamamilin/aide/releases) 下载最新 `AI桌面助手-v*.dmg`
+2. 双击 DMG，将 `AI桌面助手` 拖入 Applications
+3. 首次启动需在系统设置 → 隐私与安全性中允许运行
+4. 确保 [Ollama](https://ollama.com) 已安装并运行
+
+### 方式二：源码安装
 
 **前置条件**：[Ollama](https://ollama.com) 已安装并拉取模型：
 

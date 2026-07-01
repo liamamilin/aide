@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: python -m pip install --upgrade pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-dev.txt
+          pip install -e .
+
+      - name: Lint
+        run: ruff check ai_desktop/ tests/
+
+      - name: Test
+        run: QT_QPA_PLATFORM=offscreen pytest tests/ -q
+
+      - name: Build .app
+        run: pyinstaller scripts/aide.spec
+
+      - name: Build DMG
+        run: |
+          VERSION="${{ github.ref_name }}"
+          bash scripts/build_dmg.sh "${VERSION#v}"
+
+      - name: Upload DMG to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/AI桌面助手-*.dmg
+          generate_release_notes: true
