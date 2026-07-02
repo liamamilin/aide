@@ -26,9 +26,9 @@ _SETTING_MAP = [
     ("repeat_penalty",  "OLLAMA_REPEAT_PENALTY", float),
     ("max_rounds",      "OLLAMA_MAX_ROUNDS",     int),
     ("hotkey",          "HOTKEY",                str),
+    ("think",           "OLLAMA_THINK",          bool),
 ]
 
-# dict_key → SQLite key (大部分一致，少数不同)
 _DB_KEY_MAP = {
     "base_url":       "ollama_base_url",
     "timeout":        "ollama_timeout",
@@ -40,6 +40,7 @@ _DB_KEY_MAP = {
     "repeat_penalty": "ollama_repeat_penalty",
     "max_rounds":     "ollama_max_rounds",
     "hotkey":         "hotkey",
+    "think":          "ollama_think",
 }
 
 
@@ -53,7 +54,10 @@ class SettingsManager:
             val = get_setting(db_key)
             if val:
                 try:
-                    setattr(config, attr, conv(val))
+                    if conv is bool:
+                        setattr(config, attr, val.lower() == "true")
+                    else:
+                        setattr(config, attr, conv(val))
                 except (ValueError, TypeError):
                     logger.warning("Invalid setting %s=%s, keeping default", db_key, val)
 

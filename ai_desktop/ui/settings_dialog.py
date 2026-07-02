@@ -3,6 +3,7 @@
 """
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
+    QCheckBox,
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
@@ -26,6 +27,7 @@ class SettingsDialog(FramelessDragMixin, QDialog):
 
     FIELDS = [
         ("base_url",    "Ollama 服务地址",   str,   ""),
+        ("think",       "模型思考推理",      bool,  True),
         ("timeout",     "超时 (秒)",         int,   10),
         ("num_ctx",     "上下文窗口",        int,   2048),
         ("num_predict", "最大输出 token",    int,   256),
@@ -120,6 +122,10 @@ class SettingsDialog(FramelessDragMixin, QDialog):
                 w.setRange(lo, hi)
                 w.setStyleSheet(f"QSpinBox {{ {_widget_style} }}")
                 self._widgets[key] = w
+            elif typ is bool:
+                w = QCheckBox()
+                w.setStyleSheet(styles.LABEL)
+                self._widgets[key] = w
             else:
                 w = QLineEdit()
                 w.setStyleSheet(
@@ -159,6 +165,8 @@ class SettingsDialog(FramelessDragMixin, QDialog):
                 w.setValue(float(val) if val else float(default))
             elif typ is int:
                 w.setValue(int(val) if val else default)
+            elif typ is bool:
+                w.setChecked(bool(val) if val is not None else bool(default))
             else:
                 w.setText(str(val))
 
@@ -170,6 +178,8 @@ class SettingsDialog(FramelessDragMixin, QDialog):
                 data[key] = w.value()
             elif typ is int:
                 data[key] = w.value()
+            elif typ is bool:
+                data[key] = w.isChecked()
             else:
                 t = w.text().strip()
                 data[key] = t if t else str(default)

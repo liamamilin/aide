@@ -51,6 +51,7 @@ class ChatClient:
                 "model": self.model,
                 "messages": ollama_msgs,
                 "stream": False,
+                "think": config.OLLAMA_THINK,
                 "keep_alive": config.OLLAMA_KEEP_ALIVE,
                 "options": {
                     "num_predict": config.OLLAMA_NUM_PREDICT,
@@ -118,6 +119,7 @@ class ChatStream:
                     "model": self._model,
                     "messages": self._messages,
                     "stream": True,
+                    "think": config.OLLAMA_THINK,
                     "keep_alive": config.OLLAMA_KEEP_ALIVE,
                     "options": {
                         "num_predict": config.OLLAMA_NUM_PREDICT,

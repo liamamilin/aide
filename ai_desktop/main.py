@@ -274,6 +274,7 @@ class ChatController(QObject):
         """打开设置面板"""
         current = {
             "base_url": config.OLLAMA_BASE_URL,
+            "think": config.OLLAMA_THINK,
             "timeout": config.OLLAMA_TIMEOUT,
             "num_ctx": config.OLLAMA_NUM_CTX,
             "num_predict": config.OLLAMA_NUM_PREDICT,

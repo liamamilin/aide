@@ -1,5 +1,5 @@
 """Theme tests — ColorSet values and dark mode detection."""
-from ai_desktop.ui.theme import ColorSet, LIGHT, DARK, current, current_markdown, MarkdownColors
+from ai_desktop.ui.theme import DARK, LIGHT, ColorSet, MarkdownColors, current, current_markdown
 
 
 def test_light_and_dark_have_all_fields():
