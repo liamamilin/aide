@@ -24,7 +24,7 @@ def list_models(base_url: str = "") -> List[str]:
             return [m["name"] for m in models]
     except Exception:
         logger.debug("Failed to list models", exc_info=True)
-    return [config.OLLAMA_MODEL]  # fallback: show default
+    return []  # fallback: no models available
 
 
 @dataclass

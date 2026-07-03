@@ -107,4 +107,4 @@ class TestListModels:
         import requests as req
         with patch("requests.get", side_effect=req.exceptions.ConnectionError):
             models = list_models()
-            assert models == ["sorc/qwen3.5-instruct-uncensored:9b"]  # config default
+            assert models == []  # no models available

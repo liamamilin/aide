@@ -79,7 +79,7 @@ class MarkdownColors:
 
 
 _MARKDOWN_LIGHT = MarkdownColors(
-    heading=LIGHT.text,
+    heading=LIGHT.accent,
     bullet=LIGHT.text_secondary,
     hr=LIGHT.border,
     inline_code_bg=LIGHT.surface,
@@ -89,7 +89,7 @@ _MARKDOWN_LIGHT = MarkdownColors(
 )
 
 _MARKDOWN_DARK = MarkdownColors(
-    heading=DARK.text,
+    heading=DARK.accent,
     bullet=DARK.text_secondary,
     hr=DARK.border,
     inline_code_bg=DARK.surface,

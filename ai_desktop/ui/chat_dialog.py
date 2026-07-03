@@ -2,10 +2,11 @@
 对话窗口 —— Agent 多轮对话
 """
 import html
+import logging
 
 import requests
-from PyQt5.QtCore import QEvent, QPoint, Qt, QThread, QTimer, pyqtSignal
-from PyQt5.QtGui import QKeyEvent
+from PyQt5.QtCore import QEvent, QPoint, QRectF, Qt, QThread, QTimer, pyqtSignal
+from PyQt5.QtGui import QKeyEvent, QPainterPath, QRegion
 from PyQt5.QtWidgets import (
     QApplication,
     QComboBox,
@@ -20,10 +21,13 @@ from PyQt5.QtWidgets import (
 )
 
 from ai_desktop import config
+from ai_desktop.capture.text_normalizer import normalize
 from ai_desktop.config import Agent
 from ai_desktop.ui import markdown, styles
 from ai_desktop.ui.float_button import pin_to_all_spaces
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
+
+logger = logging.getLogger(__name__)
 
 
 class ChatDialog(FramelessDragMixin, QWidget):
@@ -76,11 +80,20 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self.setWindowFlags(
             Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
         )
-        self.setAttribute(Qt.WA_TranslucentBackground)
         w, h = self._default_size()
         self.setMinimumSize(400, 460)
         self.resize(w, h)
+        self._apply_rounded_mask()
         self.setStyleSheet(styles.CHAT_DIALOG_ROOT)
+
+    def _apply_rounded_mask(self):
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(0, 0, self.width(), self.height()), 10, 10)
+        self.setMask(QRegion(path.toFillPolygon().toPolygon()))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_rounded_mask()
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -211,9 +224,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._input = QPlainTextEdit()
         self._input.setPlaceholderText("输入消息... (Enter 发送, Shift+Enter 换行)")
         self._input.setFixedHeight(36)
-        self._input.setMaximumBlockCount(8)
         self._input.setStyleSheet(styles.INPUT_AREA)
         self._input.installEventFilter(self)
+        self._input.textChanged.connect(self._adjust_input_height)
         il.addWidget(self._input, stretch=1)
 
         self._send_btn = QPushButton("发送")
@@ -291,11 +304,25 @@ class ChatDialog(FramelessDragMixin, QWidget):
         QTimer.singleShot(1500, lambda: self._export_btn.setText("📤 导出"))
 
     def _on_send(self) -> None:
-        text = self._input.toPlainText().strip()
+        text = normalize(self._input.toPlainText())
         if not text:
             return
         self.message_sent.emit(text)
         self._input.clear()
+
+    def _adjust_input_height(self) -> None:
+        doc = self._input.document()
+        total_lines = 0
+        block = doc.begin()
+        while block.isValid():
+            total_lines += block.layout().lineCount()
+            block = block.next()
+        line_h = self._input.fontMetrics().lineSpacing()
+        h = total_lines * line_h + 18  # padding(8+8) + border(1+1)
+        new_h = max(36, min(120, h))
+        cur_h = self._input.height()
+        if cur_h != new_h:
+            self._input.setFixedHeight(new_h)
 
     def _check_ollama_status(self) -> None:
         self._ping_worker = _OllamaPingWorker()
@@ -426,6 +453,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._stream_buffer = ""
         self._thinking_text = ""
         self._thinking_buffer = ""
+        self._input.setFocus()
 
     @staticmethod
     def _copy_to_clipboard(text: str) -> None:
@@ -451,6 +479,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
             self._send_btn.setStyleSheet(styles.BUTTON_PRIMARY)
             self._send_btn.clicked.connect(self._on_send)
         self._input.setEnabled(not thinking)
+        if not thinking:
+            self._input.setFocus()
 
     def clear_messages(self) -> None:
         while self._msg_layout.count() > 1:  # keep the stretch
@@ -496,6 +526,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
             edit_btn = QPushButton("✏️")
             edit_btn.setFixedSize(18, 18)
             edit_btn.setToolTip("编辑消息")
+            edit_btn.setFocusPolicy(Qt.NoFocus)
             edit_btn.setObjectName("edit_btn_user")
             edit_btn.setCursor(Qt.PointingHandCursor)
             edit_btn.setVisible(False)
@@ -525,6 +556,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
             copy_btn = QPushButton("📋")
             copy_btn.setFixedSize(18, 18)
             copy_btn.setToolTip("复制回复")
+            copy_btn.setFocusPolicy(Qt.NoFocus)
             copy_btn.setObjectName("copy_btn_assistant")
             copy_btn.setCursor(Qt.PointingHandCursor)
             copy_btn.setVisible(False)

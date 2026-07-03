@@ -55,6 +55,25 @@ pip install -r requirements-dev.txt
 aide
 ```
 
+**构建 `.app` 安装包**（需要 PyInstaller）：
+
+```bash
+# 快速构建（清理 → 构建 → 签名）
+./scripts/build.sh
+
+# 构建前跑 ruff + pytest
+./scripts/build.sh --test
+
+# 构建 + 冒烟测试
+./scripts/build.sh --smoke
+
+# 构建 + 生成 DMG 安装包
+./scripts/build.sh --dmg
+
+# 全套
+./scripts/build.sh --test --smoke --dmg
+```
+
 ---
 
 ## 功能特性
@@ -93,7 +112,7 @@ aide
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `OLLAMA_MODEL` | `sorc/qwen3.5-instruct-uncensored:9b` | 默认模型 |
+| `OLLAMA_MODEL` | `sorc/qwen3.5-instruct-uncensored:9b` | 默认模型（不存在时自动切到第一个可用模型） |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama 服务地址 |
 | `HOTKEY` | `<cmd>+<ctrl>+l` | 全局快捷键 |
 | `OLLAMA_NUM_PREDICT` | `20480` | 最大输出 token |
@@ -102,6 +121,7 @@ aide
 | `OLLAMA_TOP_P` | `0.9` | 核采样阈值 |
 | `OLLAMA_TOP_K` | `40` | Top-K 采样 |
 | `OLLAMA_REPEAT_PENALTY` | `1.1` | 重复惩罚系数 |
+| `OLLAMA_THINK` | `True` | 模型思考推理开关 |
 | `OLLAMA_MAX_ROUNDS` | `10` | 保留的最大对话轮次 |
 | `OLLAMA_KEEP_ALIVE` | `30m` | 模型驻留时长 |
 | `OLLAMA_TIMEOUT` | `120` | HTTP 超时（秒） |
@@ -136,7 +156,8 @@ ai_desktop/
 ├── settings_manager.py         # 配置持久化加载/应用
 ├── agent_manager.py            # Agent 列表管理/切换/保存
 ├── capture/
-│   ├── hotkey_listener.py      # pynput 全局快捷键 + 运行时切换
+│   ├── hotkey_listener.py      # pynput 全局快捷键（dev 模式）
+│   ├── nsevent_monitor.py      # NSEvent 全局监听（frozen 模式）
 │   ├── clipboard_monitor.py    # ⌘C 模拟 → 读取 → 恢复（双回退）
 │   └── text_normalizer.py      # 文本清洗 + 截断
 ├── llm/
@@ -149,10 +170,16 @@ ai_desktop/
 │   ├── agent_editor.py         # Agent 管理（增删改 + emoji 选择）
 │   ├── settings_dialog.py      # 运行时设置面板
 │   ├── markdown.py             # Markdown → HTML
-│   └── styles.py               # QSS 常量（43 条集中管理）
-└── utils/
-    ├── logging.py              # 日志配置
-    └── storage.py              # SQLite 持久化（对话/消息/设置/Agent）
+│   ├── styles.py               # QSS 常量（43 条集中管理，懒加载）
+│   ├── theme.py                # ColorSet 显式亮/暗色值
+│   ├── frameless_mixin.py      # FramelessDragMixin + TitleBar
+│   └── __init__.py
+├── utils/
+│   ├── logging.py              # 日志配置
+│   ├── storage.py              # SQLite 持久化（对话/消息/设置/Agent）
+│   └── permissions.py          # AX + 输入监听权限检测/请求
+└── scripts/
+    └── aide.spec               # PyInstaller 打包配置
 tests/
 ├── conftest.py                 # 共享 fixture（qapp, mocker）
 ├── test_smoke.py               # 文本规范化 + Markdown 渲染（5 项）
@@ -173,14 +200,14 @@ tests/
 
 ## 测试
 
-项目包含 **110 项自动化测试**，覆盖 UI 信号/状态、数据层、工具函数和入口：
+项目包含 **143 项自动化测试**，覆盖 UI 信号/状态、数据层、工具函数和入口：
 
 ```bash
 # 安装开发依赖
 pip install -r requirements-dev.txt
 
 # 运行全部测试
-pytest tests/ -v    # 110 项测试
+pytest tests/ -v    # 143 项测试
 
 # 按类别运行
 pytest tests/test_chat_dialog.py -v        # 对话窗口（19 项）
@@ -192,7 +219,7 @@ pytest tests/test_history_dialog.py -v     # 历史浏览（6 项）
 pytest tests/test_agent_editor.py -v       # Agent 编辑器（8 项）
 pytest tests/test_float_button.py -v       # 悬浮按钮（8 项）
 pytest tests/test_menubar_icon.py -v       # 菜单栏图标（8 项）
-pytest tests/test_chat_client.py -v        # LLM 流式解析（9 项）
+pytest tests/test_chat_client.py -v        # LLM 流式解析（10 项）
 pytest tests/test_main_entry.py -v         # 入口点（1 项）
 pytest tests/test_smoke.py -v              # 工具函数（5 项）
 ```

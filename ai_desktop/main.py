@@ -224,6 +224,9 @@ class ChatController(QObject):
     def _show_dialog(self) -> None:
         if self._dialog is None:
             models = list_models()
+            if models and self._model not in models:
+                self._model = models[0]
+                save_setting("last_model", self._model)
             self._dialog = ChatDialog(self._all_agents, self._active_agent, models, self._model,
                                      auto_hide=self._auto_hide)
             self._dialog.message_sent.connect(self._on_user_message)
@@ -708,19 +711,18 @@ def main() -> None:
                 "启动后可点击右下角状态灯查看连接状态。",
             )
         else:
-            # 检查模型是否存在
+            # 检查是否有至少一个可用模型
             try:
                 r = requests.get(f"{config.OLLAMA_BASE_URL}/api/tags", timeout=5)
                 if r.status_code == 200:
                     installed = {m["name"] for m in r.json().get("models", [])}
-                    model = config.OLLAMA_MODEL
-                    if model not in installed:
-                        QMessageBox.information(
-                            None, "模型未安装",
-                            f"默认模型 <b>{model}</b> 未找到。<br><br>"
+                    if not installed:
+                        QMessageBox.warning(
+                            None, "无可用模型",
+                            "Ollama 已启动，但未安装任何模型。<br><br>"
                             "请打开终端执行：<br>"
-                            f"<tt>ollama pull {model}</tt><br><br>"
-                            "或启动后在设置面板中切换已安装的模型。",
+                            "<tt>ollama pull qwen3:14b</tt><br><br>"
+                            "更多模型：<a href='https://ollama.com/library'>https://ollama.com/library</a>",
                         )
             except Exception:
                 pass

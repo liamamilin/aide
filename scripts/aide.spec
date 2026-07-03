@@ -69,7 +69,6 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=True,
     target_arch=None,
-    codesign_identity="AI Desktop Assistant",
     entitlements_file=None,
     icon=[os.path.join(ROOT, "ai_desktop", "图标.icns")],
 )
