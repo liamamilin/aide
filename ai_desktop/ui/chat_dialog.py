@@ -39,6 +39,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
     stop_requested = pyqtSignal()
     agent_changed = pyqtSignal(Agent)
     model_changed = pyqtSignal(str)
+    ollama_online = pyqtSignal()
     closed = pyqtSignal()
 
     def __init__(self, agents: list[Agent], active_agent: Agent,
@@ -49,7 +50,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._agents = agents
         self._active_agent = active_agent
         self._auto_hide = auto_hide
-        self._models = models or [active_model] if active_model else []
+        self._models = list(models) if models else []
         self._active_model = active_model
         self._user_scrolled_up: bool = False
         self._stream_bubble: QLabel | None = None
@@ -156,10 +157,14 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._model_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self._model_combo.setStyleSheet(styles.MODEL_COMBO_BOX)
         self._model_combo.setToolTip("选择模型")
-        for m in self._models:
-            self._model_combo.addItem(m)
-        if self._active_model and self._active_model in self._models:
-            self._model_combo.setCurrentText(self._active_model)
+        if not self._models:
+            self._model_combo.addItem("加载中…")
+            self._model_combo.setEnabled(False)
+        else:
+            for m in self._models:
+                self._model_combo.addItem(m)
+            if self._active_model and self._active_model in self._models:
+                self._model_combo.setCurrentText(self._active_model)
         self._model_combo.currentTextChanged.connect(self._on_model_combo)
         tb.addWidget(self._model_combo)
 
@@ -265,6 +270,33 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._active_model = text
         self.model_changed.emit(text)
 
+    def refresh_models(self, models: list[str]) -> None:
+        """外部传入新模型列表时刷新 combo，尽量保留当前选中。
+
+        - 列表为空：保持原状（不清空占位）
+        - 当前选中仍存在：保留
+        - 当前选中不存在（或原为占位）：切到第一个并 emit model_changed
+        """
+        if not models:
+            return
+        self._models = list(models)
+        current = self._active_model or self._model_combo.currentText()
+        self._model_combo.blockSignals(True)
+        self._model_combo.clear()
+        self._model_combo.setEnabled(True)
+        for m in self._models:
+            self._model_combo.addItem(m)
+        if current in self._models:
+            self._model_combo.setCurrentText(current)
+            changed = False
+        else:
+            self._model_combo.setCurrentText(self._models[0])
+            changed = True
+        self._active_model = self._model_combo.currentText()
+        self._model_combo.blockSignals(False)
+        if changed:
+            self.model_changed.emit(self._active_model)
+
     def set_active_agent(self, agent: Agent) -> None:
         self._active_agent = agent
         self._title_icon.setText(agent.icon)
@@ -333,6 +365,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if ok:
             self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_OK)
             self._ollama_dot.setToolTip("Ollama 已连接")
+            self.ollama_online.emit()
         else:
             self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_ERR)
             self._ollama_dot.setToolTip("Ollama 未连接")

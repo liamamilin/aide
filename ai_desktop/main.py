@@ -5,6 +5,7 @@ AI 桌面助手 —— 主入口
   选中文字 → ⌘⌃L → 自动打开对话窗口并粘贴选中文字
 """
 import functools
+import json
 import logging
 import signal
 import sys
@@ -223,11 +224,7 @@ class ChatController(QObject):
 
     def _show_dialog(self) -> None:
         if self._dialog is None:
-            models = list_models()
-            if models and self._model not in models:
-                self._model = models[0]
-                save_setting("last_model", self._model)
-            self._dialog = ChatDialog(self._all_agents, self._active_agent, models, self._model,
+            self._dialog = ChatDialog(self._all_agents, self._active_agent, [], self._model,
                                      auto_hide=self._auto_hide)
             self._dialog.message_sent.connect(self._on_user_message)
             self._dialog.new_convo_requested.connect(self._new_conversation)
@@ -237,6 +234,7 @@ class ChatController(QObject):
             self._dialog.stop_requested.connect(self._on_stop_requested)
             self._dialog.agent_changed.connect(self._on_agent_changed)
             self._dialog.model_changed.connect(self._on_model_changed)
+            self._dialog.ollama_online.connect(self._refresh_model_list)
             # 首次打开自动恢复上次对话
             if self._restore_last:
                 self._restore_last = False
@@ -249,6 +247,11 @@ class ChatController(QObject):
                         self._active_agent = self._agent_mgr.switch(prev_agent)
                         self._dialog.set_active_agent(self._active_agent)
                         self._tray.set_active_agent(self._active_agent)
+            # 首次构造后立刻刷新模型列表（dialog combo 当前为占位"加载中…"）
+            self._refresh_model_list()
+        else:
+            # 复用现有 dialog，每次显示刷新模型列表
+            self._refresh_model_list()
         # 如果悬浮球被隐藏了，重新显示
         if self.float_btn.isHidden():
             self.float_btn.show()
@@ -336,6 +339,28 @@ class ChatController(QObject):
         self._model = model
         save_setting("last_model", model)
         logger.info("Model switched: %s", model)
+
+    @_safe_slot
+    def _refresh_model_list(self) -> None:
+        """从 Ollama 拉取模型列表刷新 dialog combo，失败时回退到 SQLite 缓存。
+
+        缓存 key = 'cached_models'，存放 JSON 编码的模型名列表。
+        """
+        models = list_models()
+        if not models:
+            cached = get_setting("cached_models")
+            if cached:
+                try:
+                    models = json.loads(cached)
+                except (json.JSONDecodeError, TypeError):
+                    models = []
+        if models:
+            if self._model not in models:
+                self._model = models[0]
+                save_setting("last_model", self._model)
+            save_setting("cached_models", json.dumps(models, ensure_ascii=False))
+            if self._dialog:
+                self._dialog.refresh_models(models)
 
     # ── 新建对话 ───────────────────────────────────────
 

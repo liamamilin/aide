@@ -228,3 +228,66 @@ class TestChatDialogDataFlow:
             with qtbot.waitSignal(worker.result, timeout=3000) as spy:
                 worker.run()
             assert spy.args == [True]
+
+
+# ── L4: refresh_models Tests ─────────────────────────────
+
+class TestChatDialogRefreshModels:
+    """Verify refresh_models() updates the combo and preserves selection."""
+
+    def test_refresh_preserves_selection(self, qtbot, dialog):
+        """refresh_models() keeps current selection if it's still in the new list."""
+        # Current selection is "qwen3:14b"
+        new_models = ["qwen3:14b", "llama3:8b", "qwen3.6:27b-mlx"]
+        dialog.refresh_models(new_models)
+        assert dialog._model_combo.count() == 3
+        assert dialog._model_combo.currentText() == "qwen3:14b"
+        assert dialog._active_model == "qwen3:14b"
+
+    def test_refresh_fallback_to_first_when_missing(self, qtbot, dialog):
+        """When current selection disappears, fall back to the first item and emit."""
+        with qtbot.waitSignal(dialog.model_changed, timeout=1000) as spy:
+            dialog.refresh_models(["qwen3.6:27b-mlx", "qwen3.5:9b-mlx"])
+        assert dialog._model_combo.currentText() == "qwen3.6:27b-mlx"
+        assert dialog._active_model == "qwen3.6:27b-mlx"
+        assert spy.args == ["qwen3.6:27b-mlx"]
+
+    def test_refresh_empty_skips(self, qtbot, dialog):
+        """refresh_models([]) leaves the combo unchanged."""
+        before = dialog._model_combo.count()
+        before_text = dialog._model_combo.currentText()
+        with qtbot.assertNotEmitted(dialog.model_changed, wait=200):
+            dialog.refresh_models([])
+        assert dialog._model_combo.count() == before
+        assert dialog._model_combo.currentText() == before_text
+
+    def test_refresh_replaces_placeholder_on_empty_init(self, qtbot):
+        """A dialog constructed without models shows placeholder, refresh replaces it."""
+        with patch("ai_desktop.ui.chat_dialog.pin_to_all_spaces"):
+            from ai_desktop.ui.chat_dialog import ChatDialog
+            d = ChatDialog(agents=AGENTS, active_agent=ACTIVE, models=None, active_model="qwen3.5:9b-mlx")
+            qtbot.addWidget(d)
+            # Placeholder present + disabled
+            assert d._model_combo.count() == 1
+            assert d._model_combo.currentText() == "加载中…"
+            assert not d._model_combo.isEnabled()
+            # Refresh enables and populates
+            d.refresh_models(["qwen3.5:9b-mlx", "glm-5.1:cloud"])
+            assert d._model_combo.isEnabled()
+            assert d._model_combo.count() == 2
+            assert d._model_combo.currentText() == "qwen3.5:9b-mlx"
+
+    def test_refresh_preserves_active_model_over_placeholder(self, qtbot):
+        """构造时无 models（占位），refresh_models 应保留 active_model 而非退回 models[0]。"""
+        with patch("ai_desktop.ui.chat_dialog.pin_to_all_spaces"):
+            from ai_desktop.ui.chat_dialog import ChatDialog
+            d = ChatDialog(agents=AGENTS, active_agent=ACTIVE, models=None,
+                           active_model="glm-5.1:cloud")
+            qtbot.addWidget(d)
+            # 占位状态
+            assert d._model_combo.currentText() == "加载中…"
+            # 不应 emit model_changed（active_model 在新列表里，且不是第一项）
+            with qtbot.assertNotEmitted(d.model_changed, wait=200):
+                d.refresh_models(["qwen3.6:27b-mlx", "qwen3.5:9b-mlx", "glm-5.1:cloud"])
+            assert d._model_combo.currentText() == "glm-5.1:cloud"
+            assert d._active_model == "glm-5.1:cloud"

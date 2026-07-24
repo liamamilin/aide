@@ -22,8 +22,9 @@ def list_models(base_url: str = "") -> List[str]:
         if resp.status_code == 200:
             models = resp.json().get("models", [])
             return [m["name"] for m in models]
-    except Exception:
-        logger.debug("Failed to list models", exc_info=True)
+        logger.warning("list_models: HTTP %d from %s", resp.status_code, url)
+    except Exception as e:
+        logger.warning("list_models: failed to reach %s: %s", url, e)
     return []  # fallback: no models available
 
 
