@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QTextCursor
 
 from ai_desktop.config import Agent
 
@@ -291,3 +292,161 @@ class TestChatDialogRefreshModels:
                 d.refresh_models(["qwen3.6:27b-mlx", "qwen3.5:9b-mlx", "glm-5.1:cloud"])
             assert d._model_combo.currentText() == "glm-5.1:cloud"
             assert d._active_model == "glm-5.1:cloud"
+
+
+# ── L5: 输入历史浏览 Tests ─────────────────────────────
+
+class TestChatDialogInputHistory:
+    """上下键浏览输入历史（readline 式：Up 随时进入，多行光标边界规则，编辑不退出）"""
+
+    def _press(self, qtbot, dialog, key):
+        qtbot.keyClick(dialog._input, key)
+
+    def _move_cursor_to(self, dialog, block: int):
+        cursor = dialog._input.textCursor()
+        cursor.movePosition(QTextCursor.Start)
+        for _ in range(block):
+            cursor.movePosition(QTextCursor.Down)
+        dialog._input.setTextCursor(cursor)
+
+    def test_up_from_empty_loads_newest(self, qtbot, dialog):
+        dialog.set_input_history(["新消息", "旧消息"])
+        self._press(qtbot, dialog, Qt.Key_Up)
+        assert dialog._input.toPlainText() == "新消息"
+        assert dialog._hist_index == 0
+
+    def test_up_with_keypad_modifier_browses(self, qtbot, dialog):
+        """macOS 箭头键携带 KeypadModifier，仍应进入浏览"""
+        dialog.set_input_history(["新消息", "旧消息"])
+        qtbot.keyClick(dialog._input, Qt.Key_Up, Qt.KeypadModifier)
+        assert dialog._input.toPlainText() == "新消息"
+        assert dialog._hist_index == 0
+
+    def test_up_then_up_goes_older(self, qtbot, dialog):
+        dialog.set_input_history(["最新", "中间", "最旧"])
+        self._press(qtbot, dialog, Qt.Key_Up)
+        self._press(qtbot, dialog, Qt.Key_Up)
+        assert dialog._input.toPlainText() == "中间"
+
+    def test_up_at_oldest_stays(self, qtbot, dialog):
+        dialog.set_input_history(["最新", "最旧"])
+        self._press(qtbot, dialog, Qt.Key_Up)
+        self._press(qtbot, dialog, Qt.Key_Up)
+        self._press(qtbot, dialog, Qt.Key_Up)
+        assert dialog._input.toPlainText() == "最旧"
+
+    def test_down_restores_empty_and_exits(self, qtbot, dialog):
+        dialog.set_input_history(["新", "旧"])
+        self._press(qtbot, dialog, Qt.Key_Up)
+        assert dialog._input.toPlainText() == "新"
+        self._press(qtbot, dialog, Qt.Key_Down)
+        assert dialog._input.toPlainText() == ""
+        assert dialog._hist_index == -1
+
+    def test_down_returns_to_newest_then_draft(self, qtbot, dialog):
+        dialog.set_input_history(["最新", "中间", "最旧"])
+        self._press(qtbot, dialog, Qt.Key_Up)
+        self._press(qtbot, dialog, Qt.Key_Up)
+        assert dialog._input.toPlainText() == "中间"
+        self._press(qtbot, dialog, Qt.Key_Down)
+        assert dialog._input.toPlainText() == "最新"
+        assert dialog._hist_index == 0
+        self._press(qtbot, dialog, Qt.Key_Down)
+        assert dialog._input.toPlainText() == ""
+        assert dialog._hist_index == -1
+
+    def test_up_with_typed_text_browses_and_restores_draft(self, qtbot, dialog):
+        """手动输入的文本也支持 Up 浏览历史，Down 恢复原文"""
+        dialog.set_input_history(["历史消息", "更旧的"])
+        dialog._input.setPlainText("正在输入")
+        cursor = dialog._input.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        dialog._input.setTextCursor(cursor)
+        self._press(qtbot, dialog, Qt.Key_Up)
+        assert dialog._input.toPlainText() == "历史消息"
+        assert dialog._hist_index == 0
+        self._press(qtbot, dialog, Qt.Key_Down)
+        assert dialog._input.toPlainText() == "正在输入"
+        assert dialog._hist_index == -1
+
+    def test_up_with_autofilled_text_browses_and_restores_draft(self, qtbot, dialog):
+        """热键自动填入的文字同样支持 Up 浏览历史，Down 恢复原文"""
+        dialog.set_input_history(["历史消息", "更旧的"])
+        dialog.set_input_text("选中文字")
+        assert dialog._input.toPlainText() == "选中文字"
+        self._press(qtbot, dialog, Qt.Key_Up)
+        assert dialog._input.toPlainText() == "历史消息"
+        self._press(qtbot, dialog, Qt.Key_Down)
+        assert dialog._input.toPlainText() == "选中文字"
+        assert dialog._hist_index == -1
+
+    def test_up_without_history_does_nothing(self, qtbot, dialog):
+        self._press(qtbot, dialog, Qt.Key_Up)
+        assert dialog._input.toPlainText() == ""
+        assert dialog._hist_index == -1
+
+    def test_edit_keeps_browsing(self, qtbot, dialog):
+        """浏览中手动编辑不退出，仍可继续 Up 切换更旧条目"""
+        dialog.set_input_history(["新", "旧"])
+        self._press(qtbot, dialog, Qt.Key_Up)
+        assert dialog._input.toPlainText() == "新"
+        assert dialog._hist_index == 0
+        dialog._input.setPlainText("改过了")
+        assert dialog._hist_index == 0
+        self._press(qtbot, dialog, Qt.Key_Up)
+        assert dialog._input.toPlainText() == "旧"
+        assert dialog._hist_index == 1
+
+    def test_multiline_up_moves_cursor_then_browses(self, qtbot, dialog):
+        dialog.set_input_history(["第一行\n第二行\n第三行", "上一句"])
+        self._press(qtbot, dialog, Qt.Key_Up)
+        assert dialog._input.toPlainText() == "第一行\n第二行\n第三行"
+        # 光标在末尾（第三行）
+        assert dialog._input.textCursor().blockNumber() == 2
+        # 不在首行 → Up 移动光标
+        self._press(qtbot, dialog, Qt.Key_Up)
+        assert dialog._input.toPlainText() == "第一行\n第二行\n第三行"
+        assert dialog._input.textCursor().blockNumber() == 1
+        # 到首行后 Up 切上一条
+        self._press(qtbot, dialog, Qt.Key_Up)
+        assert dialog._input.textCursor().blockNumber() == 0
+        self._press(qtbot, dialog, Qt.Key_Up)
+        assert dialog._input.toPlainText() == "上一句"
+
+    def test_multiline_down_moves_cursor_then_browses(self, qtbot, dialog):
+        dialog.set_input_history(["最新单行", "第一行\n第二行\n第三行"])
+        self._press(qtbot, dialog, Qt.Key_Up)  # 最新单行
+        self._press(qtbot, dialog, Qt.Key_Up)  # 多行条目（光标末行）
+        assert dialog._input.toPlainText() == "第一行\n第二行\n第三行"
+        # 不在末行 → Down 移动光标
+        self._move_cursor_to(dialog, 0)
+        self._press(qtbot, dialog, Qt.Key_Down)
+        assert dialog._input.toPlainText() == "第一行\n第二行\n第三行"
+        assert dialog._input.textCursor().blockNumber() == 1
+        # 到末行后 Down 切下一条
+        self._move_cursor_to(dialog, 2)
+        self._press(qtbot, dialog, Qt.Key_Down)
+        assert dialog._input.toPlainText() == "最新单行"
+
+    def test_add_input_history_dedup(self, qtbot, dialog):
+        dialog.add_input_history("hello")
+        dialog.add_input_history("world")
+        dialog.add_input_history("hello")
+        assert dialog._input_history == ["hello", "world"]
+
+    def test_add_input_history_empty_ignored(self, qtbot, dialog):
+        dialog.add_input_history("  ")
+        assert dialog._input_history == []
+
+    def test_set_input_history_dedups_and_strips(self, qtbot, dialog):
+        dialog.set_input_history(["a", "b", "a", "  ", "c"])
+        assert dialog._input_history == ["a", "b", "c"]
+
+    def test_send_records_history_and_exits_browsing(self, qtbot, dialog):
+        dialog.set_input_history(["旧消息"])
+        self._press(qtbot, dialog, Qt.Key_Up)
+        assert dialog._hist_index == 0
+        with qtbot.waitSignal(dialog.message_sent, timeout=1000):
+            dialog._on_send()
+        assert dialog._input_history == ["旧消息"]
+        assert dialog._hist_index == -1

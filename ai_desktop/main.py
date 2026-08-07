@@ -35,6 +35,7 @@ from ai_desktop.utils.storage import (
     get_setting,
     init_db,
     list_conversations,
+    list_input_history,
     save_message,
     save_setting,
 )
@@ -235,6 +236,8 @@ class ChatController(QObject):
             self._dialog.agent_changed.connect(self._on_agent_changed)
             self._dialog.model_changed.connect(self._on_model_changed)
             self._dialog.ollama_online.connect(self._refresh_model_list)
+            # 灌入输入历史（上下键浏览用）
+            self._dialog.set_input_history(list_input_history())
             # 首次打开自动恢复上次对话
             if self._restore_last:
                 self._restore_last = False

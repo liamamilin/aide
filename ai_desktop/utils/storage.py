@@ -223,6 +223,21 @@ def _load_messages(convo_id: int) -> list[Message]:
     return [Message(id=r["id"], role=r["role"], content=r["content"], created_at=r["created_at"]) for r in rows]
 
 
+def list_input_history(limit: int = 100) -> list[str]:
+    """最近发送过的用户消息（去重、最新在前），用于输入框上下键浏览历史。"""
+    db = _conn()
+    rows = db.execute(
+        """
+        SELECT DISTINCT content FROM messages
+        WHERE role='user' AND TRIM(content) != ''
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    return [r["content"] for r in rows]
+
+
 # ── 设置持久化 ────────────────────────────────────────
 
 

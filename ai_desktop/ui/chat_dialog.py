@@ -6,7 +6,7 @@ import logging
 
 import requests
 from PyQt5.QtCore import QEvent, QPoint, QRectF, Qt, QThread, QTimer, pyqtSignal
-from PyQt5.QtGui import QKeyEvent, QPainterPath, QRegion
+from PyQt5.QtGui import QKeyEvent, QPainterPath, QRegion, QTextCursor
 from PyQt5.QtWidgets import (
     QApplication,
     QComboBox,
@@ -65,6 +65,10 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._ollama_timer = QTimer(self)
         self._ollama_timer.setInterval(30000)       # 每 30 秒探活
         self._ollama_timer.timeout.connect(self._check_ollama_status)
+        # 输入历史浏览状态
+        self._input_history: list[str] = []         # 最新在前
+        self._hist_index = -1                       # -1 = 未在浏览
+        self._hist_draft = ""                       # 进入浏览前保存的草稿
         self._setup_window()
         self._setup_ui()
 
@@ -231,7 +235,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._input.setFixedHeight(36)
         self._input.setStyleSheet(styles.INPUT_AREA)
         self._input.installEventFilter(self)
-        self._input.textChanged.connect(self._adjust_input_height)
+        self._input.textChanged.connect(self._on_input_text_changed)
         il.addWidget(self._input, stretch=1)
 
         self._send_btn = QPushButton("发送")
@@ -327,6 +331,32 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._input.setFocus()
         self._input.selectAll()
 
+    def set_input_history(self, entries: list[str]) -> None:
+        """灌入历史输入（最新在前），供上下键浏览。"""
+        self._input_history = []
+        seen: set[str] = set()
+        for text in entries:
+            text = text.strip()
+            if text and text not in seen:
+                seen.add(text)
+                self._input_history.append(text)
+
+    def add_input_history(self, text: str) -> None:
+        """记录一条已发送的输入（重复项移到最前）。"""
+        text = text.strip()
+        if not text:
+            return
+        if text in self._input_history:
+            self._input_history.remove(text)
+        self._input_history.insert(0, text)
+        if len(self._input_history) > 100:
+            self._input_history.pop()
+
+    def _exit_input_browsing(self) -> None:
+        """退出历史浏览状态（保留当前文本）"""
+        self._hist_index = -1
+        self._hist_draft = ""
+
     def flash_busy(self) -> None:
         self._input.setPlaceholderText("⏳ 等待回复完成...")
         QTimer.singleShot(1500, lambda: self._input.setPlaceholderText("输入消息... (Enter 发送, Shift+Enter 换行)"))
@@ -341,6 +371,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
             return
         self.message_sent.emit(text)
         self._input.clear()
+        self.add_input_history(text)
+        self._exit_input_browsing()
 
     def _adjust_input_height(self) -> None:
         doc = self._input.document()
@@ -648,8 +680,66 @@ class ChatDialog(FramelessDragMixin, QWidget):
                     event.modifiers() == Qt.ControlModifier):
                 self.new_convo_requested.emit()
                 return True
+            # Up/Down: 输入历史浏览（readline 式，多行时光标边界规则）
+            if event.key() in (Qt.Key_Up, Qt.Key_Down):
+                # macOS 的箭头键会携带 KeypadModifier，屏蔽后再判断修饰键
+                if (event.modifiers() & ~Qt.KeypadModifier) == Qt.NoModifier:
+                    if self._hist_handle_arrow(event.key() == Qt.Key_Up):
+                        return True
 
         return super().eventFilter(obj, event)
+
+    # ── 输入历史浏览 ───────────────────────────────────
+
+    def _hist_handle_arrow(self, is_up: bool) -> bool:
+        """处理上下键，返回 True 表示事件已消费。
+
+        规则：
+        - 未浏览时：按 Up 即进入浏览（保存当前内容为草稿），手动输入同样支持
+        - 浏览中：光标在首行才切上一条，末行才切下一条，否则放行默认光标移动
+        - 最新一条再按 Down → 恢复进入前的草稿并退出浏览
+        """
+        if not self._input_history:
+            return False
+        cursor = self._input.textCursor()
+        doc = self._input.document()
+        at_first_line = cursor.blockNumber() == 0
+        at_last_line = cursor.blockNumber() == doc.blockCount() - 1
+
+        if self._hist_index < 0:
+            if not is_up:
+                return False
+            self._hist_draft = self._input.toPlainText()
+            self._hist_index = 0
+        else:
+            if is_up and not at_first_line:
+                return False
+            if not is_up and not at_last_line:
+                return False
+            if is_up:
+                if self._hist_index >= len(self._input_history) - 1:
+                    return True  # 已是最旧
+                self._hist_index += 1
+            else:
+                if self._hist_index == 0:
+                    draft = self._hist_draft
+                    self._exit_input_browsing()
+                    self._hist_set_text(draft)
+                    return True
+                self._hist_index -= 1
+
+        self._hist_set_text(self._input_history[self._hist_index])
+        return True
+
+    def _hist_set_text(self, text: str) -> None:
+        self._input.setPlainText(text)
+        cursor = self._input.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        self._input.setTextCursor(cursor)
+
+    def _on_input_text_changed(self) -> None:
+        """编辑不退出浏览模式；仅自适应高度。"""
+        self._adjust_input_height()
 
     # ── 插入气泡 ───────────────────────────────────────
 

@@ -155,6 +155,50 @@ class TestSettings:
         assert storage.load_custom_agents() == []
 
 
+class TestInputHistory:
+    """输入历史（上下键浏览）测试"""
+
+    def test_list_input_history_newest_first(self, tmp_db):
+        conv = storage.create_conversation("code_expert")
+        storage.save_message(conv.id, "user", "第一条")
+        storage.save_message(conv.id, "assistant", "回复")
+        storage.save_message(conv.id, "user", "第二条")
+        assert storage.list_input_history() == ["第二条", "第一条"]
+
+    def test_list_input_history_dedup(self, tmp_db):
+        conv = storage.create_conversation("code_expert")
+        storage.save_message(conv.id, "user", "重复问题")
+        storage.save_message(conv.id, "user", "其他问题")
+        storage.save_message(conv.id, "user", "重复问题")
+        assert storage.list_input_history() == ["重复问题", "其他问题"]
+
+    def test_list_input_history_excludes_assistant_and_empty(self, tmp_db):
+        conv = storage.create_conversation("code_expert")
+        storage.save_message(conv.id, "assistant", "不是用户输入")
+        storage.save_message(conv.id, "user", "")
+        storage.save_message(conv.id, "user", "   ")
+        storage.save_message(conv.id, "user", "有效输入")
+        assert storage.list_input_history() == ["有效输入"]
+
+    def test_list_input_history_limit(self, tmp_db):
+        conv = storage.create_conversation("code_expert")
+        for i in range(5):
+            storage.save_message(conv.id, "user", f"消息{i}")
+        result = storage.list_input_history(limit=3)
+        assert len(result) == 3
+        assert result == ["消息4", "消息3", "消息2"]
+
+    def test_list_input_history_across_conversations(self, tmp_db):
+        conv1 = storage.create_conversation("code_expert")
+        conv2 = storage.create_conversation("translator")
+        storage.save_message(conv1.id, "user", "对话A的输入")
+        storage.save_message(conv2.id, "user", "对话B的输入")
+        assert storage.list_input_history() == ["对话B的输入", "对话A的输入"]
+
+    def test_list_input_history_empty_db(self, tmp_db):
+        assert storage.list_input_history() == []
+
+
 class TestDbPath:
     """Test DB path resolution"""
 
