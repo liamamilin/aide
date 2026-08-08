@@ -14,19 +14,22 @@ class TitleBar(QWidget):
 
     close_clicked = pyqtSignal()
 
-    def __init__(self, title: str, height: int = 40, parent=None):
+    def __init__(self, title: str, height: int = 44, parent=None):
         super().__init__(parent)
         self.setFixedHeight(height)
         self.setStyleSheet(styles.TITLE_BAR)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 0, 8, 0)
+        layout.setContentsMargins(14, 0, 10, 0)
 
         label = QLabel(title)
+        label.setObjectName("dialogTitle")
         label.setStyleSheet(styles.LABEL_BOLD)
         layout.addWidget(label)
         layout.addStretch()
 
         close_btn = QPushButton("×")
+        close_btn.setObjectName("dialogCloseButton")
+        close_btn.setToolTip("关闭")
         close_btn.setFixedSize(24, 24)
         close_btn.setStyleSheet(styles.CLOSE_BUTTON)
         close_btn.clicked.connect(self.close_clicked.emit)

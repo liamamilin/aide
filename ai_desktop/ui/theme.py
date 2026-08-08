@@ -1,9 +1,4 @@
-"""
-主题工具 —— 系统暗色检测 + 全量语义颜色集
-
-提供两套显式颜色（亮/暗），由 styles.py 在首次渲染时懒加载。
-与 palette() 不同，显式颜色保证两种模式下均有足够对比度。
-"""
+"""macOS inspired semantic theme tokens used by every desktop surface."""
 from dataclasses import dataclass
 
 from PyQt5.QtGui import QPalette
@@ -23,34 +18,80 @@ class ColorSet:
     accent_hover: str    # 强调色 hover
     success: str         # 成功/连接
     error: str           # 错误/断开
+    surface_elevated: str
+    surface_muted: str
+    separator: str
+    focus_ring: str
+    disabled: str
+    disabled_text: str
+    user_bubble: str
+    shadow: str
+
+
+@dataclass(frozen=True)
+class LayoutTokens:
+    """Shared geometry tokens. Values are device-independent Qt pixels."""
+
+    font_small: int = 11
+    font_body: int = 13
+    font_title: int = 14
+    spacing_xs: int = 4
+    spacing_sm: int = 8
+    spacing_md: int = 12
+    spacing_lg: int = 16
+    radius_sm: int = 6
+    radius_md: int = 9
+    radius_lg: int = 12
+    control_height: int = 30
+    title_height: int = 44
+
+
+TOKENS = LayoutTokens()
+SYSTEM_FONT = ".AppleSystemUIFont, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif"
 
 
 LIGHT = ColorSet(
     window="#f5f5f7",
-    surface="#e8e8ed",
-    button="#d1d1d6",
-    button_hover="#c1c1c6",
-    border="#b0b0b5",
-    text="#1a1a1a",
-    text_secondary="#666666",
-    accent="#007AFF",
-    accent_hover="#0066d6",
+    surface="#f0f0f2",
+    button="#ffffff",
+    button_hover="#e9e9ed",
+    border="#d2d2d7",
+    text="#1d1d1f",
+    text_secondary="#6e6e73",
+    accent="#0a73e8",
+    accent_hover="#0864cc",
     success="#34c759",
     error="#ff3b30",
+    surface_elevated="#ffffff",
+    surface_muted="#e9e9ec",
+    separator="#dedee3",
+    focus_ring="#73aef2",
+    disabled="#e5e5e9",
+    disabled_text="#a1a1a6",
+    user_bubble="#0a73e8",
+    shadow="#40000000",
 )
 
 DARK = ColorSet(
-    window="#1a1a1a",
-    surface="#2d2d2d",
-    button="#3a3a3c",
-    button_hover="#4a4a4c",
-    border="#5a5a5c",
-    text="#e0e0e0",
-    text_secondary="#999999",
+    window="#1c1c1e",
+    surface="#242426",
+    button="#303033",
+    button_hover="#3a3a3d",
+    border="#48484c",
+    text="#f5f5f7",
+    text_secondary="#a1a1a6",
     accent="#0a84ff",
     accent_hover="#0066d6",
     success="#30d158",
     error="#ff453a",
+    surface_elevated="#2c2c2e",
+    surface_muted="#252527",
+    separator="#38383b",
+    focus_ring="#409cff",
+    disabled="#2a2a2c",
+    disabled_text="#68686d",
+    user_bubble="#0a84ff",
+    shadow="#80000000",
 )
 
 

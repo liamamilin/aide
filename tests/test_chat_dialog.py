@@ -64,26 +64,13 @@ class TestChatDialogSignals:
 
     def test_new_convo_button_emits_signal(self, qtbot, dialog):
         """Clicking the new conversation button → new_convo_requested signal."""
-        # Find the "＋ 新对话" button in the title bar
-        new_btn = None
-        for child in dialog.findChildren(object):
-            if hasattr(child, 'text') and callable(child.text) and "新对话" in child.text():
-                new_btn = child
-                break
-        assert new_btn is not None, "Could not find new conversation button"
         with qtbot.waitSignal(dialog.new_convo_requested, timeout=1000):
-            qtbot.mouseClick(new_btn, Qt.LeftButton)
+            qtbot.mouseClick(dialog._new_btn, Qt.LeftButton)
 
     def test_history_button_emits_signal(self, qtbot, dialog):
         """Clicking the history button → history_requested signal."""
-        hist_btn = None
-        for child in dialog.findChildren(object):
-            if hasattr(child, 'text') and callable(child.text) and "历史" in child.text():
-                hist_btn = child
-                break
-        assert hist_btn is not None, "Could not find history button"
         with qtbot.waitSignal(dialog.history_requested, timeout=1000):
-            qtbot.mouseClick(hist_btn, Qt.LeftButton)
+            qtbot.mouseClick(dialog._history_btn, Qt.LeftButton)
 
     def test_export_button_emits_signal(self, qtbot, dialog):
         """Clicking the export button → export_requested signal."""
@@ -204,6 +191,38 @@ class TestChatDialogState:
         """set_input_text() → input field has text and is selected."""
         dialog.set_input_text("test query")
         assert dialog._input.toPlainText() == "test query"
+
+    def test_empty_state_tracks_messages(self, qtbot, dialog):
+        """A new conversation has guidance which disappears once content exists."""
+        assert dialog._empty_state.isVisible()
+        assert "开始与" in dialog._empty_state.text()
+        dialog.add_user_message("Hello")
+        assert not dialog._empty_state.isVisible()
+        dialog.clear_messages()
+        assert dialog._empty_state.isVisible()
+
+    def test_bubble_width_follows_viewport(self, qtbot, dialog):
+        """Bubble width is recalculated instead of using the old fixed 340 px value."""
+        dialog.add_user_message("A long message " * 30)
+        bubble = dialog._bubble_labels[-1]
+        dialog.resize(400, 520)
+        qtbot.wait(20)
+        narrow = bubble.maximumWidth()
+        assert narrow <= int(dialog._scroll.viewport().width() * 0.78) + 1
+
+        dialog.resize(600, 520)
+        qtbot.wait(20)
+        assert bubble.maximumWidth() > narrow
+
+    def test_toolbar_compacts_at_minimum_width(self, qtbot, dialog):
+        dialog.resize(400, 520)
+        qtbot.wait(20)
+        assert dialog._new_btn.width() == 32
+        assert dialog._new_btn.text() == "＋"
+        assert dialog._history_btn.isHidden()
+        assert dialog._model_combo.width() == 160
+        assert dialog._more_btn.isVisible()
+        assert dialog._model_combo.toolTip() == dialog._model_combo.currentText()
 
 
 # ── L3: Data Flow Tests ────────────────────────────────

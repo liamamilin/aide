@@ -35,11 +35,45 @@ class TestChatStream:
         ]
         resp = _fake_stream_response(lines)
 
-        with patch("requests.post", return_value=resp):
+        with patch("requests.post", return_value=resp), patch(
+            "ai_desktop.llm.chat_client.config.OLLAMA_THINK", True
+        ):
             stream = ChatStream("http://localhost", "model", [], 10)
             results = list(stream)
             assert ("thinking", "Let me think...") in results
             assert ("response", "Answer") in results
+
+    def test_thinking_disabled_drops_reasoning_fields(self):
+        lines = [
+            json.dumps({"message": {"thinking": "internal"}, "done": False}),
+            json.dumps({"message": {"reasoning_content": "more internal"}, "done": False}),
+            json.dumps({"message": {"content": "Answer"}, "done": True}),
+        ]
+        resp = _fake_stream_response(lines)
+
+        with patch("requests.post", return_value=resp) as post, patch(
+            "ai_desktop.llm.chat_client.config.OLLAMA_THINK", False
+        ):
+            results = list(ChatStream("http://localhost", "model", [], 10))
+
+        assert results == [("response", "Answer")]
+        assert post.call_args.kwargs["json"]["think"] is False
+
+    def test_thinking_disabled_filters_split_think_tags(self):
+        lines = [
+            json.dumps({"message": {"content": "Visible<thi"}, "done": False}),
+            json.dumps({"message": {"content": "nk>hidden</th"}, "done": False}),
+            json.dumps({"message": {"content": "ink> answer"}, "done": True}),
+        ]
+        resp = _fake_stream_response(lines)
+
+        with patch("requests.post", return_value=resp), patch(
+            "ai_desktop.llm.chat_client.config.OLLAMA_THINK", False
+        ):
+            results = list(ChatStream("http://localhost", "model", [], 10))
+
+        assert "".join(text for kind, text in results if kind == "response") == "Visible answer"
+        assert all("hidden" not in text for _, text in results)
 
     def test_http_error(self):
         resp = MagicMock()

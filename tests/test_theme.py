@@ -1,5 +1,14 @@
 """Theme tests — ColorSet values and dark mode detection."""
-from ai_desktop.ui.theme import DARK, LIGHT, ColorSet, MarkdownColors, current, current_markdown
+from ai_desktop.ui.theme import (
+    DARK,
+    LIGHT,
+    SYSTEM_FONT,
+    TOKENS,
+    ColorSet,
+    MarkdownColors,
+    current,
+    current_markdown,
+)
 
 
 def test_light_and_dark_have_all_fields():
@@ -64,3 +73,17 @@ def test_markdown_colors_consistency():
     """MarkdownColors should be consistent with ColorSet (same hex values)."""
     md_light = current_markdown()  # Since is_dark_mode() may return False in test
     assert isinstance(md_light, MarkdownColors)
+
+
+def test_semantic_interaction_colors_are_present():
+    """Focus, disabled and elevated surfaces must not fall back to hardcoded QSS."""
+    fields = ("surface_elevated", "separator", "focus_ring", "disabled", "disabled_text", "user_bubble")
+    for palette in (LIGHT, DARK):
+        assert all(getattr(palette, field).startswith("#") for field in fields)
+
+
+def test_layout_and_system_font_tokens():
+    assert TOKENS.control_height >= 28
+    assert TOKENS.radius_md > TOKENS.radius_sm
+    assert TOKENS.spacing_lg > TOKENS.spacing_sm
+    assert "AppleSystemUIFont" in SYSTEM_FONT

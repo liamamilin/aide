@@ -13,6 +13,7 @@ from typing import Optional
 
 import requests
 from PyQt5.QtCore import QObject, QThread, QTimer, pyqtSignal
+from PyQt5.QtGui import QFontDatabase
 from PyQt5.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 
 from ai_desktop import config
@@ -96,10 +97,30 @@ class StreamingChatWorker(QThread):
 # ChatController —— 悬浮按钮 + 快捷键 → 多轮对话
 # ═══════════════════════════════════════════════════════
 
+def _create_hotkey_backend(callback):
+    """Create a platform-safe global hotkey backend."""
+    if sys.platform == "darwin":
+        # pynput's CGEventTap handles Caps Lock on a worker thread. macOS 26
+        # asserts when that path enters TSM/AppKit off the main queue.
+        from ai_desktop.capture.nsevent_monitor import NSEventMonitor
+
+        backend = NSEventMonitor()
+        backend_name = "NSEventMonitor"
+    else:
+        from ai_desktop.capture.hotkey_listener import HotkeyListener
+
+        backend = HotkeyListener()
+        backend_name = "pynput"
+
+    backend.register(config.HOTKEY, callback)
+    logger.info("Using %s hotkey backend", backend_name)
+    return backend
+
+
 class ChatController(QObject):
     """快捷键触发 → 读选中文字 → 打开对话窗口粘贴 → 用户按 Enter 发送"""
 
-    # pynput 回调在后台线程，通过信号桥接到主线程
+    # 统一通过信号桥接，确保后续 UI 操作位于 Qt 主线程。
     _hotkey_triggered = pyqtSignal(str)
 
     def __init__(self, parent: QObject | None = None) -> None:
@@ -147,19 +168,8 @@ class ChatController(QObject):
         self._tray.about_clicked.connect(self._show_about)
         self._tray.exit_clicked.connect(self._on_exit)
 
-        # 全局快捷键
-        if getattr(sys, "frozen", False):
-            # 冻结模式（.app）：用 NSEvent 全局监听（主线程，无 dispatch 断言）
-            from ai_desktop.capture.nsevent_monitor import NSEventMonitor
-            self.hotkey = NSEventMonitor()
-            self.hotkey.register(config.HOTKEY, self._on_global_hotkey)
-            logger.info("Using NSEventMonitor hotkey backend")
-        else:
-            # 开发模式（aide）：用 pynput（终端已有 AX 权限）
-            from ai_desktop.capture.hotkey_listener import HotkeyListener
-            self.hotkey = HotkeyListener()
-            self.hotkey.register(config.HOTKEY, self._on_global_hotkey)
-            logger.info("Using pynput hotkey backend")
+        # macOS 开发模式与打包模式都必须使用主线程安全的 NSEvent。
+        self.hotkey = _create_hotkey_backend(self._on_global_hotkey)
         self._hotkey_triggered.connect(self._on_hotkey_triggered)
 
     def start(self) -> None:
@@ -186,7 +196,7 @@ class ChatController(QObject):
     # ── 快捷键 ─────────────────────────────────────────
 
     def _on_global_hotkey(self) -> None:
-        """热键回调：发射信号到主线程（pynput 后台线程 / NSEvent 主线程均适用）"""
+        """热键回调：通过 Qt 信号进入主线程。"""
         self._hotkey_triggered.emit("")
 
     def _on_hotkey_triggered(self, _text: str) -> None:
@@ -622,6 +632,7 @@ def main() -> None:
     app = QApplication(sys.argv)
     app.setApplicationName("AI 桌面助手")
     app.setQuitOnLastWindowClosed(False)
+    app.setFont(QFontDatabase.systemFont(QFontDatabase.GeneralFont))
 
     _quit_flag = False
 

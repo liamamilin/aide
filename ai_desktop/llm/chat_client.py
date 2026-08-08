@@ -14,6 +14,56 @@ from ai_desktop.utils.storage import Message
 logger = logging.getLogger(__name__)
 
 
+class _ThinkTagFilter:
+    """从流式正文中移除可能跨 chunk 的 <think> 内容。"""
+
+    def __init__(self):
+        self._buffer = ""
+        self._inside_think = False
+
+    def feed(self, text: str) -> str:
+        self._buffer += text
+        output: list[str] = []
+
+        while self._buffer:
+            tag = "</think>" if self._inside_think else "<think>"
+            lower_buffer = self._buffer.lower()
+            tag_index = lower_buffer.find(tag)
+            if tag_index >= 0:
+                if not self._inside_think:
+                    output.append(self._buffer[:tag_index])
+                self._buffer = self._buffer[tag_index + len(tag):]
+                self._inside_think = not self._inside_think
+                continue
+
+            partial_length = self._partial_tag_length(lower_buffer, tag)
+            safe_length = len(self._buffer) - partial_length
+            if not self._inside_think:
+                output.append(self._buffer[:safe_length])
+            self._buffer = self._buffer[safe_length:]
+            break
+
+        return "".join(output)
+
+    def finish(self) -> str:
+        remaining = "" if self._inside_think else self._buffer
+        self._buffer = ""
+        return remaining
+
+    @staticmethod
+    def _partial_tag_length(text: str, tag: str) -> int:
+        max_length = min(len(text), len(tag) - 1)
+        for length in range(max_length, 0, -1):
+            if text.endswith(tag[:length]):
+                return length
+        return 0
+
+
+def _without_think_tags(text: str) -> str:
+    tag_filter = _ThinkTagFilter()
+    return tag_filter.feed(text) + tag_filter.finish()
+
+
 def list_models(base_url: str = "") -> List[str]:
     """列出本地可用的 Ollama 模型名称"""
     url = (base_url or config.OLLAMA_BASE_URL).rstrip("/")
@@ -74,6 +124,8 @@ class ChatClient:
             if resp.status_code == 200:
                 data = resp.json()
                 text = data.get("message", {}).get("content", "")
+                if not config.OLLAMA_THINK:
+                    text = _without_think_tags(text)
                 logger.info("Chat returned %d chars", len(text))
                 return ChatResponse(text=text, ok=True)
             else:
@@ -113,6 +165,8 @@ class ChatStream:
         self._timeout = timeout
 
     def __iter__(self):
+        think_enabled = config.OLLAMA_THINK
+        tag_filter = _ThinkTagFilter() if not think_enabled else None
         try:
             resp = requests.post(
                 f"{self._base_url}/api/chat",
@@ -120,7 +174,7 @@ class ChatStream:
                     "model": self._model,
                     "messages": self._messages,
                     "stream": True,
-                    "think": config.OLLAMA_THINK,
+                    "think": think_enabled,
                     "keep_alive": config.OLLAMA_KEEP_ALIVE,
                     "options": {
                         "num_predict": config.OLLAMA_NUM_PREDICT,
@@ -146,14 +200,25 @@ class ChatStream:
                 except json.JSONDecodeError:
                     continue
                 msg = data.get("message", {})
-                thinking = msg.get("thinking", "")
+                thinking = msg.get("thinking", "") or msg.get("reasoning_content", "")
                 content = msg.get("content", "")
-                if thinking:
+                if think_enabled and thinking:
                     yield ("thinking", thinking)
                 if content:
-                    yield ("response", content)
+                    response = content if tag_filter is None else tag_filter.feed(content)
+                    if response:
+                        yield ("response", response)
                 if data.get("done"):
+                    if tag_filter is not None:
+                        remaining = tag_filter.finish()
+                        if remaining:
+                            yield ("response", remaining)
                     return
+
+            if tag_filter is not None:
+                remaining = tag_filter.finish()
+                if remaining:
+                    yield ("response", remaining)
 
         except requests.exceptions.ConnectionError:
             yield ("error", "无法连接到 Ollama")

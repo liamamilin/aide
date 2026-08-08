@@ -5,11 +5,12 @@ import ctypes
 import ctypes.util
 import os
 
-from PyQt5.QtCore import QPoint, QRectF, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QCursor, QIcon, QPainter, QPainterPath, QPixmap
-from PyQt5.QtWidgets import QApplication, QMenu, QPushButton
+from PyQt5.QtCore import QPoint, QRectF, QSize, Qt, QTimer, pyqtSignal
+from PyQt5.QtGui import QColor, QCursor, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PyQt5.QtWidgets import QApplication, QGraphicsDropShadowEffect, QMenu, QPushButton
 
 from ai_desktop.ui import styles
+from ai_desktop.ui.theme import current
 from ai_desktop.utils.paths import resource_path
 
 _ICON_PATH = next(
@@ -86,6 +87,7 @@ class FloatButton(QPushButton):
         self._is_dragging: bool = False
         self._responding: bool = False
         self._pulse_on: bool = False
+        self._hovered: bool = False
         self._init_ui()
         self._position_initial()
         self._start_screen_tracking()
@@ -97,20 +99,54 @@ class FloatButton(QPushButton):
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setCursor(Qt.PointingHandCursor)
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(14)
+        shadow.setOffset(0, 2)
+        shadow.setColor(QColor(current().shadow))
+        self.setGraphicsEffect(shadow)
 
         if os.path.exists(_ICON_PATH):
             icon = _make_circular_icon(_ICON_PATH, _SIZE)
             self.setIcon(icon)
-            self.setIconSize(self.size())
+            self.setIconSize(QSize(_SIZE - 6, _SIZE - 6))
             self.setStyleSheet(
-                f"QPushButton {{ background: transparent; border: none; border-radius: {_SIZE // 2}px; }}"
-                f"QPushButton:hover {{ background: rgba(255, 255, 255, 0.15); border-radius: {_SIZE // 2}px; }}"
+                f"QPushButton {{ background: transparent; border: none; border-radius: {_SIZE // 2}px; padding: 3px; }}"
             )
         else:
+            c = current()
             self.setStyleSheet(
-                f"QPushButton {{ background: rgba(0,122,255,0.85); border-radius: {_SIZE // 2}px; }}"
+                f"QPushButton {{ color: white; background: {c.accent}; border: 1px solid {c.focus_ring}; "
+                f"border-radius: {_SIZE // 2}px; font-weight: 600; }}"
             )
             self.setText("AI")
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        c = current()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        if self._responding:
+            color = QColor(c.accent)
+            color.setAlpha(230 if self._pulse_on else 130)
+            width = 2.5
+        else:
+            color = QColor(c.focus_ring if self._hovered else c.border)
+            color.setAlpha(220 if self._hovered else 180)
+            width = 1.2
+        painter.setPen(QPen(color, width))
+        painter.setBrush(Qt.NoBrush)
+        inset = 2.0 if self._responding else 1.5
+        painter.drawEllipse(QRectF(inset, inset, self.width() - inset * 2, self.height() - inset * 2))
+
+    def enterEvent(self, event) -> None:
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._hovered = False
+        self.update()
+        super().leaveEvent(event)
 
     # ── 响应状态脉冲 ───────────────────────────────────
 
@@ -128,10 +164,11 @@ class FloatButton(QPushButton):
                 self._pulse_timer.stop()
             self._pulse_on = False
             self.setWindowOpacity(1.0)
+        self.update()
 
     def _toggle_pulse(self) -> None:
         self._pulse_on = not self._pulse_on
-        self.setWindowOpacity(0.5 if self._pulse_on else 1.0)
+        self.update()
 
     # ── 屏幕跟随 ───────────────────────────────────────
 
