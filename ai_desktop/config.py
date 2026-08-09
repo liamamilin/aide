@@ -26,6 +26,14 @@ HOTKEY: str = "<cmd>+<ctrl>+l"
 
 MAX_TEXT_LENGTH: int = 12_000
 
+# ── 语音朗读 ─────────────────────────────────────────
+
+TTS_MODEL: str = "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16"
+TTS_VOICE: str = "Aiden"             # 原生美式英语，优先保证单词发音准确
+TTS_LANGUAGE: str = "English"
+TTS_MAX_TEXT_LENGTH: int = 500
+TTS_IDLE_TIMEOUT: int = 60             # 空闲后卸载模型，释放统一内存
+
 # ── UI ───────────────────────────────────────────────
 
 FONT_FAMILY: str = "PingFang SC, Helvetica, sans-serif"

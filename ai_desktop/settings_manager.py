@@ -27,6 +27,7 @@ _SETTING_MAP = [
     ("max_rounds",      "OLLAMA_MAX_ROUNDS",     int),
     ("hotkey",          "HOTKEY",                str),
     ("think",           "OLLAMA_THINK",          bool),
+    ("tts_voice",       "TTS_VOICE",             str),
 ]
 
 _DB_KEY_MAP = {
@@ -41,6 +42,7 @@ _DB_KEY_MAP = {
     "max_rounds":     "ollama_max_rounds",
     "hotkey":         "hotkey",
     "think":          "ollama_think",
+    "tts_voice":      "tts_voice",
 }
 
 

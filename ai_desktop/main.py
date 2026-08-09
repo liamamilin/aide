@@ -22,6 +22,7 @@ from ai_desktop.capture.clipboard_monitor import read_selection
 from ai_desktop.config import Agent
 from ai_desktop.llm.chat_client import ChatClient, list_models
 from ai_desktop.settings_manager import SettingsManager
+from ai_desktop.tts import SpeechWorker
 from ai_desktop.ui.agent_editor import AgentDef, AgentEditor
 from ai_desktop.ui.chat_dialog import ChatDialog
 from ai_desktop.ui.float_button import FloatButton, pin_to_all_spaces
@@ -149,6 +150,14 @@ class ChatController(QObject):
         self._worker: Optional[StreamingChatWorker] = None
         self._stale_workers: list[StreamingChatWorker] = []
         self._dialog: Optional[ChatDialog] = None
+        self._speech_worker = SpeechWorker(
+            config.TTS_MODEL,
+            idle_timeout_seconds=config.TTS_IDLE_TIMEOUT,
+            parent=self,
+        )
+        self._speech_worker.status_changed.connect(self._on_tts_status)
+        self._speech_worker.speech_finished.connect(self._on_tts_finished)
+        self._speech_worker.error.connect(self._on_tts_error)
 
         # 悬浮按钮
         self.float_btn = FloatButton()
@@ -184,6 +193,8 @@ class ChatController(QObject):
         logger.info("ChatController 已就绪（快捷键 %s）", config.HOTKEY)
 
     def stop(self) -> None:
+        if not self._speech_worker.shutdown():
+            logger.warning("Speech worker did not stop within 5s")
         self._tray.hide()
         self.hotkey.stop()
         self.float_btn.hide()
@@ -243,6 +254,8 @@ class ChatController(QObject):
             self._dialog.export_requested.connect(self._on_export_requested)
             self._dialog.manage_agents_requested.connect(self._on_manage_agents)
             self._dialog.stop_requested.connect(self._on_stop_requested)
+            self._dialog.speak_requested.connect(self._on_speak_requested)
+            self._dialog.stop_speaking_requested.connect(self._on_stop_speaking)
             self._dialog.agent_changed.connect(self._on_agent_changed)
             self._dialog.model_changed.connect(self._on_model_changed)
             self._dialog.ollama_online.connect(self._refresh_model_list)
@@ -303,6 +316,7 @@ class ChatController(QObject):
             "repeat_penalty": config.OLLAMA_REPEAT_PENALTY,
             "max_rounds": config.OLLAMA_MAX_ROUNDS,
             "hotkey": config.HOTKEY,
+            "tts_voice": config.TTS_VOICE,
         }
         dlg = SettingsDialog(current, parent=self._dialog)
         dlg.settings_applied.connect(self._on_settings_applied)
@@ -509,6 +523,47 @@ class ChatController(QObject):
         """中断当前流式生成"""
         self._stop_worker()
         logger.info("Streaming interrupted by user")
+
+    @_safe_slot
+    def _on_speak_requested(self, text: str) -> None:
+        if sys.platform != "darwin":
+            self._on_tts_error("MLX 语音朗读仅支持 Apple Silicon Mac。")
+            return
+        import platform
+
+        if platform.machine() != "arm64":
+            self._on_tts_error("当前 Mac 不是 Apple Silicon，无法运行 MLX 语音模型。")
+            return
+        if self._dialog:
+            self._dialog.set_tts_status("正在准备语音…")
+        self._speech_worker.speak(
+            text[:config.TTS_MAX_TEXT_LENGTH],
+            config.TTS_VOICE,
+            config.TTS_LANGUAGE,
+        )
+
+    def _on_stop_speaking(self) -> None:
+        self._speech_worker.stop_speaking()
+        if self._dialog:
+            self._dialog.set_tts_status("")
+
+    def _on_tts_status(self, status: str) -> None:
+        if self._dialog:
+            self._dialog.set_tts_status(status)
+
+    def _on_tts_finished(self, _ok: bool) -> None:
+        if self._dialog:
+            self._dialog.set_tts_status("")
+
+    def _on_tts_error(self, message: str) -> None:
+        if self._dialog:
+            self._dialog.set_tts_status("")
+        self._tray.showMessage(
+            "语音朗读",
+            message,
+            QSystemTrayIcon.Warning,
+            5000,
+        )
 
     def _on_user_message(self, text: str) -> None:
         if self._worker and self._worker.isRunning():

@@ -84,6 +84,38 @@ class TestChatDialogSignals:
         with qtbot.waitSignal(dialog.stop_requested, timeout=1000):
             qtbot.mouseClick(dialog._send_btn, Qt.LeftButton)
 
+    def test_speak_input_emits_selected_text(self, qtbot, dialog):
+        dialog._input.setPlainText("hello world")
+        cursor = dialog._input.textCursor()
+        cursor.setPosition(0)
+        cursor.setPosition(5, QTextCursor.KeepAnchor)
+        dialog._input.setTextCursor(cursor)
+        with qtbot.waitSignal(dialog.speak_requested, timeout=1000) as spy:
+            dialog._on_speak_input()
+        assert spy.args == ["hello"]
+
+    def test_speak_input_falls_back_to_full_text(self, qtbot, dialog):
+        dialog._input.setPlainText("pronunciation")
+        with qtbot.waitSignal(dialog.speak_requested, timeout=1000) as spy:
+            dialog._on_speak_input()
+        assert spy.args == ["pronunciation"]
+
+    def test_speak_selected_bubble_text(self, qtbot, dialog):
+        dialog.add_assistant_message("hello world")
+        label = dialog._bubble_labels[-1]
+        label.setSelection(6, 5)
+        with qtbot.waitSignal(dialog.speak_requested, timeout=1000) as spy:
+            dialog._on_speak_label(label)
+        assert spy.args == ["world"]
+
+    def test_active_speech_button_requests_stop(self, qtbot, dialog):
+        dialog.set_tts_status("正在朗读…")
+        assert dialog._tts_btn.text() == "⏹"
+        with qtbot.waitSignal(dialog.stop_speaking_requested, timeout=1000):
+            dialog._on_speak_input()
+        dialog.set_tts_status("")
+        assert dialog._tts_btn.text() == "🔊"
+
 
 # ── L2: State Transition Tests ──────────────────────────
 

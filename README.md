@@ -89,6 +89,7 @@ aide
 - **输入框自动伸缩** — 多行输入时高度自动从 36px 扩至 120px，超长可滚动
 - **导出** — 一键复制整段对话为 Markdown
 - **通知** — 回复完成时，若窗口在后台则弹 macOS 通知
+- **选中文字朗读** — 输入框或消息气泡选中文字后点击 `🔊`，使用本地 MLX 语音模型发音
 
 ### Agent
 - **5 个内置 Agent**：代码专家 💻 / 翻译 🌐 / 通用助手 🤖 / 摘要 📄 / 润色 ✍️
@@ -104,6 +105,7 @@ aide
 - **运行时配置** — 右键悬浮按钮 → 设置… → 修改 Ollama 地址、超时、上下文窗口、快捷键
 - **持久化** — 所有设置、Agent、模型选择重启后保留
 - **自动恢复** — 启动时自动加载上次对话，保留用户选择的 Agent
+- **朗读声音** — 默认使用发音准确的美式英语 `Aiden`，也可切换 `Ryan`、`Serena` 或 `Vivian`
 
 ---
 
@@ -126,8 +128,23 @@ aide
 | `OLLAMA_MAX_ROUNDS` | `10` | 保留的最大对话轮次 |
 | `OLLAMA_KEEP_ALIVE` | `30m` | 模型驻留时长 |
 | `OLLAMA_TIMEOUT` | `120` | HTTP 超时（秒） |
+| `TTS_MODEL` | `mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16` | 本地 MLX 语音模型 |
+| `TTS_VOICE` | `Aiden` | 默认英文朗读声音 |
+| `TTS_IDLE_TIMEOUT` | `60` | 朗读结束后模型保留时间（秒），超时自动释放内存 |
 
 快捷键格式：`<cmd>`, `<shift>`, `<ctrl>`, `<alt>`。不要用 `<fn>` 或 `<option>`。
+
+### 语音朗读
+
+语音朗读需要 Apple Silicon Mac。首次点击 `🔊` 时会从 Hugging Face 下载约 2.49 GB 模型，之后使用本地缓存，不需要重复下载。
+
+模型会在连续朗读时复用；停止朗读 60 秒后自动从内存卸载，但磁盘缓存仍会保留。下次朗读无需重新下载，只需重新加载模型。
+
+1. 在任意 App 选中单词，按 `⌘⌃L` 带入输入框，然后点击输入框旁的 `🔊`。
+2. 或在对话消息中选中文字，将鼠标移到消息上，点击操作栏里的 `🔊`。
+3. 朗读过程中点击输入框旁的 `⏹` 可立即停止。
+
+`Aiden` 和 `Ryan` 是原生英文男声，英文单词准确度更高；`Serena` 和 `Vivian` 是女声，但原生语言为中文。
 
 ---
 
@@ -144,6 +161,10 @@ aide
 ### 启动后无响应
 
 检查 Ollama：`curl http://localhost:11434/api/tags`，或输入栏右侧状态灯 🔴 → 🟢。
+
+### 首次朗读等待较久
+
+首次使用需要下载并加载语音模型。请确认至少有 5 GB 可用磁盘空间并能访问 Hugging Face；后续朗读会直接使用本地缓存。
 
 ---
 
@@ -163,6 +184,8 @@ ai_desktop/
 │   └── text_normalizer.py      # 文本清洗 + 截断
 ├── llm/
 │   └── chat_client.py          # Ollama /api/chat（流式 + thinking）
+├── tts/
+│   └── speech_worker.py        # MLX 模型懒加载 + 流式音频播放
 ├── ui/
 │   ├── float_button.py         # 悬浮圆形按钮（拖拽/跨屏/右键）
 │   ├── menubar_icon.py         # macOS 菜单栏图标 + Agent 菜单

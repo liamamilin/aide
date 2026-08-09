@@ -39,6 +39,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
     export_requested = pyqtSignal()
     manage_agents_requested = pyqtSignal()
     stop_requested = pyqtSignal()
+    speak_requested = pyqtSignal(str)
+    stop_speaking_requested = pyqtSignal()
     agent_changed = pyqtSignal(Agent)
     model_changed = pyqtSignal(str)
     ollama_online = pyqtSignal()
@@ -73,6 +75,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._hist_draft = ""                       # 进入浏览前保存的草稿
         self._bubble_labels: list[QLabel] = []
         self._layout_compact: bool | None = None
+        self._tts_active = False
         self._scroll_pending = False
         self._resize_timer = QTimer(self)
         self._resize_timer.setSingleShot(True)
@@ -263,6 +266,13 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._input.textChanged.connect(self._on_input_text_changed)
         il.addWidget(self._input, stretch=1)
 
+        self._tts_btn = QPushButton("🔊")
+        self._tts_btn.setFixedSize(36, 40)
+        self._tts_btn.setStyleSheet(styles.ICON_BUTTON)
+        self._tts_btn.setToolTip("朗读选中文字（未选择时朗读全部输入）")
+        self._tts_btn.clicked.connect(self._on_speak_input)
+        il.addWidget(self._tts_btn)
+
         self._send_btn = QPushButton("发送")
         self._send_btn.setFixedSize(58, 40)
         self._send_btn.setStyleSheet(styles.BUTTON_PRIMARY)
@@ -410,6 +420,38 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._input.clear()
         self.add_input_history(text)
         self._exit_input_browsing()
+
+    def _on_speak_input(self) -> None:
+        if self._tts_active:
+            self.stop_speaking_requested.emit()
+            return
+        cursor = self._input.textCursor()
+        text = cursor.selectedText() if cursor.hasSelection() else self._input.toPlainText()
+        self._emit_speech(text)
+
+    def _on_speak_label(self, label: QLabel) -> None:
+        if self._tts_active:
+            self.stop_speaking_requested.emit()
+            return
+        self._emit_speech(label.selectedText() if label.hasSelectedText() else "")
+
+    def _emit_speech(self, text: str) -> None:
+        text = text.replace("\u2029", "\n").strip()[:config.TTS_MAX_TEXT_LENGTH]
+        if text:
+            self.speak_requested.emit(text)
+
+    def set_tts_status(self, status: str) -> None:
+        """Update the always-visible speech button for loading/playback state."""
+        self._tts_active = bool(status)
+        if not status:
+            self._tts_btn.setText("🔊")
+            self._tts_btn.setToolTip("朗读选中文字（未选择时朗读全部输入）")
+        elif "朗读" in status:
+            self._tts_btn.setText("⏹")
+            self._tts_btn.setToolTip(f"{status} 点击停止")
+        else:
+            self._tts_btn.setText("…")
+            self._tts_btn.setToolTip(f"{status} 点击取消")
 
     def _adjust_input_height(self) -> None:
         doc = self._input.document()
@@ -648,6 +690,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
             edit_btn.clicked.connect(lambda checked, t=content: self.set_input_text(t))
             bl.addWidget(edit_btn)
 
+            speak_btn = self._make_speak_button(lbl)
+            bl.addWidget(speak_btn)
+
             v_layout.addWidget(btn_bar)
             wl.addStretch()
             wl.addLayout(v_layout)
@@ -678,6 +723,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
             copy_btn.setStyleSheet(styles.COPY_BUTTON)
             bl.addWidget(copy_btn)
 
+            speak_btn = self._make_speak_button(lbl)
+            bl.addWidget(speak_btn)
+
             v_layout.addWidget(btn_bar)
             wl.addLayout(v_layout)
             wl.addStretch()
@@ -701,6 +749,18 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._bubble_labels.append(lbl)
         return wrapper
 
+    def _make_speak_button(self, label: QLabel) -> QPushButton:
+        button = QPushButton("🔊")
+        button.setFixedSize(18, 18)
+        button.setToolTip("朗读选中的文字")
+        button.setFocusPolicy(Qt.NoFocus)
+        button.setObjectName("speak_btn")
+        button.setCursor(Qt.PointingHandCursor)
+        button.setVisible(False)
+        button.setStyleSheet(styles.COPY_BUTTON)
+        button.clicked.connect(lambda checked, lbl=label: self._on_speak_label(lbl))
+        return button
+
     # ── hover 显示复制按钮 ─────────────────────────────
 
     def eventFilter(self, obj, event):
@@ -709,12 +769,16 @@ class ChatDialog(FramelessDragMixin, QWidget):
                 btn.setVisible(True)
             for btn in obj.findChildren(QPushButton, "edit_btn_user"):
                 btn.setVisible(True)
+            for btn in obj.findChildren(QPushButton, "speak_btn"):
+                btn.setVisible(True)
             for bar in obj.findChildren(QWidget, "messageActions"):
                 bar.setFixedHeight(20)
         elif event.type() == QEvent.Leave:
             for btn in obj.findChildren(QPushButton, "copy_btn_assistant"):
                 btn.setVisible(False)
             for btn in obj.findChildren(QPushButton, "edit_btn_user"):
+                btn.setVisible(False)
+            for btn in obj.findChildren(QPushButton, "speak_btn"):
                 btn.setVisible(False)
             for bar in obj.findChildren(QWidget, "messageActions"):
                 bar.setFixedHeight(0)

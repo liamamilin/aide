@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-14
 
     steps:
       - uses: actions/checkout@v4
@@ -21,6 +21,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Verify Apple Silicon runner
+        run: test "$(uname -m)" = "arm64"
 
       - run: python -m pip install --upgrade pip
 
@@ -36,34 +39,7 @@ jobs:
         run: QT_QPA_PLATFORM=offscreen pytest tests/ -q
 
       - name: Build .app
-        run: |
-          pyinstaller --windowed --onedir --argv-emulation \
-            --name "AI桌面助手" \
-            --icon ai_desktop/图标.icns \
-            --add-data "ai_desktop/图标.icns:ai_desktop" \
-            --add-data "ai_desktop/图标.png:ai_desktop" \
-            --hidden-import pynput.keyboard._darwin \
-            --hidden-import pynput.mouse._darwin \
-            --hidden-import pynput.keyboard._base \
-            --hidden-import pynput.mouse._base \
-            --exclude-module PyQt5.QtWebEngine \
-            --exclude-module PyQt5.QtWebSockets \
-            --exclude-module PyQt5.QtMultimedia \
-            --exclude-module PyQt5.QtMultimediaWidgets \
-            --exclude-module PyQt5.QtBluetooth \
-            --exclude-module PyQt5.QtNfc \
-            --exclude-module PyQt5.QtPositioning \
-            --exclude-module PyQt5.QtSensors \
-            --exclude-module PyQt5.QtQuick \
-            --exclude-module PyQt5.QtQml \
-            --exclude-module PyQt5.Qt3DCore \
-            --exclude-module PyQt5.QtSql \
-            --exclude-module PyQt5.QtTest \
-            --exclude-module PyQt5.QtDBus \
-            --exclude-module tkinter \
-            --exclude-module matplotlib \
-            --exclude-module scipy \
-            ai_desktop/main.py
+        run: pyinstaller --clean --noconfirm scripts/aide.spec
 
       - name: Build DMG
         run: |

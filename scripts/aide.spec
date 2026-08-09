@@ -1,17 +1,21 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec for AI 桌面助手 — macOS .app bundle"""
 import os
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(SPEC)), ".."))
+
+mlx_datas, mlx_binaries, mlx_hiddenimports = collect_all('mlx')
+qwen_tts_hiddenimports = collect_submodules('mlx_audio.tts.models.qwen3_tts')
 
 a = Analysis(
     [os.path.join(ROOT, "ai_desktop", "main.py")],
     pathex=[ROOT],
-    binaries=[],
+    binaries=mlx_binaries,
     datas=[
         (os.path.join(ROOT, "ai_desktop", "图标.icns"), "ai_desktop"),
         (os.path.join(ROOT, "ai_desktop", "图标.png"), "ai_desktop"),
-    ],
+    ] + mlx_datas,
     hiddenimports=[
         'pynput.keyboard._darwin',
         'pynput.mouse._darwin',
@@ -25,7 +29,7 @@ a = Analysis(
         'objc',
         'Quartz',
         'PyObjCTools',
-    ],
+    ] + qwen_tts_hiddenimports + mlx_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -47,7 +51,8 @@ a = Analysis(
         'PyQt5.QtXmlPatterns',
         'tkinter',
         'matplotlib',
-        'scipy',
+        'pytest',
+        '_pytest',
         'PIL',
     ],
     noarchive=False,
@@ -68,7 +73,7 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=True,
-    target_arch=None,
+    target_arch='arm64',
     entitlements_file=None,
     icon=[os.path.join(ROOT, "ai_desktop", "图标.icns")],
 )

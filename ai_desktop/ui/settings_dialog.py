@@ -4,6 +4,7 @@
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
@@ -38,6 +39,7 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         ("repeat_penalty", "Repeat Penalty", float, 1.1),
         ("max_rounds",  "最大保留轮次",      int,   10),
         ("hotkey",      "快捷键",            str,   ""),
+        ("tts_voice",   "朗读声音",          str,   "Aiden"),
     ]
 
     def __init__(self, current: dict, parent=None):
@@ -75,7 +77,7 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         content_layout.setSpacing(12)
 
         groups: dict[str, QFormLayout] = {}
-        for group_name in ("连接", "模型", "应用"):
+        for group_name in ("连接", "模型", "语音", "应用"):
             box = QGroupBox(group_name)
             box.setStyleSheet(styles.FORM_GROUP)
             group_form = QFormLayout(box)
@@ -104,7 +106,15 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         }
 
         for key, label, typ, _ in self.FIELDS:
-            if typ is float:
+            if key == "tts_voice":
+                w = QComboBox()
+                w.addItem("Aiden（美式英语，推荐）", "Aiden")
+                w.addItem("Ryan（英语，节奏感）", "Ryan")
+                w.addItem("Serena（女声，原生中文）", "Serena")
+                w.addItem("Vivian（女声，原生中文）", "Vivian")
+                w.setStyleSheet(styles.FORM_INPUT)
+                self._widgets[key] = w
+            elif typ is float:
                 w = QDoubleSpinBox()
                 lo, hi = _float_ranges.get(key, (0.0, 1.0))
                 w.setRange(lo, hi)
@@ -130,6 +140,8 @@ class SettingsDialog(FramelessDragMixin, QDialog):
             lbl.setStyleSheet(styles.LABEL)
             if key in {"base_url", "timeout"}:
                 group = "连接"
+            elif key == "tts_voice":
+                group = "语音"
             elif key in {"hotkey"}:
                 group = "应用"
             else:
@@ -160,7 +172,10 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         for key, label, typ, default in self.FIELDS:
             val = self._current.get(key, default)
             w = self._widgets[key]
-            if typ is float:
+            if key == "tts_voice":
+                index = w.findData(str(val))
+                w.setCurrentIndex(index if index >= 0 else 0)
+            elif typ is float:
                 w.setValue(float(val) if val else float(default))
             elif typ is int:
                 w.setValue(int(val) if val else default)
@@ -173,7 +188,9 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         data = {}
         for key, label, typ, default in self.FIELDS:
             w = self._widgets[key]
-            if typ is float:
+            if key == "tts_voice":
+                data[key] = w.currentData()
+            elif typ is float:
                 data[key] = w.value()
             elif typ is int:
                 data[key] = w.value()
