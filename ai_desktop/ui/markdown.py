@@ -78,15 +78,12 @@ class _Renderer:
         url = f"copy://codeblock_{self.code_idx}"
         self.code_map[url] = code
         self.result.append(
-            f'<div style="position:relative;margin:8px 0;">'
-            f'<div style="display:flex;justify-content:flex-end;'
-            f'background:{self.c.pre_bg};border-radius:6px 6px 0 0;padding:2px 6px;">'
+            f'<div style="margin:8px 0;background:{self.c.pre_bg};">'
             f'<a href="{url}" style="color:{self.c.pre_text};font-size:11px;'
-            f'text-decoration:none;cursor:pointer;">📋 复制</a>'
-            f'</div>'
+            f'text-decoration:none;">复制代码</a>'
+            f'<br>'
             f'<pre style="background:{self.c.pre_bg};color:{self.c.pre_text};'
-            f'padding:6px 14px 12px;border-radius:0 0 6px 6px;'
-            f'font-size:12px;line-height:1.5;overflow-x:auto;margin:0;">{escaped}</pre>'
+            f'padding:6px 12px 10px;font-size:12px;line-height:1.5;margin:0;">{escaped}</pre>'
             f'</div>'
         )
         self.code_lines = []

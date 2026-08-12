@@ -27,6 +27,7 @@ def dialog(qtbot):
         "repeat_penalty": 1.1,
         "max_rounds": 10,
         "hotkey": "<cmd>+<ctrl>+l",
+        "tts_voice": "Serena",
     }
     d = SettingsDialog(current=current)
     qtbot.addWidget(d)
@@ -56,6 +57,7 @@ class TestSettingsDialogSignals:
         assert "base_url" in data
         assert "timeout" in data
         assert "hotkey" in data
+        assert data["tts_voice"] == "Serena"
 
     def test_cancel_does_not_emit(self, qtbot, dialog):
         """Clicking cancel → settings_applied signal is NOT emitted."""

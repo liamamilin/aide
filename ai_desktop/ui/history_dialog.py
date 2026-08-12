@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
 
 from ai_desktop.config import AGENTS
 from ai_desktop.ui import styles
-from ai_desktop.ui.frameless_mixin import FramelessDragMixin
+from ai_desktop.ui.frameless_mixin import FramelessDragMixin, TitleBar
 from ai_desktop.utils.storage import (
     delete_conversation,
     list_conversations_with_counts,
@@ -31,7 +31,7 @@ class HistoryDialog(FramelessDragMixin, QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._setup_drag(40)
+        self._setup_drag(44)
         self._setup_window()
         self._setup_ui()
         self._load()
@@ -47,24 +47,8 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── 标题栏 ──
-        title = QWidget()
-        title.setFixedHeight(40)
-        title.setStyleSheet(styles.TITLE_BAR)
-        tl = QHBoxLayout(title)
-        tl.setContentsMargins(12, 0, 8, 0)
-
-        title_lbl = QLabel("对话历史")
-        title_lbl.setStyleSheet(styles.LABEL_BOLD)
-        tl.addWidget(title_lbl)
-        tl.addStretch()
-
-        close_btn = QPushButton("×")
-        close_btn.setFixedSize(24, 24)
-        close_btn.setStyleSheet(styles.CLOSE_BUTTON)
-        close_btn.clicked.connect(self.close)
-        tl.addWidget(close_btn)
-
+        title = TitleBar("对话历史", height=44)
+        title.close_clicked.connect(self.close)
         root.addWidget(title)
 
         # ── 搜索栏 ──
@@ -112,7 +96,8 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         results = search_conversations(query, limit=50)
         if not results:
             empty = QLabel("未找到匹配的对话")
-            empty.setStyleSheet("color: #999; font-size: 13px; padding: 20px;")
+            empty.setObjectName("historyEmptyState")
+            empty.setStyleSheet(styles.EMPTY_STATE)
             empty.setAlignment(Qt.AlignCenter)
             self._list_layout.insertWidget(0, empty)
             return
@@ -132,7 +117,8 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         conversations = list_conversations_with_counts(limit=50)
         if not conversations:
             empty = QLabel("暂无历史对话")
-            empty.setStyleSheet("color: #999; font-size: 13px; padding: 20px;")
+            empty.setObjectName("historyEmptyState")
+            empty.setStyleSheet(styles.EMPTY_STATE)
             empty.setAlignment(Qt.AlignCenter)
             self._list_layout.insertWidget(0, empty)
             return
@@ -150,11 +136,12 @@ class HistoryDialog(FramelessDragMixin, QDialog):
 
     def _make_row(self, convo: dict) -> QWidget:
         row = QWidget()
+        row.setObjectName("listRow")
         row.setCursor(Qt.PointingHandCursor)
         row.setStyleSheet(styles.HISTORY_ROW)
 
         rl = QHBoxLayout(row)
-        rl.setContentsMargins(8, 6, 8, 6)
+        rl.setContentsMargins(10, 8, 10, 8)
         rl.setSpacing(8)
 
         # Agent 图标

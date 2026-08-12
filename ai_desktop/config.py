@@ -16,7 +16,7 @@ OLLAMA_TOP_P: float = 0.9           # 核采样阈值（0.0 ~ 1.0）
 OLLAMA_TOP_K: int = 40              # Top-K 采样
 OLLAMA_REPEAT_PENALTY: float = 1.1  # 重复惩罚系数
 OLLAMA_MAX_ROUNDS: int = 10         # 发送时保留的最大对话轮次（超出的历史将被截断）
-OLLAMA_THINK: bool = True           # 模型是否进行思考推理（对支持 think 的模型生效）
+OLLAMA_THINK: bool = False          # 模型是否进行思考推理（对支持 think 的模型生效）
 
 # ── 快捷键 ───────────────────────────────────────────
 
@@ -25,6 +25,14 @@ HOTKEY: str = "<cmd>+<ctrl>+l"
 # ── 文本处理 ─────────────────────────────────────────
 
 MAX_TEXT_LENGTH: int = 12_000
+
+# ── 语音朗读 ─────────────────────────────────────────
+
+TTS_MODEL: str = "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16"
+TTS_VOICE: str = "Aiden"             # 原生美式英语，优先保证单词发音准确
+TTS_LANGUAGE: str = "English"
+TTS_MAX_TEXT_LENGTH: int = 500
+TTS_IDLE_TIMEOUT: int = 60             # 空闲后卸载模型，释放统一内存
 
 # ── UI ───────────────────────────────────────────────
 

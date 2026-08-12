@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
 )
 
 from ai_desktop.ui import styles
-from ai_desktop.ui.frameless_mixin import FramelessDragMixin
+from ai_desktop.ui.frameless_mixin import FramelessDragMixin, TitleBar
 
 
 @dataclass
@@ -37,7 +37,7 @@ class AgentEditor(FramelessDragMixin, QDialog):
     def __init__(self, builtin_agents: list[AgentDef], custom_agents: list[AgentDef],
                  parent=None):
         super().__init__(parent)
-        self._setup_drag(40)
+        self._setup_drag(44)
         self._builtin = builtin_agents
         self._custom = list(custom_agents)
         self._setup_window()
@@ -56,24 +56,8 @@ class AgentEditor(FramelessDragMixin, QDialog):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── 标题栏 ──
-        title = QWidget()
-        title.setFixedHeight(40)
-        title.setStyleSheet(styles.TITLE_BAR)
-        tl = QHBoxLayout(title)
-        tl.setContentsMargins(12, 0, 8, 0)
-
-        title_lbl = QLabel("管理 Agent")
-        title_lbl.setStyleSheet(styles.LABEL_BOLD)
-        tl.addWidget(title_lbl)
-        tl.addStretch()
-
-        close_btn = QPushButton("×")
-        close_btn.setFixedSize(24, 24)
-        close_btn.setStyleSheet(styles.CLOSE_BUTTON)
-        close_btn.clicked.connect(self.close)
-        tl.addWidget(close_btn)
-
+        title = TitleBar("管理 Agent", height=44)
+        title.close_clicked.connect(self.close)
         root.addWidget(title)
 
         # ── 列表区域 ──
@@ -110,6 +94,11 @@ class AgentEditor(FramelessDragMixin, QDialog):
     def _load(self) -> None:
         all_agents = list(self._builtin) + self._custom
         if not all_agents:
+            empty = QLabel("还没有 Agent\n点击下方按钮创建一个")
+            empty.setObjectName("agentEmptyState")
+            empty.setAlignment(Qt.AlignCenter)
+            empty.setStyleSheet(styles.EMPTY_STATE)
+            self._list_layout.insertWidget(0, empty)
             return
         for ag in all_agents:
             row = self._make_row(ag)
@@ -124,9 +113,10 @@ class AgentEditor(FramelessDragMixin, QDialog):
 
     def _make_row(self, agent: AgentDef) -> QWidget:
         row = QWidget()
-        row.setStyleSheet(styles.TRANSPARENT)
+        row.setObjectName("listRow")
+        row.setStyleSheet(styles.HISTORY_ROW)
         rl = QHBoxLayout(row)
-        rl.setContentsMargins(8, 4, 8, 4)
+        rl.setContentsMargins(10, 8, 10, 8)
         rl.setSpacing(8)
 
         icon = QLabel(agent.icon)

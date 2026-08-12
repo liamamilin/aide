@@ -7,12 +7,14 @@ AI 桌面助手 —— 主入口
 import functools
 import json
 import logging
+import os
 import signal
 import sys
 from typing import Optional
 
 import requests
-from PyQt5.QtCore import QObject, QThread, QTimer, pyqtSignal
+from PyQt5.QtCore import QLockFile, QObject, QThread, QTimer, pyqtSignal
+from PyQt5.QtGui import QFontDatabase
 from PyQt5.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 
 from ai_desktop import config
@@ -21,6 +23,7 @@ from ai_desktop.capture.clipboard_monitor import read_selection
 from ai_desktop.config import Agent
 from ai_desktop.llm.chat_client import ChatClient, list_models
 from ai_desktop.settings_manager import SettingsManager
+from ai_desktop.tts import SpeechWorker
 from ai_desktop.ui.agent_editor import AgentDef, AgentEditor
 from ai_desktop.ui.chat_dialog import ChatDialog
 from ai_desktop.ui.float_button import FloatButton, pin_to_all_spaces
@@ -69,37 +72,71 @@ class StreamingChatWorker(QThread):
         self.messages = messages
         self.system_prompt = system_prompt
         self._model = model
+        self._stream = None
+
+    def cancel(self) -> None:
+        """Interrupt iteration and close the underlying HTTP response."""
+        self.requestInterruption()
+        stream = self._stream
+        if stream is not None:
+            stream.close()
 
     def run(self) -> None:
         client = ChatClient(model=self._model)
         stream = client.chat_stream(self.messages, self.system_prompt)
+        self._stream = stream
         full_response = ""
-        for kind, token in stream:
+        try:
+            for kind, token in stream:
+                if self.isInterruptionRequested():
+                    return
+                if kind == "thinking":
+                    self.thinking_chunk.emit(token)
+                elif kind == "response":
+                    full_response += token
+                    self.chunk.emit(token)
+                elif kind == "error":
+                    self.chunk.emit(token)
+                    full_response = token
+                    break
             if self.isInterruptionRequested():
-                break
-            if kind == "thinking":
-                self.thinking_chunk.emit(token)
-            elif kind == "response":
-                full_response += token
-                self.chunk.emit(token)
-            elif kind == "error":
-                self.chunk.emit(token)
-                full_response = token
-                break
-        is_error = (full_response.startswith("HTTP ")
-                     or full_response.startswith("无法")
-                     or full_response.startswith("响应超时"))
-        self.done.emit(full_response, not is_error)
+                return
+            is_error = (full_response.startswith("HTTP ")
+                        or full_response.startswith("无法")
+                        or full_response.startswith("响应超时"))
+            self.done.emit(full_response, not is_error)
+        finally:
+            self._stream = None
 
 
 # ═══════════════════════════════════════════════════════
 # ChatController —— 悬浮按钮 + 快捷键 → 多轮对话
 # ═══════════════════════════════════════════════════════
 
+def _create_hotkey_backend(callback):
+    """Create a platform-safe global hotkey backend."""
+    if sys.platform == "darwin":
+        # pynput's CGEventTap handles Caps Lock on a worker thread. macOS 26
+        # asserts when that path enters TSM/AppKit off the main queue.
+        from ai_desktop.capture.nsevent_monitor import NSEventMonitor
+
+        backend = NSEventMonitor()
+        backend_name = "NSEventMonitor"
+    else:
+        from ai_desktop.capture.hotkey_listener import HotkeyListener
+
+        backend = HotkeyListener()
+        backend_name = "pynput"
+
+    backend.register(config.HOTKEY, callback)
+    logger.info("Using %s hotkey backend", backend_name)
+    return backend
+
+
 class ChatController(QObject):
     """快捷键触发 → 读选中文字 → 打开对话窗口粘贴 → 用户按 Enter 发送"""
 
-    # pynput 回调在后台线程，通过信号桥接到主线程
+    # 统一通过信号桥接，确保后续 UI 操作位于 Qt 主线程。
     _hotkey_triggered = pyqtSignal(str)
 
     def __init__(self, parent: QObject | None = None) -> None:
@@ -128,12 +165,21 @@ class ChatController(QObject):
         self._worker: Optional[StreamingChatWorker] = None
         self._stale_workers: list[StreamingChatWorker] = []
         self._dialog: Optional[ChatDialog] = None
+        self._float_btn_hidden_by_user = False
+        self._speech_worker = SpeechWorker(
+            config.TTS_MODEL,
+            idle_timeout_seconds=config.TTS_IDLE_TIMEOUT,
+            parent=self,
+        )
+        self._speech_worker.status_changed.connect(self._on_tts_status)
+        self._speech_worker.speech_finished.connect(self._on_tts_finished)
+        self._speech_worker.error.connect(self._on_tts_error)
 
         # 悬浮按钮
         self.float_btn = FloatButton()
         self.float_btn.clicked.connect(self._toggle_dialog)
         self.float_btn.exit_requested.connect(self._on_exit)
-        self.float_btn.hide_requested.connect(self.float_btn.hide)
+        self.float_btn.hide_requested.connect(self._hide_float_button)
         self.float_btn.about_requested.connect(self._show_about)
         self.float_btn.settings_requested.connect(self._on_settings_requested)
         self.float_btn.auto_hide_toggled.connect(self._on_auto_hide_toggled)
@@ -147,19 +193,8 @@ class ChatController(QObject):
         self._tray.about_clicked.connect(self._show_about)
         self._tray.exit_clicked.connect(self._on_exit)
 
-        # 全局快捷键
-        if getattr(sys, "frozen", False):
-            # 冻结模式（.app）：用 NSEvent 全局监听（主线程，无 dispatch 断言）
-            from ai_desktop.capture.nsevent_monitor import NSEventMonitor
-            self.hotkey = NSEventMonitor()
-            self.hotkey.register(config.HOTKEY, self._on_global_hotkey)
-            logger.info("Using NSEventMonitor hotkey backend")
-        else:
-            # 开发模式（aide）：用 pynput（终端已有 AX 权限）
-            from ai_desktop.capture.hotkey_listener import HotkeyListener
-            self.hotkey = HotkeyListener()
-            self.hotkey.register(config.HOTKEY, self._on_global_hotkey)
-            logger.info("Using pynput hotkey backend")
+        # macOS 开发模式与打包模式都必须使用主线程安全的 NSEvent。
+        self.hotkey = _create_hotkey_backend(self._on_global_hotkey)
         self._hotkey_triggered.connect(self._on_hotkey_triggered)
 
     def start(self) -> None:
@@ -174,6 +209,11 @@ class ChatController(QObject):
         logger.info("ChatController 已就绪（快捷键 %s）", config.HOTKEY)
 
     def stop(self) -> None:
+        self._speech_worker.shutdown()
+        self._stop_worker()
+        for worker in tuple(self._stale_workers):
+            worker.wait()
+        self._stale_workers.clear()
         self._tray.hide()
         self.hotkey.stop()
         self.float_btn.hide()
@@ -183,10 +223,14 @@ class ChatController(QObject):
             self._dialog = None
         logger.info("ChatController 已退出")
 
+    def _hide_float_button(self) -> None:
+        self._float_btn_hidden_by_user = True
+        self.float_btn.hide()
+
     # ── 快捷键 ─────────────────────────────────────────
 
     def _on_global_hotkey(self) -> None:
-        """热键回调：发射信号到主线程（pynput 后台线程 / NSEvent 主线程均适用）"""
+        """热键回调：通过 Qt 信号进入主线程。"""
         self._hotkey_triggered.emit("")
 
     def _on_hotkey_triggered(self, _text: str) -> None:
@@ -233,6 +277,8 @@ class ChatController(QObject):
             self._dialog.export_requested.connect(self._on_export_requested)
             self._dialog.manage_agents_requested.connect(self._on_manage_agents)
             self._dialog.stop_requested.connect(self._on_stop_requested)
+            self._dialog.speak_requested.connect(self._on_speak_requested)
+            self._dialog.stop_speaking_requested.connect(self._on_stop_speaking)
             self._dialog.agent_changed.connect(self._on_agent_changed)
             self._dialog.model_changed.connect(self._on_model_changed)
             self._dialog.ollama_online.connect(self._refresh_model_list)
@@ -255,8 +301,8 @@ class ChatController(QObject):
         else:
             # 复用现有 dialog，每次显示刷新模型列表
             self._refresh_model_list()
-        # 如果悬浮球被隐藏了，重新显示
-        if self.float_btn.isHidden():
+        # Respect an explicit user request to hide the floating button.
+        if not self._float_btn_hidden_by_user and self.float_btn.isHidden():
             self.float_btn.show()
             pin_to_all_spaces(self.float_btn)
         self._dialog.show_near(
@@ -293,6 +339,7 @@ class ChatController(QObject):
             "repeat_penalty": config.OLLAMA_REPEAT_PENALTY,
             "max_rounds": config.OLLAMA_MAX_ROUNDS,
             "hotkey": config.HOTKEY,
+            "tts_voice": config.TTS_VOICE,
         }
         dlg = SettingsDialog(current, parent=self._dialog)
         dlg.settings_applied.connect(self._on_settings_applied)
@@ -378,18 +425,14 @@ class ChatController(QObject):
     # ── 工作线程管理 ───────────────────────────────────
 
     def _stop_worker(self) -> None:
-        """安全停止当前流式 worker：发送中断信号 + 等待退出 + 清理"""
+        """Cancel the current stream without blocking the Qt UI thread."""
         if self._worker is None:
             return
         if not self._worker.isRunning():
             self._worker = None
             return
         w = self._worker
-        w.requestInterruption()
-        if w.wait(5000):
-            self._worker = None
-            return
-        logger.warning("Worker did not stop within 5s, keeping reference for cleanup")
+        w.cancel()
         try:
             w.thinking_chunk.disconnect()
             w.chunk.disconnect()
@@ -399,6 +442,10 @@ class ChatController(QObject):
         self._worker = None
         self._stale_workers.append(w)
         w.finished.connect(lambda w=w: self._prune_worker(w))
+        self.float_btn.set_responding(False)
+        if self._dialog:
+            self._dialog.set_thinking(False)
+            self._dialog.finalize_assistant_stream("", False)
 
     def _prune_worker(self, w: StreamingChatWorker) -> None:
         """从遗留队列中移除已完成的 worker"""
@@ -499,6 +546,47 @@ class ChatController(QObject):
         """中断当前流式生成"""
         self._stop_worker()
         logger.info("Streaming interrupted by user")
+
+    @_safe_slot
+    def _on_speak_requested(self, text: str) -> None:
+        if sys.platform != "darwin":
+            self._on_tts_error("MLX 语音朗读仅支持 Apple Silicon Mac。")
+            return
+        import platform
+
+        if platform.machine() != "arm64":
+            self._on_tts_error("当前 Mac 不是 Apple Silicon，无法运行 MLX 语音模型。")
+            return
+        if self._dialog:
+            self._dialog.set_tts_status("正在准备语音…")
+        self._speech_worker.speak(
+            text[:config.TTS_MAX_TEXT_LENGTH],
+            config.TTS_VOICE,
+            config.TTS_LANGUAGE,
+        )
+
+    def _on_stop_speaking(self) -> None:
+        self._speech_worker.stop_speaking()
+        if self._dialog:
+            self._dialog.set_tts_status("")
+
+    def _on_tts_status(self, status: str) -> None:
+        if self._dialog:
+            self._dialog.set_tts_status(status)
+
+    def _on_tts_finished(self, _ok: bool) -> None:
+        if self._dialog:
+            self._dialog.set_tts_status("")
+
+    def _on_tts_error(self, message: str) -> None:
+        if self._dialog:
+            self._dialog.set_tts_status("")
+        self._tray.showMessage(
+            "语音朗读",
+            message,
+            QSystemTrayIcon.Warning,
+            5000,
+        )
 
     def _on_user_message(self, text: str) -> None:
         if self._worker and self._worker.isRunning():
@@ -622,6 +710,24 @@ def main() -> None:
     app = QApplication(sys.argv)
     app.setApplicationName("AI 桌面助手")
     app.setQuitOnLastWindowClosed(False)
+    app.setFont(QFontDatabase.systemFont(QFontDatabase.GeneralFont))
+
+    # A menu-bar app can otherwise be launched repeatedly from Finder,
+    # leaving multiple global hotkey listeners and tray icons active.
+    lock_path = os.path.join(
+        os.path.expanduser("~/Library/Application Support/AI桌面助手"),
+        "instance.lock",
+    )
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+    instance_lock = QLockFile(lock_path)
+    instance_lock.setStaleLockTime(0)
+    if not instance_lock.tryLock(100):
+        QMessageBox.information(
+            None,
+            "AI桌面助手已在运行",
+            "AI桌面助手已经启动，请使用菜单栏图标或快捷键打开窗口。",
+        )
+        return
 
     _quit_flag = False
 
@@ -776,4 +882,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    from multiprocessing import freeze_support
+
+    freeze_support()
     main()

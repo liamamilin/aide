@@ -21,6 +21,7 @@ _ORIG_DEFAULTS = {
     "OLLAMA_REPEAT_PENALTY": config.OLLAMA_REPEAT_PENALTY,
     "OLLAMA_MAX_ROUNDS": config.OLLAMA_MAX_ROUNDS,
     "HOTKEY": config.HOTKEY,
+    "TTS_VOICE": config.TTS_VOICE,
 }
 
 
@@ -127,6 +128,14 @@ class TestSettingsManagerApply:
         assert "hotkey" in changed
         assert config.HOTKEY == "<cmd>+<shift>+k"
         assert storage.get_setting("hotkey") == "<cmd>+<shift>+k"
+
+    def test_apply_handles_tts_voice_change(self):
+        _reset_config()
+        mgr = SettingsManager()
+        changed = mgr.apply({"tts_voice": "Serena"})
+        assert "tts_voice" in changed
+        assert config.TTS_VOICE == "Serena"
+        assert storage.get_setting("tts_voice") == "Serena"
 
     def test_apply_rejects_invalid_hotkey(self):
         _reset_config()
