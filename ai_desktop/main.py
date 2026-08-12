@@ -7,12 +7,13 @@ AI 桌面助手 —— 主入口
 import functools
 import json
 import logging
+import os
 import signal
 import sys
 from typing import Optional
 
 import requests
-from PyQt5.QtCore import QObject, QThread, QTimer, pyqtSignal
+from PyQt5.QtCore import QLockFile, QObject, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QFontDatabase
 from PyQt5.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 
@@ -71,27 +72,41 @@ class StreamingChatWorker(QThread):
         self.messages = messages
         self.system_prompt = system_prompt
         self._model = model
+        self._stream = None
+
+    def cancel(self) -> None:
+        """Interrupt iteration and close the underlying HTTP response."""
+        self.requestInterruption()
+        stream = self._stream
+        if stream is not None:
+            stream.close()
 
     def run(self) -> None:
         client = ChatClient(model=self._model)
         stream = client.chat_stream(self.messages, self.system_prompt)
+        self._stream = stream
         full_response = ""
-        for kind, token in stream:
+        try:
+            for kind, token in stream:
+                if self.isInterruptionRequested():
+                    return
+                if kind == "thinking":
+                    self.thinking_chunk.emit(token)
+                elif kind == "response":
+                    full_response += token
+                    self.chunk.emit(token)
+                elif kind == "error":
+                    self.chunk.emit(token)
+                    full_response = token
+                    break
             if self.isInterruptionRequested():
-                break
-            if kind == "thinking":
-                self.thinking_chunk.emit(token)
-            elif kind == "response":
-                full_response += token
-                self.chunk.emit(token)
-            elif kind == "error":
-                self.chunk.emit(token)
-                full_response = token
-                break
-        is_error = (full_response.startswith("HTTP ")
-                     or full_response.startswith("无法")
-                     or full_response.startswith("响应超时"))
-        self.done.emit(full_response, not is_error)
+                return
+            is_error = (full_response.startswith("HTTP ")
+                        or full_response.startswith("无法")
+                        or full_response.startswith("响应超时"))
+            self.done.emit(full_response, not is_error)
+        finally:
+            self._stream = None
 
 
 # ═══════════════════════════════════════════════════════
@@ -150,6 +165,7 @@ class ChatController(QObject):
         self._worker: Optional[StreamingChatWorker] = None
         self._stale_workers: list[StreamingChatWorker] = []
         self._dialog: Optional[ChatDialog] = None
+        self._float_btn_hidden_by_user = False
         self._speech_worker = SpeechWorker(
             config.TTS_MODEL,
             idle_timeout_seconds=config.TTS_IDLE_TIMEOUT,
@@ -163,7 +179,7 @@ class ChatController(QObject):
         self.float_btn = FloatButton()
         self.float_btn.clicked.connect(self._toggle_dialog)
         self.float_btn.exit_requested.connect(self._on_exit)
-        self.float_btn.hide_requested.connect(self.float_btn.hide)
+        self.float_btn.hide_requested.connect(self._hide_float_button)
         self.float_btn.about_requested.connect(self._show_about)
         self.float_btn.settings_requested.connect(self._on_settings_requested)
         self.float_btn.auto_hide_toggled.connect(self._on_auto_hide_toggled)
@@ -193,8 +209,11 @@ class ChatController(QObject):
         logger.info("ChatController 已就绪（快捷键 %s）", config.HOTKEY)
 
     def stop(self) -> None:
-        if not self._speech_worker.shutdown():
-            logger.warning("Speech worker did not stop within 5s")
+        self._speech_worker.shutdown()
+        self._stop_worker()
+        for worker in tuple(self._stale_workers):
+            worker.wait()
+        self._stale_workers.clear()
         self._tray.hide()
         self.hotkey.stop()
         self.float_btn.hide()
@@ -203,6 +222,10 @@ class ChatController(QObject):
             self._dialog.deleteLater()
             self._dialog = None
         logger.info("ChatController 已退出")
+
+    def _hide_float_button(self) -> None:
+        self._float_btn_hidden_by_user = True
+        self.float_btn.hide()
 
     # ── 快捷键 ─────────────────────────────────────────
 
@@ -278,8 +301,8 @@ class ChatController(QObject):
         else:
             # 复用现有 dialog，每次显示刷新模型列表
             self._refresh_model_list()
-        # 如果悬浮球被隐藏了，重新显示
-        if self.float_btn.isHidden():
+        # Respect an explicit user request to hide the floating button.
+        if not self._float_btn_hidden_by_user and self.float_btn.isHidden():
             self.float_btn.show()
             pin_to_all_spaces(self.float_btn)
         self._dialog.show_near(
@@ -402,18 +425,14 @@ class ChatController(QObject):
     # ── 工作线程管理 ───────────────────────────────────
 
     def _stop_worker(self) -> None:
-        """安全停止当前流式 worker：发送中断信号 + 等待退出 + 清理"""
+        """Cancel the current stream without blocking the Qt UI thread."""
         if self._worker is None:
             return
         if not self._worker.isRunning():
             self._worker = None
             return
         w = self._worker
-        w.requestInterruption()
-        if w.wait(5000):
-            self._worker = None
-            return
-        logger.warning("Worker did not stop within 5s, keeping reference for cleanup")
+        w.cancel()
         try:
             w.thinking_chunk.disconnect()
             w.chunk.disconnect()
@@ -423,6 +442,10 @@ class ChatController(QObject):
         self._worker = None
         self._stale_workers.append(w)
         w.finished.connect(lambda w=w: self._prune_worker(w))
+        self.float_btn.set_responding(False)
+        if self._dialog:
+            self._dialog.set_thinking(False)
+            self._dialog.finalize_assistant_stream("", False)
 
     def _prune_worker(self, w: StreamingChatWorker) -> None:
         """从遗留队列中移除已完成的 worker"""
@@ -688,6 +711,23 @@ def main() -> None:
     app.setApplicationName("AI 桌面助手")
     app.setQuitOnLastWindowClosed(False)
     app.setFont(QFontDatabase.systemFont(QFontDatabase.GeneralFont))
+
+    # A menu-bar app can otherwise be launched repeatedly from Finder,
+    # leaving multiple global hotkey listeners and tray icons active.
+    lock_path = os.path.join(
+        os.path.expanduser("~/Library/Application Support/AI桌面助手"),
+        "instance.lock",
+    )
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+    instance_lock = QLockFile(lock_path)
+    instance_lock.setStaleLockTime(0)
+    if not instance_lock.tryLock(100):
+        QMessageBox.information(
+            None,
+            "AI桌面助手已在运行",
+            "AI桌面助手已经启动，请使用菜单栏图标或快捷键打开窗口。",
+        )
+        return
 
     _quit_flag = False
 

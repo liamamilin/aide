@@ -57,12 +57,20 @@ class SpeechWorker(QThread):
             except Exception:
                 logger.debug("Failed to abort audio stream", exc_info=True)
 
-    def shutdown(self, timeout_ms: int = 5000) -> bool:
+    def shutdown(self, timeout_ms: int | None = None) -> bool:
+        """Stop the worker without allowing Qt to destroy a live QThread.
+
+        MLX GPU operations can outlive the audio stream abort request. Waiting
+        without a deadline is intentional during process shutdown: exiting
+        while this thread is alive makes Qt abort in ``QThread::~QThread``.
+        """
         self._stopping.set()
         self.stop_speaking()
         self._discard_pending_requests()
         self._requests.put(None)
-        return not self.isRunning() or self.wait(timeout_ms)
+        if not self.isRunning():
+            return True
+        return self.wait() if timeout_ms is None else self.wait(timeout_ms)
 
     def _discard_pending_requests(self) -> None:
         while True:
@@ -84,14 +92,16 @@ class SpeechWorker(QThread):
                     break
                 self._cancelled.clear()
                 ok = self._process(request)
-                self.speech_finished.emit(ok)
+                # A cancelled request must not clear the UI state of a newer
+                # request queued immediately after it.
+                if not self._cancelled.is_set():
+                    self.speech_finished.emit(ok)
         finally:
             self._unload_model()
 
     def _unload_model(self) -> None:
         if self._model is None:
             return
-        self._model = None
         gc.collect()
         try:
             import mlx.core as mx
@@ -99,6 +109,7 @@ class SpeechWorker(QThread):
             mx.clear_cache()
         except Exception:
             logger.debug("Failed to clear MLX cache", exc_info=True)
+        self._model = None
         logger.info("Speech model unloaded after idle timeout")
 
     def _process(self, request: SpeechRequest) -> bool:

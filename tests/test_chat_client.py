@@ -27,6 +27,16 @@ class TestChatStream:
             stream = ChatStream("http://localhost", "model", [], 10)
             results = list(stream)
             assert results == [("response", "Hello"), ("response", " world")]
+        resp.close.assert_called_once_with()
+
+    def test_close_aborts_active_response(self):
+        resp = _fake_stream_response([])
+        with patch("requests.post", return_value=resp):
+            stream = ChatStream("http://localhost", "model", [], 10)
+            iterator = iter(stream)
+            next(iterator, None)
+            stream.close()
+        resp.close.assert_called()
 
     def test_thinking_and_response(self):
         lines = [

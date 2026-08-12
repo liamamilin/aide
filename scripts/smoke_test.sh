@@ -12,7 +12,7 @@ fi
 
 echo "==> Launching ${APP_PATH} ..."
 open "$APP_PATH"
-PID=$(pgrep -f "AI桌面助手" || true)
+PID=$(pgrep -f "${APP_PATH}/Contents/MacOS/AI桌面助手" | tr '\n' ' ' || true)
 if [ -z "$PID" ]; then
     echo "ERROR: App did not start"
     exit 1
@@ -22,10 +22,10 @@ echo "==> App started (PID: $PID)"
 echo "==> Waiting 5 seconds ..."
 sleep 5
 
-if kill -0 "$PID" 2>/dev/null; then
+if kill -0 ${PID} 2>/dev/null; then
     echo "==> App still running after 5s — SMOKE TEST PASSED"
     echo "==> Cleaning up ..."
-    kill "$PID" 2>/dev/null || true
+    kill ${PID} 2>/dev/null || true
     sleep 1
 else
     echo "ERROR: App crashed within 5 seconds"

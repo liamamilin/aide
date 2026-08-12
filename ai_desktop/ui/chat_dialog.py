@@ -433,7 +433,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if self._tts_active:
             self.stop_speaking_requested.emit()
             return
-        self._emit_speech(label.selectedText() if label.hasSelectedText() else "")
+        self._emit_speech(label.selectedText() if label.hasSelectedText() else getattr(label, "speech_text", ""))
 
     def _emit_speech(self, text: str) -> None:
         text = text.replace("\u2029", "\n").strip()[:config.TTS_MAX_TEXT_LENGTH]
@@ -513,6 +513,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._insert_widget(bubble)
         if self._stream_bubble is not None:
             self._stream_bubble.setText("正在思考…")
+            self._stream_bubble.speech_text = ""
         self._generation_status.setVisible(True)
         self._stream_timer.start()
 
@@ -544,6 +545,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if self._thinking_text:
             display += f"💭 {self._thinking_text}\n\n"
         display += self._stream_text
+        self._stream_bubble.speech_text = (self._thinking_text + "\n\n" + self._stream_text).strip()
         self._stream_bubble.setText(display)
         self._stream_bubble.setTextFormat(Qt.PlainText)
         self._scroll_to_bottom()
@@ -554,6 +556,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._flush_stream_buffer()
         if self._stream_bubble is None:
             return
+        self._stream_bubble.speech_text = self._stream_text
         if ok and self._stream_text:
             body, code_map = markdown.to_html(self._stream_text)
             if self._thinking_text.strip():
@@ -745,6 +748,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
             lbl.setText(full_html)
         else:
             lbl.setText(content)
+        lbl.speech_text = html.unescape(content) if is_html else content
 
         self._bubble_labels.append(lbl)
         return wrapper

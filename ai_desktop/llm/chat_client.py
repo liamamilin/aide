@@ -3,6 +3,7 @@ LLM 聊天客户端（Ollama /api/chat）
 """
 import json
 import logging
+import threading
 from dataclasses import dataclass
 from typing import List
 
@@ -163,6 +164,15 @@ class ChatStream:
         self._model = model
         self._messages = messages
         self._timeout = timeout
+        self._response = None
+        self._response_lock = threading.Lock()
+
+    def close(self) -> None:
+        """Close the active HTTP response so a waiting stream can stop."""
+        with self._response_lock:
+            response = self._response
+        if response is not None:
+            response.close()
 
     def __iter__(self):
         think_enabled = config.OLLAMA_THINK
@@ -188,6 +198,8 @@ class ChatStream:
                 timeout=self._timeout,
                 stream=True,
             )
+            with self._response_lock:
+                self._response = resp
             if resp.status_code != 200:
                 yield ("error", f"HTTP {resp.status_code}")
                 return
@@ -227,3 +239,9 @@ class ChatStream:
         except Exception as e:
             logger.exception("ChatStream error")
             yield ("error", str(e))
+        finally:
+            with self._response_lock:
+                response = self._response
+                self._response = None
+            if response is not None:
+                response.close()

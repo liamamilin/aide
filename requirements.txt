@@ -2,3 +2,4 @@ PyQt5>=5.15.0,<6.0.0
 pynput>=1.7.6,<2.0.0
 requests>=2.31.0,<3.0.0
 mlx-audio==0.4.7; sys_platform == "darwin" and platform_machine == "arm64"
+sounddevice>=0.5.0,<1.0.0; sys_platform == "darwin" and platform_machine == "arm64"
