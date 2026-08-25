@@ -92,6 +92,30 @@ class StreamingChatWorker(QThread):
         self.done.emit(full_response, not is_error)
 
 
+class ScreenshotWorker(QThread):
+    """截图 Worker：后台运行 screencapture
+
+    - done(path): 成功时发射图片路径；用户取消时发射空串
+    - failed(error): 截图失败（如屏幕录制权限未授予）
+    """
+    done = pyqtSignal(str)
+    failed = pyqtSignal(str)
+
+    def run(self) -> None:
+        from ai_desktop.capture.screenshot import capture_region
+        try:
+            path, err = capture_region()
+        except Exception:
+            logger.exception("Screenshot capture error")
+            path, err = None, "截图失败"
+        if path:
+            self.done.emit(path)
+        elif err:
+            self.failed.emit(err)
+        else:
+            self.done.emit("")  # 用户取消
+
+
 # ═══════════════════════════════════════════════════════
 # ChatController —— 悬浮按钮 + 快捷键 → 多轮对话
 # ═══════════════════════════════════════════════════════
@@ -147,20 +171,28 @@ class ChatController(QObject):
         self._tray.about_clicked.connect(self._show_about)
         self._tray.exit_clicked.connect(self._on_exit)
 
-        # 全局快捷键
+        # 全局快捷键：选中文字 → ⌘⌃L → 提问
+        self.hotkey = self._create_hotkey_backend()
+        self.hotkey.register(config.HOTKEY, self._on_global_hotkey)
+        self._hotkey_triggered.connect(self._on_hotkey_triggered)
+
+        # 全局快捷键：⌘⌃S → 截图并附加到对话
+        self.hotkey_img = self._create_hotkey_backend()
+        self.hotkey_img.register(config.SCREENSHOT_HOTKEY, self._on_screenshot_hotkey)
+        self._screenshot_worker: Optional[ScreenshotWorker] = None
+
+    @staticmethod
+    def _create_hotkey_backend():
+        """按运行模式返回全局快捷键后端（冻结→NSEvent，开发→pynput）"""
         if getattr(sys, "frozen", False):
             # 冻结模式（.app）：用 NSEvent 全局监听（主线程，无 dispatch 断言）
             from ai_desktop.capture.nsevent_monitor import NSEventMonitor
-            self.hotkey = NSEventMonitor()
-            self.hotkey.register(config.HOTKEY, self._on_global_hotkey)
             logger.info("Using NSEventMonitor hotkey backend")
-        else:
-            # 开发模式（aide）：用 pynput（终端已有 AX 权限）
-            from ai_desktop.capture.hotkey_listener import HotkeyListener
-            self.hotkey = HotkeyListener()
-            self.hotkey.register(config.HOTKEY, self._on_global_hotkey)
-            logger.info("Using pynput hotkey backend")
-        self._hotkey_triggered.connect(self._on_hotkey_triggered)
+            return NSEventMonitor()
+        # 开发模式（aide）：用 pynput（终端已有 AX 权限）
+        from ai_desktop.capture.hotkey_listener import HotkeyListener
+        logger.info("Using pynput hotkey backend")
+        return HotkeyListener()
 
     def start(self) -> None:
         init_db()
@@ -168,14 +200,19 @@ class ChatController(QObject):
             self.hotkey.start()
         except Exception as e:
             logger.warning("Failed to start hotkey listener: %s", e)
+        try:
+            self.hotkey_img.start()
+        except Exception as e:
+            logger.warning("Failed to start screenshot hotkey listener: %s", e)
         self.float_btn.show()
         pin_to_all_spaces(self.float_btn)
         self._tray.show()
-        logger.info("ChatController 已就绪（快捷键 %s）", config.HOTKEY)
+        logger.info("ChatController 已就绪（快捷键 %s / 截图 %s）", config.HOTKEY, config.SCREENSHOT_HOTKEY)
 
     def stop(self) -> None:
         self._tray.hide()
         self.hotkey.stop()
+        self.hotkey_img.stop()
         self.float_btn.hide()
         if self._dialog:
             self._dialog.hide()
@@ -188,6 +225,49 @@ class ChatController(QObject):
     def _on_global_hotkey(self) -> None:
         """热键回调：发射信号到主线程（pynput 后台线程 / NSEvent 主线程均适用）"""
         self._hotkey_triggered.emit("")
+
+    def _on_screenshot_hotkey(self) -> None:
+        """截图热键回调：后台启动框选截图，完成后附加到对话窗口"""
+        if self._screenshot_worker and self._screenshot_worker.isRunning():
+            return
+        self._screenshot_worker = ScreenshotWorker()
+        self._screenshot_worker.done.connect(self._on_screenshot_done)
+        self._screenshot_worker.failed.connect(self._on_screenshot_failed)
+        self._screenshot_worker.start()
+
+    def _on_screenshot_done(self, path: str) -> None:
+        if not path:
+            return
+        if not self._dialog or not self._dialog.isVisible():
+            self._show_dialog()
+        else:
+            self._dialog.activateWindow()
+            self._dialog.raise_()
+        if self._dialog:
+            self._dialog.attach_image_paths([path])
+
+    def _on_screenshot_failed(self, err: str) -> None:
+        """截图失败：引导用户授予屏幕录制权限"""
+        logger.warning("Screenshot failed: %s", err)
+        box = QMessageBox(
+            QMessageBox.Warning,
+            "截图失败",
+            "无法进行截图：屏幕录制权限未授予。\n\n"
+            "请前往 系统设置 → 隐私与安全性 → 屏幕录制，\n"
+            "勾选允许「AI 桌面助手」（开发模式为「终端」），授权后重新截图。",
+            QMessageBox.Ok,
+        )
+        settings_btn = box.addButton("打开系统设置", QMessageBox.ActionRole)
+        box.exec_()
+        if box.clickedButton() is settings_btn:
+            self._open_screen_recording_prefs()
+
+    @staticmethod
+    def _open_screen_recording_prefs() -> None:
+        import subprocess
+        subprocess.Popen(
+            ["open", "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"]
+        )
 
     def _on_hotkey_triggered(self, _text: str) -> None:
         """主线程：延迟读取选中文字 → 打开对话窗口
@@ -228,6 +308,7 @@ class ChatController(QObject):
             self._dialog = ChatDialog(self._all_agents, self._active_agent, [], self._model,
                                      auto_hide=self._auto_hide)
             self._dialog.message_sent.connect(self._on_user_message)
+            self._dialog.screenshot_requested.connect(self._on_screenshot_hotkey)
             self._dialog.new_convo_requested.connect(self._new_conversation)
             self._dialog.history_requested.connect(self._on_history_requested)
             self._dialog.export_requested.connect(self._on_export_requested)
@@ -439,7 +520,7 @@ class ChatController(QObject):
                 self._dialog.clear_messages()
                 for m in conv.messages:
                     if m.role == "user":
-                        self._dialog.add_user_message(m.content)
+                        self._dialog.add_user_message(m.content, images=m.images)
                     else:
                         self._dialog.add_assistant_message(m.content)
             logger.info("Loaded conversation %d (%d messages)", convo_id, len(conv.messages))
@@ -500,10 +581,12 @@ class ChatController(QObject):
         self._stop_worker()
         logger.info("Streaming interrupted by user")
 
-    def _on_user_message(self, text: str) -> None:
+    def _on_user_message(self, text: str, images: Optional[list] = None) -> None:
+        images = images or []
         if self._worker and self._worker.isRunning():
             if self._dialog:
                 self._dialog.set_input_text(text)
+                self._dialog.attach_image_paths(images)
                 self._dialog.flash_busy()
             return
 
@@ -512,11 +595,11 @@ class ChatController(QObject):
                 conv = create_conversation(self._active_agent.id)
                 self._convo_id = conv.id
 
-            user_msg = save_message(self._convo_id, "user", text)
+            user_msg = save_message(self._convo_id, "user", text, images=images)
             self._messages.append(user_msg)
 
             if self._dialog:
-                self._dialog.add_user_message(text)
+                self._dialog.add_user_message(text, images=images)
                 self._dialog.begin_assistant_stream()
                 self._dialog.set_thinking(True)
 
@@ -536,6 +619,7 @@ class ChatController(QObject):
             logger.exception("Failed to send message")
             if self._dialog:
                 self._dialog.set_input_text(text)  # restore input so user can retry
+                self._dialog.attach_image_paths(images)
 
     @_safe_slot
     def _on_thinking_chunk(self, token: str) -> None:
@@ -679,6 +763,10 @@ def main() -> None:
                     controller.hotkey.start()
                 except Exception as e:
                     logger.warning("热键启动失败: %s", e)
+                try:
+                    controller.hotkey_img.start()
+                except Exception as e:
+                    logger.warning("截图热键启动失败: %s", e)
             _perm_recheck.stop()
             _perm_requested = False
         else:

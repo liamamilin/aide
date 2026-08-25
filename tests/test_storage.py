@@ -73,6 +73,24 @@ class TestConversationCRUD:
         assert loaded is not None
         assert "Python 的 GIL" in loaded.title
 
+    def test_save_message_with_images_roundtrip(self):
+        conv = storage.create_conversation("vision")
+        paths = ["/tmp/a.png", "/tmp/b.jpg"]
+        msg = storage.save_message(conv.id, "user", "看图说话", images=paths)
+        assert msg.images == paths
+
+        loaded = storage.get_conversation(conv.id)
+        assert loaded is not None
+        user_msgs = [m for m in loaded.messages if m.role == "user"]
+        assert user_msgs[0].images == paths
+
+    def test_image_only_message_title(self):
+        conv = storage.create_conversation("vision")
+        storage.save_message(conv.id, "user", "", images=["/tmp/a.png"])
+        loaded = storage.get_conversation(conv.id)
+        assert loaded is not None
+        assert loaded.title == "[图片]"
+
     def test_messages_order(self):
         conv = storage.create_conversation("code_expert")
         storage.save_message(conv.id, "user", "Q1")

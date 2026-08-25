@@ -9,6 +9,7 @@ from typing import List
 import requests
 
 from ai_desktop import config
+from ai_desktop.utils import images as image_utils
 from ai_desktop.utils.storage import Message
 
 logger = logging.getLogger(__name__)
@@ -99,7 +100,11 @@ class ChatClient:
         if system_prompt:
             ollama_msgs.append({"role": "system", "content": system_prompt})
         for m in messages:
-            ollama_msgs.append({"role": m.role, "content": m.content})
+            msg: dict = {"role": m.role, "content": m.content}
+            images = getattr(m, "images", None)
+            if images:
+                msg["images"] = [image_utils.encode_image_base64(p) for p in images]
+            ollama_msgs.append(msg)
         return ollama_msgs
 
 

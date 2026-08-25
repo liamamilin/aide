@@ -1,8 +1,15 @@
 """LLM chat client tests — mock HTTP responses"""
+import base64
 import json
 from unittest.mock import MagicMock, patch
 
-from ai_desktop.llm.chat_client import ChatStream, list_models
+from ai_desktop.llm.chat_client import ChatClient, ChatStream, list_models
+from ai_desktop.utils.storage import Message
+
+# 1x1 透明 PNG
+_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+)
 
 
 def _fake_stream_response(lines: list[str]):
@@ -108,3 +115,34 @@ class TestListModels:
         with patch("requests.get", side_effect=req.exceptions.ConnectionError):
             models = list_models()
             assert models == []  # no models available
+
+
+class TestBuildOllamaMessages:
+    """_build_ollama_messages 多模态构建测试"""
+
+    def test_text_only_message(self):
+        client = ChatClient()
+        msgs = [Message(role="user", content="你好")]
+        built = client._build_ollama_messages(msgs)
+        assert len(built) == 1
+        assert built[0] == {"role": "user", "content": "你好"}
+        assert "images" not in built[0]
+
+    def test_message_with_images(self, tmp_path):
+        img = tmp_path / "shot.png"
+        img.write_bytes(_PNG_BYTES)
+
+        client = ChatClient()
+        msgs = [Message(role="user", content="这是什么", images=[str(img)])]
+        built = client._build_ollama_messages(msgs)
+        assert len(built) == 1
+        assert built[0]["role"] == "user"
+        assert built[0]["content"] == "这是什么"
+        assert built[0]["images"] == [base64.b64encode(_PNG_BYTES).decode("ascii")]
+
+    def test_system_prompt_prepended_and_unchanged(self):
+        client = ChatClient()
+        msgs = [Message(role="user", content="hi")]
+        built = client._build_ollama_messages(msgs, system_prompt="SYSTEM")
+        assert built[0] == {"role": "system", "content": "SYSTEM"}
+        assert built[1] == {"role": "user", "content": "hi"}

@@ -38,7 +38,8 @@ class TestChatDialogSignals:
         dialog._input.setPlainText("Hello world")
         with qtbot.waitSignal(dialog.message_sent, timeout=1000) as spy:
             dialog._on_send()
-        assert spy.args == ["Hello world"]
+        assert spy.args[0] == "Hello world"
+        assert spy.args[1] == []
 
     def test_send_clears_input(self, qtbot, dialog):
         dialog._input.setPlainText("Hello")

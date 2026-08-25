@@ -20,7 +20,8 @@ OLLAMA_THINK: bool = True           # 模型是否进行思考推理（对支持
 
 # ── 快捷键 ───────────────────────────────────────────
 
-HOTKEY: str = "<cmd>+<ctrl>+l"
+HOTKEY: str = "<cmd>+<ctrl>+l"          # 读取选中文字 → 提问
+SCREENSHOT_HOTKEY: str = "<cmd>+<ctrl>+s"  # 截图并发送到对话
 
 # ── 文本处理 ─────────────────────────────────────────
 

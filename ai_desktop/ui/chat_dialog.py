@@ -6,12 +6,14 @@ import logging
 
 import requests
 from PyQt5.QtCore import QEvent, QPoint, QRectF, Qt, QThread, QTimer, pyqtSignal
-from PyQt5.QtGui import QKeyEvent, QPainterPath, QRegion, QTextCursor
+from PyQt5.QtGui import QKeyEvent, QPainterPath, QPixmap, QRegion, QTextCursor
 from PyQt5.QtWidgets import (
     QApplication,
     QComboBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -26,12 +28,54 @@ from ai_desktop.config import Agent
 from ai_desktop.ui import markdown, styles
 from ai_desktop.ui.float_button import pin_to_all_spaces
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
+from ai_desktop.utils import images as image_utils
 
 logger = logging.getLogger(__name__)
 
 
+class _ChatInputEdit(QPlainTextEdit):
+    """输入框 —— 重写右键菜单以套用主题样式，并拦截粘贴/拖入的图片。"""
+
+    def contextMenuEvent(self, event) -> None:
+        menu = self.createStandardContextMenu()
+        menu.setStyleSheet(styles.MENU)
+        menu.exec_(event.globalPos())
+
+    def insertFromMimeData(self, source) -> None:
+        # 优先处理图片：粘贴剪贴板图片 / 拖入的图片文件
+        if source.hasImage():
+            img = source.imageData()
+            pixmap = img if isinstance(img, QPixmap) else QPixmap.fromImage(img)
+            if not pixmap.isNull() and hasattr(self, "_on_image_attach"):
+                self._on_image_attach(pixmap)
+            return
+        urls = source.urls()
+        if urls and hasattr(self, "_on_image_paths"):
+            paths = [u.toLocalFile() for u in urls if u.isLocalFile()]
+            if paths:
+                self._on_image_paths(paths)
+                return
+        super().insertFromMimeData(source)
+
+
+class _ClickableImage(QLabel):
+    """可点击的图片 Label（点击回调图片路径）"""
+
+    clicked = pyqtSignal(str)
+
+    def __init__(self, path: str, parent=None):
+        super().__init__(parent)
+        self._path = path
+        self.setCursor(Qt.PointingHandCursor)
+
+    def mousePressEvent(self, event) -> None:
+        self.clicked.emit(self._path)
+        super().mousePressEvent(event)
+
+
 class ChatDialog(FramelessDragMixin, QWidget):
-    message_sent = pyqtSignal(str)
+    message_sent = pyqtSignal(str, list)     # (text, image_paths)
+    screenshot_requested = pyqtSignal()
     new_convo_requested = pyqtSignal()
     history_requested = pyqtSignal()
     export_requested = pyqtSignal()
@@ -53,6 +97,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._models = list(models) if models else []
         self._active_model = active_model
         self._user_scrolled_up: bool = False
+        self._pending_images: list[str] = []     # 发送前暂存的图片（应用数据目录路径）
         self._stream_bubble: QLabel | None = None
         self._stream_copy_btn: QPushButton | None = None
         self._stream_text: str = ""
@@ -88,6 +133,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         w, h = self._default_size()
         self.setMinimumSize(400, 460)
         self.resize(w, h)
+        self.setAcceptDrops(True)
         self._apply_rounded_mask()
         self.setStyleSheet(styles.CHAT_DIALOG_ROOT)
 
@@ -219,6 +265,15 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._scroll.verticalScrollBar().valueChanged.connect(self._on_scroll_changed)
         root.addWidget(scroll, stretch=1)
 
+        # ── 图片预览行（发送前暂存已附图片）──
+        self._image_preview = QWidget()
+        self._image_preview.setStyleSheet("background: transparent;")
+        self._image_preview.setVisible(False)
+        self._preview_layout = QHBoxLayout(self._image_preview)
+        self._preview_layout.setContentsMargins(8, 4, 8, 4)
+        self._preview_layout.setSpacing(6)
+        root.addWidget(self._image_preview)
+
         # ── 输入区域 ──
         input_row = QHBoxLayout()
         input_row.setContentsMargins(0, 0, 0, 0)
@@ -230,12 +285,31 @@ class ChatDialog(FramelessDragMixin, QWidget):
         il.setContentsMargins(8, 6, 8, 6)
         il.setSpacing(6)
 
-        self._input = QPlainTextEdit()
-        self._input.setPlaceholderText("输入消息... (Enter 发送, Shift+Enter 换行)")
+        self._input = _ChatInputEdit()
+        self._input.setPlaceholderText("输入消息... (Enter 发送, Shift+Enter 换行, ⌘V 粘贴图片)")
         self._input.setFixedHeight(36)
         self._input.setStyleSheet(styles.INPUT_AREA)
         self._input.installEventFilter(self)
         self._input.textChanged.connect(self._on_input_text_changed)
+        self._input._on_image_attach = self._attach_pixmap
+        self._input._on_image_paths = self._attach_image_paths
+
+        # 图片附件按钮（📎 菜单：选择文件 / 截图 / 粘贴剪贴板图片）
+        attach_btn = QPushButton("📎")
+        attach_btn.setFixedSize(28, 36)
+        attach_btn.setStyleSheet(styles.ICON_BUTTON)
+        attach_btn.setToolTip("添加图片")
+        attach_menu = QMenu(attach_btn)
+        attach_menu.setStyleSheet(styles.MENU)
+        a_file = attach_menu.addAction("选择图片文件…")
+        a_shot = attach_menu.addAction("截图…")
+        a_paste = attach_menu.addAction("粘贴剪贴板图片")
+        a_file.triggered.connect(self._pick_image_files)
+        a_shot.triggered.connect(self.screenshot_requested.emit)
+        a_paste.triggered.connect(self._paste_clipboard_image)
+        attach_btn.setMenu(attach_menu)
+        il.addWidget(attach_btn)
+
         il.addWidget(self._input, stretch=1)
 
         self._send_btn = QPushButton("发送")
@@ -359,7 +433,12 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     def flash_busy(self) -> None:
         self._input.setPlaceholderText("⏳ 等待回复完成...")
-        QTimer.singleShot(1500, lambda: self._input.setPlaceholderText("输入消息... (Enter 发送, Shift+Enter 换行)"))
+        QTimer.singleShot(
+            1500,
+            lambda: self._input.setPlaceholderText(
+                "输入消息... (Enter 发送, Shift+Enter 换行, ⌘V 粘贴图片)"
+            ),
+        )
 
     def flash_export_btn(self) -> None:
         self._export_btn.setText("✅ 已复制")
@@ -367,12 +446,136 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     def _on_send(self) -> None:
         text = normalize(self._input.toPlainText())
-        if not text:
+        images = list(self._pending_images)
+        if not text and not images:
             return
-        self.message_sent.emit(text)
+        self.message_sent.emit(text, images)
         self._input.clear()
         self.add_input_history(text)
         self._exit_input_browsing()
+        self.clear_pending_images()
+
+    # ── 图片附件 ───────────────────────────────────────
+
+    def attach_image_paths(self, paths: list[str]) -> None:
+        """外部（截图/历史恢复）传入图片文件路径：复制到应用数据目录并加入待发列表。"""
+        for p in paths:
+            try:
+                if not p or not image_utils.is_image_file(p):
+                    continue
+                stored = image_utils.store_image(p)
+                if stored not in self._pending_images:
+                    self._pending_images.append(stored)
+            except Exception:
+                logger.exception("Failed to attach image %s", p)
+        self._refresh_image_preview()
+
+    def _attach_image_paths(self, paths: list[str]) -> None:
+        self.attach_image_paths(paths)
+
+    def _attach_pixmap(self, pixmap) -> None:
+        try:
+            if pixmap.isNull():
+                return
+            stored = image_utils.store_pixmap(pixmap)
+            if stored not in self._pending_images:
+                self._pending_images.append(stored)
+            self._refresh_image_preview()
+        except Exception:
+            logger.exception("Failed to attach pasted pixmap")
+
+    def _pick_image_files(self) -> None:
+        files, _ = QFileDialog.getOpenFileNames(
+            self, "选择图片", "",
+            "图片 (*.png *.jpg *.jpeg *.gif *.webp *.bmp *.tiff *.heic);;所有文件 (*)",
+        )
+        if files:
+            self.attach_image_paths(files)
+
+    def _paste_clipboard_image(self) -> None:
+        img = QApplication.clipboard().image()
+        if img.isNull():
+            return
+        pix = QPixmap.fromImage(img)
+        self._attach_pixmap(pix)
+
+    def clear_pending_images(self) -> None:
+        self._pending_images = []
+        self._refresh_image_preview()
+
+    def _refresh_image_preview(self) -> None:
+        layout = self._preview_layout
+        while layout.count():
+            item = layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+        if not self._pending_images:
+            self._image_preview.setVisible(False)
+            return
+        for idx, path in enumerate(self._pending_images):
+            item = QWidget()
+            item.setFixedSize(64, 64)
+            il = QVBoxLayout(item)
+            il.setContentsMargins(0, 0, 0, 0)
+            il.setSpacing(0)
+            thumb = QLabel()
+            pix = QPixmap(path)
+            if not pix.isNull():
+                thumb.setPixmap(
+                    pix.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                )
+            thumb.setStyleSheet("border-radius: 4px;")
+            il.addWidget(thumb, 1)
+            rm = QPushButton("✕")
+            rm.setFixedSize(16, 16)
+            rm.setStyleSheet(
+                "QPushButton { background: rgba(0,0,0,0.6); color: white; border: none;"
+                " border-radius: 8px; font-size: 9px; }"
+                "QPushButton:hover { background: #ff3b30; }"
+            )
+            rm.clicked.connect(lambda checked, i=idx: self._remove_pending_image(i))
+            il.addWidget(rm, alignment=Qt.AlignTop | Qt.AlignRight)
+            layout.addWidget(item)
+        self._image_preview.setVisible(True)
+
+    def _remove_pending_image(self, idx: int) -> None:
+        if 0 <= idx < len(self._pending_images):
+            del self._pending_images[idx]
+            self._refresh_image_preview()
+
+    def get_pending_images(self) -> list[str]:
+        return list(self._pending_images)
+
+    # ── 拖拽图片文件到对话窗口 ─────────────────────────
+
+    def dragEnterEvent(self, event) -> None:
+        md = event.mimeData()
+        if md.hasUrls() or md.hasImage():
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:
+        md = event.mimeData()
+        if md.hasUrls() or md.hasImage():
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event) -> None:
+        md = event.mimeData()
+        if md.hasUrls():
+            paths = [u.toLocalFile() for u in md.urls() if u.isLocalFile()]
+            self.attach_image_paths(paths)
+            event.acceptProposedAction()
+        elif md.hasImage():
+            img = md.imageData()
+            pix = img if isinstance(img, QPixmap) else QPixmap.fromImage(img)
+            self._attach_pixmap(pix)
+            event.acceptProposedAction()
+        else:
+            super().dropEvent(event)
 
     def _adjust_input_height(self) -> None:
         doc = self._input.document()
@@ -402,8 +605,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
             self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_ERR)
             self._ollama_dot.setToolTip("Ollama 未连接")
 
-    def add_user_message(self, text: str) -> None:
-        bubble = self._make_bubble(text, is_user=True)
+    def add_user_message(self, text: str, images: list[str] | None = None) -> None:
+        bubble = self._make_bubble(text, is_user=True, images=images)
         self._insert_widget(bubble)
 
     def add_assistant_message(self, text: str) -> None:
@@ -552,12 +755,14 @@ class ChatDialog(FramelessDragMixin, QWidget):
             item = self._msg_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+        self.clear_pending_images()
 
     # ── 气泡 ───────────────────────────────────────────
 
     def _make_bubble(
         self, content: str, is_user: bool, is_html: bool = False,
         code_map: dict[str, str] | None = None,
+        images: list[str] | None = None,
     ) -> QWidget:
         wrapper = QWidget()
         wrapper.setStyleSheet("background: transparent;")
@@ -580,6 +785,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
             v_layout = QVBoxLayout()
             v_layout.setContentsMargins(0, 0, 0, 0)
             v_layout.setSpacing(2)
+            if images:
+                v_layout.addWidget(self._build_bubble_images(images))
             v_layout.addWidget(lbl)
 
             btn_bar = QWidget()
@@ -649,6 +856,51 @@ class ChatDialog(FramelessDragMixin, QWidget):
             lbl.setText(content)
 
         return wrapper
+
+    def _build_bubble_images(self, images: list[str]) -> QWidget:
+        """构建气泡内图片展示区（缩略横排，点击可放大查看）"""
+        box = QWidget()
+        box.setStyleSheet("background: transparent;")
+        bl = QHBoxLayout(box)
+        bl.setContentsMargins(0, 0, 0, 0)
+        bl.setSpacing(6)
+        for path in images:
+            thumb = _ClickableImage(path)
+            pix = QPixmap(path)
+            if pix.isNull():
+                continue
+            thumb.setPixmap(
+                pix.scaled(160, 160, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+            thumb.setStyleSheet(
+                "border-radius: 6px; border: 1px solid rgba(255,255,255,0.25);"
+            )
+            thumb.clicked.connect(self._view_image_full)
+            bl.addWidget(thumb, alignment=Qt.AlignLeft)
+        return box
+
+    @staticmethod
+    def _view_image_full(path: str) -> None:
+        """在新窗口预览大图（查看图片详情）"""
+        try:
+            from PyQt5.QtWidgets import QDialog, QScrollArea
+            dlg = QDialog()
+            dlg.setWindowTitle("图片预览")
+            dlg.setWindowFlag(Qt.WindowStaysOnTopHint)
+            dlg.setMinimumSize(300, 300)
+            label = QLabel()
+            pix = QPixmap(path)
+            if pix.isNull():
+                return
+            label.setPixmap(pix)
+            scroll = QScrollArea()
+            scroll.setWidget(label)
+            lay = QVBoxLayout(dlg)
+            lay.addWidget(scroll)
+            dlg.resize(min(pix.width(), 900) + 40, min(pix.height(), 900) + 40)
+            dlg.exec_()
+        except Exception:
+            pass
 
     # ── hover 显示复制按钮 ─────────────────────────────
 

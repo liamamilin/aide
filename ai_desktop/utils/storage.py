@@ -10,7 +10,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +84,8 @@ def init_db() -> None:
         )
         """
     )
+    # 图片理解：用户消息可附带图片（存储为应用数据目录下的绝对路径列表）
+    _ensure_column(db, "messages", "images", "TEXT NOT NULL DEFAULT '[]'")
     db.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_messages_conversation
@@ -101,12 +103,21 @@ def init_db() -> None:
     db.commit()
 
 
+def _ensure_column(db, table: str, column: str, definition: str) -> None:
+    """若列不存在则 ALTER TABLE 添加（SQLite 迁移，幂等）。"""
+    cols = {r["name"] for r in db.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in cols:
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        db.commit()
+
+
 @dataclass
 class Message:
     role: str  # user / assistant
     content: str
     id: int = 0
     created_at: float = 0.0
+    images: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -195,32 +206,53 @@ def delete_conversation(convo_id: int) -> None:
     db.commit()
 
 
-def save_message(convo_id: int, role: str, content: str) -> Message:
+def save_message(convo_id: int, role: str, content: str, images: Optional[List[str]] = None) -> Message:
     db = _conn()
     now = time.time()
+    images_json = json.dumps(images or [], ensure_ascii=False)
     cur = db.execute(
-        "INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)",
-        (convo_id, role, content, now),
+        "INSERT INTO messages (conversation_id, role, content, images, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (convo_id, role, content, images_json, now),
     )
 
     # 第一条用户消息作为对话标题
     if role == "user":
         count = db.execute("SELECT COUNT(*) FROM messages WHERE conversation_id=?", (convo_id,)).fetchone()[0]
         if count == 1:
-            title = content[:40].replace("\n", " ")
+            title = (content or "[图片]")[:40].replace("\n", " ")
             db.execute("UPDATE conversations SET title=? WHERE id=?", (title, convo_id))
 
     db.commit()
-    return Message(id=cur.lastrowid, role=role, content=content, created_at=now)
+    return Message(id=cur.lastrowid, role=role, content=content, created_at=now, images=images or [])
 
 
 def _load_messages(convo_id: int) -> list[Message]:
     db = _conn()
     rows = db.execute(
-        "SELECT id, role, content, created_at FROM messages WHERE conversation_id=? ORDER BY id ASC",
+        "SELECT id, role, content, created_at, images FROM messages WHERE conversation_id=? ORDER BY id ASC",
         (convo_id,),
     ).fetchall()
-    return [Message(id=r["id"], role=r["role"], content=r["content"], created_at=r["created_at"]) for r in rows]
+    return [
+        Message(
+            id=r["id"],
+            role=r["role"],
+            content=r["content"],
+            created_at=r["created_at"],
+            images=_parse_images(r["images"]),
+        )
+        for r in rows
+    ]
+
+
+def _parse_images(raw) -> list[str]:
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        return [str(p) for p in data] if isinstance(data, list) else []
+    except (json.JSONDecodeError, TypeError):
+        return []
 
 
 def list_input_history(limit: int = 100) -> list[str]:
