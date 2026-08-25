@@ -90,6 +90,12 @@ def _generate() -> dict[str, str]:
         f"QDialog {{ background: {c.window}; color: {c.text}; border: none; border-radius: 10px; }}"
     )
 
+    # ── 对话框主体面板（半透明窗口下铺满背景，避免穿透）──
+    s["DIALOG_BODY"] = (
+        f"background: {c.window}; border: none; "
+        f"border-bottom-left-radius: 10px; border-bottom-right-radius: 10px;"
+    )
+
     # ── 删除按钮 ──
     s["DELETE_BUTTON"] = (
         f"QPushButton {{ background: {c.button}; border: 1px solid {c.border}; border-radius: 4px;"

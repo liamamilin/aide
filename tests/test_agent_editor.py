@@ -131,3 +131,36 @@ class TestAgentEditorDataFlow:
         dialog._refresh()
         # After refresh, should have 3 agents (2 builtin + 1 custom) + stretch
         assert dialog._list_layout.count() >= 3
+
+
+# ── 新增/编辑弹窗 ─────────────────────────────────────
+
+class TestAgentEditDialog:
+    """Verify the '新增 Agent' modal constructs correctly with opaque body."""
+
+    def test_constructs_with_defaults(self, qtbot):
+        """Dialog should construct and expose default field values."""
+        from ai_desktop.ui.agent_editor import AgentDef, _AgentEditDialog
+        dlg = _AgentEditDialog(
+            "新增 Agent",
+            AgentDef(id="", name="", icon="🤖", system_prompt=""),
+        )
+        qtbot.addWidget(dlg)
+        assert dlg.name() == ""
+        assert dlg.icon_text() == "🤖"
+        assert dlg.prompt() == ""
+
+    def test_has_opaque_body(self, qtbot):
+        """Body panel must carry DIALOG_BODY style so no see-through gaps."""
+        from ai_desktop.ui import styles
+        from ai_desktop.ui.agent_editor import AgentDef, _AgentEditDialog
+        dlg = _AgentEditDialog(
+            "新增 Agent",
+            AgentDef(id="", name="", icon="🤖", system_prompt=""),
+        )
+        qtbot.addWidget(dlg)
+        from PyQt5.QtWidgets import QWidget
+        bodies = [w for w in dlg.findChildren(QWidget)
+                  if w.styleSheet() and "border-bottom-left-radius" in w.styleSheet()]
+        assert bodies, "body widget with DIALOG_BODY style missing"
+        assert bodies[0].styleSheet() == styles.DIALOG_BODY

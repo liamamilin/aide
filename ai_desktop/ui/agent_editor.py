@@ -235,6 +235,13 @@ class _AgentEditDialog(FramelessDragMixin, QDialog):
         tl2.addWidget(cb)
         root.addWidget(tbar)
 
+        # 主体面板（不透明背景，避免半透明窗口下间隙穿透）
+        body = QWidget()
+        body.setStyleSheet(styles.DIALOG_BODY)
+        broot = QVBoxLayout(body)
+        broot.setContentsMargins(0, 0, 0, 0)
+        broot.setSpacing(0)
+
         # 表单
         form = QVBoxLayout()
         form.setContentsMargins(16, 12, 16, 12)
@@ -269,7 +276,7 @@ class _AgentEditDialog(FramelessDragMixin, QDialog):
         self._prompt.setStyleSheet(styles.FORM_TEXTAREA)
         form.addWidget(self._prompt, stretch=1)
 
-        root.addLayout(form)
+        broot.addLayout(form)
 
         # 按钮
         bb = QHBoxLayout()
@@ -286,7 +293,9 @@ class _AgentEditDialog(FramelessDragMixin, QDialog):
         save.clicked.connect(self._on_save)
         bb.addWidget(save)
 
-        root.addLayout(bb)
+        broot.addLayout(bb)
+
+        root.addWidget(body)
 
     def _on_save(self) -> None:
         if not self._name.text().strip():
