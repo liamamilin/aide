@@ -1,5 +1,7 @@
-<h1 align="center">AI 桌面助手</h1>
-<p align="center"><em>macOS 常驻 AI 助手 — 选中文字 → <code>⌘⌃L</code> → 一键提问，本地 LLM 零上传。</em></p>
+<h1 align="center">AI Desktop Assistant</h1>
+<p align="center"><em>Always-on AI assistant for macOS — select text → <code>⌘⌃L</code> → ask in one keystroke, or press <code>⌘⌃S</code> to capture a screenshot region and ask. Local LLM, zero uploads.</em></p>
+
+<p align="center"><a href="README.zh.md">中文</a> | <strong>English</strong></p>
 
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![PyQt5](https://img.shields.io/badge/UI-PyQt5-green.svg)](https://pypi.org/project/PyQt5/)
@@ -8,221 +10,251 @@
 
 ---
 
-## 三入口
+## Three Ways to Open
 
-| 入口 | 交互 |
-|------|------|
-| **快捷键** `⌘⌃L` | 任意 App 选中文字 → 按快捷键 → 自动填入对话框 |
-| **悬浮按钮** | 屏幕右侧圆形图标，左键开关对话框，右键菜单 |
-| **菜单栏图标** | macOS 菜单栏常驻，左键开关对话框，右键快速切换 Agent |
+| Entrance | Interaction |
+|----------|-------------|
+| **Hotkey** `⌘⌃L` | Select text in any app → press the hotkey → text is auto-filled into the dialog |
+| **Floating button** | Circular icon on the right edge of the screen; left-click to toggle the dialog, right-click for the menu |
+| **Menu bar icon** | Persistent in the macOS menu bar; left-click to toggle the dialog, right-click to switch agents quickly |
 
 ---
 
-## 下载安装
+## Installation
 
-### 方式一：DMG 安装（推荐）
+### Option 1: DMG Install (Recommended)
 
-1. 前往 [Releases](https://github.com/liamamilin/aide/releases) 下载最新 `AI桌面助手-v*.dmg`
-2. 双击 DMG，将 `AI桌面助手` 拖入 Applications
-3. 首次启动需在系统设置 → 隐私与安全性中允许运行
-4. 确保 [Ollama](https://ollama.com) 已安装并运行
+1. Download the latest `AI桌面助手-v*.dmg` from [Releases](https://github.com/liamamilin/aide/releases)
+2. Double-click the DMG and drag `AI桌面助手` into Applications
+3. On first launch, allow it to run in System Settings → Privacy & Security
+4. Make sure [Ollama](https://ollama.com) is installed and running
 
-### 方式二：源码安装
+### Option 2: From Source
 
-**前置条件**：[Ollama](https://ollama.com) 已安装并拉取模型：
+**Prerequisites**: [Ollama](https://ollama.com) installed with a model pulled:
 
 ```bash
 ollama serve
 ollama pull qwen3:14b
 ```
 
-**安装**：
+**Install**:
 
 ```bash
 cd /path/to/AI桌面助手
 pip install -e .
 ```
 
-**开发**（运行测试需要）：
+**Development** (required to run tests):
 
 ```bash
 pip install -r requirements-dev.txt
 ```
 
-**启动**：
+**Run**:
 
 ```bash
 aide
 ```
 
-**构建 `.app` 安装包**（需要 PyInstaller）：
+**Build the `.app` bundle** (requires PyInstaller):
 
 ```bash
-# 快速构建（清理 → 构建 → 签名）
+# Quick build (clean → build → sign)
 ./scripts/build.sh
 
-# 构建前跑 ruff + pytest
+# Run ruff + pytest before building
 ./scripts/build.sh --test
 
-# 构建 + 冒烟测试
+# Build + smoke test
 ./scripts/build.sh --smoke
 
-# 构建 + 生成 DMG 安装包
+# Build + generate DMG
 ./scripts/build.sh --dmg
 
-# 全套
+# Everything
 ./scripts/build.sh --test --smoke --dmg
 ```
 
 ---
 
-## 功能特性
+## Features
 
-### 对话
-- **流式输出** — token 级实时渲染，50ms 批量刷新
-- **思考过程** — LLM 推理过程实时展示，完成后折叠为 `💭 思考过程`
-- **Markdown 渲染** — 代码块、列表、粗体、标题完整支持，标题使用强调色蓝色
-- **多轮对话** — 追问、修正，SQLite 持久化
-- **中断 ⏹** — 流式生成时可随时停止
-- **编辑 ✏️** — 用户消息 hover 可见编辑按钮，点击回填输入框重新发送
-- **复制 📋** — 助手回复 hover 可见复制按钮
-- **输入框自动伸缩** — 多行输入时高度自动从 36px 扩至 120px，超长可滚动
-- **导出** — 一键复制整段对话为 Markdown
-- **通知** — 回复完成时，若窗口在后台则弹 macOS 通知
+### Chat
+- **Streaming output** — token-level real-time rendering, batched at 50ms
+- **Thinking process** — LLM reasoning shown live, collapsed into `💭 Thinking` when complete
+- **Markdown rendering** — code blocks, lists, bold, headings; headings use the accent blue
+- **Multi-turn conversation** — follow-ups and corrections, persisted in SQLite
+- **Image understanding (multimodal)** — send images by pasting, drag-and-drop, 📎 attach, or `⌘⌃S` region screenshot; images persist with the conversation and can be clicked for a full view. Select a vision-capable multimodal model (e.g. `llava`, `qwen2.5vl`) in the model dropdown; images are processed locally only
+- **Interrupt ⏹** — stop streaming generation at any time
+- **Edit ✏️** — hover a user message for the edit button; click to refill the input and resend
+- **Copy 📋** — hover an assistant reply for the copy button
+- **Auto-growing input** — height grows from 36px to 120px on multi-line input, scrollable when long
+- **Export** — copy the whole conversation as Markdown in one click
+- **Notifications** — macOS notification when a reply finishes while the window is in the background
 
 ### Agent
-- **5 个内置 Agent**：代码专家 💻 / 翻译 🌐 / 通用助手 🤖 / 摘要 📄 / 润色 ✍️
-- **自定义 Agent** — 新增/编辑/删除，自定义 emoji 图标和 prompt
-- **菜单栏快速切换** — 菜单栏图标右键菜单直接切换 Agent
+- **5 built-in agents**: Code Expert 💻 / Translator 🌐 / General Assistant 🤖 / Summarizer 📄 / Polisher ✍️
+- **Custom agents** — create / edit / delete with custom emoji icon and prompt
+- **Quick switch from menu bar** — switch agents directly from the menu bar icon's right-click menu
 
-### 历史
-- **对话浏览** — 打开历史窗口，显示所有对话及消息数
-- **全文搜索** — 搜索对话标题和消息内容，300ms 防抖
-- **删除/加载** — 从历史加载对话，或删除不需要的
+### History
+- **Browse conversations** — open the history window to see all conversations with message counts
+- **Full-text search** — search conversation titles and message contents, 300ms debounce
+- **Delete / Load** — load a conversation from history, or delete the ones you don't need
 
-### 设置
-- **运行时配置** — 右键悬浮按钮 → 设置… → 修改 Ollama 地址、超时、上下文窗口、快捷键
-- **持久化** — 所有设置、Agent、模型选择重启后保留
-- **自动恢复** — 启动时自动加载上次对话，保留用户选择的 Agent
-
----
-
-## 配置
-
-运行时通过**设置面板**修改，或编辑 `ai_desktop/config.py`：
-
-| 配置项 | 默认值 | 说明 |
-|--------|--------|------|
-| `OLLAMA_MODEL` | `sorc/qwen3.5-instruct-uncensored:9b` | 默认模型（不存在时自动切到第一个可用模型） |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama 服务地址 |
-| `HOTKEY` | `<cmd>+<ctrl>+l` | 全局快捷键 |
-| `OLLAMA_NUM_PREDICT` | `20480` | 最大输出 token |
-| `OLLAMA_NUM_CTX` | `8192` | 上下文窗口 |
-| `OLLAMA_TEMPERATURE` | `0.7` | 生成温度（0.0 ~ 2.0） |
-| `OLLAMA_TOP_P` | `0.9` | 核采样阈值 |
-| `OLLAMA_TOP_K` | `40` | Top-K 采样 |
-| `OLLAMA_REPEAT_PENALTY` | `1.1` | 重复惩罚系数 |
-| `OLLAMA_THINK` | `True` | 模型思考推理开关 |
-| `OLLAMA_MAX_ROUNDS` | `10` | 保留的最大对话轮次 |
-| `OLLAMA_KEEP_ALIVE` | `30m` | 模型驻留时长 |
-| `OLLAMA_TIMEOUT` | `120` | HTTP 超时（秒） |
-
-快捷键格式：`<cmd>`, `<shift>`, `<ctrl>`, `<alt>`。不要用 `<fn>` 或 `<option>`。
+### Settings
+- **Runtime configuration** — right-click the floating button → Settings… → change Ollama URL, timeout, context window, hotkeys
+- **Persistence** — all settings, agents, and model selection survive restarts
+- **Auto-restore** — loads the last conversation on startup, keeping your selected agent
 
 ---
 
-## 故障排除
+## Configuration
 
-### 弹窗出现但输入框为空
+Change at runtime via the **Settings panel**, or edit `ai_desktop/config.py`:
 
-日志中出现 `This process is not trusted!` 或 `Clipboard unchanged after Cmd+C`：
+| Key | Default | Description |
+|-----|---------|-------------|
+| `OLLAMA_MODEL` | `sorc/qwen3.5-instruct-uncensored:9b` | Default model (falls back to the first available model if missing) |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama service URL |
+| `HOTKEY` | `<cmd>+<ctrl>+l` | Global hotkey |
+| `OLLAMA_NUM_PREDICT` | `20480` | Max output tokens |
+| `OLLAMA_NUM_CTX` | `8192` | Context window |
+| `OLLAMA_TEMPERATURE` | `0.7` | Generation temperature (0.0 ~ 2.0) |
+| `OLLAMA_TOP_P` | `0.9` | Nucleus sampling threshold |
+| `OLLAMA_TOP_K` | `40` | Top-K sampling |
+| `OLLAMA_REPEAT_PENALTY` | `1.1` | Repetition penalty |
+| `OLLAMA_THINK` | `True` | Model thinking / reasoning toggle |
+| `OLLAMA_MAX_ROUNDS` | `10` | Max conversation rounds kept |
+| `OLLAMA_KEEP_ALIVE` | `30m` | Model keep-alive duration |
+| `OLLAMA_TIMEOUT` | `120` | HTTP timeout (seconds) |
+| `SCREENSHOT_HOTKEY` | `<cmd>+<ctrl>+s` | Region screenshot sent to the conversation (requires Screen Recording permission) |
 
-> macOS 辅助功能权限未授权。
-
-**解决**：系统设置 → 隐私与安全性 → 辅助功能 → 勾选终端应用，必要时取消重勾刷新缓存。
-
-### 启动后无响应
-
-检查 Ollama：`curl http://localhost:11434/api/tags`，或输入栏右侧状态灯 🔴 → 🟢。
+Hotkey syntax: `<cmd>`, `<shift>`, `<ctrl>`, `<alt>`. Do not use `<fn>` or `<option>`.
 
 ---
 
-## 项目结构
+## Troubleshooting
+
+### Dialog opens but the input is empty
+
+Logs contain `This process is not trusted!` or `Clipboard unchanged after Cmd+C`:
+
+> macOS Accessibility permission not granted.
+
+**Fix**: System Settings → Privacy & Security → Accessibility → enable your terminal app; if needed, uncheck and re-check to refresh the cache.
+
+### No response after launch
+
+Check Ollama: `curl http://localhost:11434/api/tags`, or watch the status dot 🔴 → 🟢 next to the input bar.
+
+### Screenshot fails or nothing happens
+
+Clicking 📎 → Screenshot or pressing `⌘⌃S` shows "Screenshot failed" / nothing happens:
+
+> macOS Screen Recording permission not granted.
+
+**Fix**: System Settings → Privacy & Security → Screen Recording → enable "AI 桌面助手" (or "Terminal" in dev mode), then restart the app. The app pops up a guide when the permission is missing and can jump straight to the settings page.
+
+### Model doesn't understand image content after sending
+
+The current model doesn't support vision (multimodal). **Fix**: switch to a vision model (e.g. `llava`, `qwen2.5vl`) in the dropdown and resend.
+
+---
+
+## Project Structure
 
 ```
 ai_desktop/
-├── main.py                     # 入口 + ChatController
-├── config.py                   # LLM/快捷键/Agent 配置
-├── __main__.py                 # python -m ai_desktop 支持
-├── settings_manager.py         # 配置持久化加载/应用
-├── agent_manager.py            # Agent 列表管理/切换/保存
+├── main.py                     # Entry point + ChatController
+├── config.py                   # LLM / hotkey / agent config
+├── __main__.py                 # python -m ai_desktop support
+├── settings_manager.py         # Persisted config load / apply
+├── agent_manager.py            # Agent list management / switch / save
 ├── capture/
-│   ├── hotkey_listener.py      # pynput 全局快捷键（dev 模式）
-│   ├── nsevent_monitor.py      # NSEvent 全局监听（frozen 模式）
-│   ├── clipboard_monitor.py    # ⌘C 模拟 → 读取 → 恢复（双回退）
-│   └── text_normalizer.py      # 文本清洗 + 截断
+│   ├── hotkey_listener.py      # pynput global hotkeys (dev mode)
+│   ├── nsevent_monitor.py      # NSEvent global listener (frozen mode)
+│   ├── screenshot.py           # screencapture region capture (permission error detection)
+│   ├── clipboard_monitor.py    # ⌘C simulate → read → restore (dual fallback)
+│   └── text_normalizer.py      # text cleaning + truncation
 ├── llm/
-│   └── chat_client.py          # Ollama /api/chat（流式 + thinking）
+│   └── chat_client.py          # Ollama /api/chat (streaming + thinking + multimodal images)
 ├── ui/
-│   ├── float_button.py         # 悬浮圆形按钮（拖拽/跨屏/右键）
-│   ├── menubar_icon.py         # macOS 菜单栏图标 + Agent 菜单
-│   ├── chat_dialog.py          # 多轮对话 + 快捷键 + 复制/编辑/中断
-│   ├── history_dialog.py       # 历史浏览 + 全文搜索
-│   ├── agent_editor.py         # Agent 管理（增删改 + emoji 选择）
-│   ├── settings_dialog.py      # 运行时设置面板
+│   ├── float_button.py         # floating circular button (drag / cross-screen / right-click)
+│   ├── menubar_icon.py         # macOS menu bar icon + agent menu
+│   ├── chat_dialog.py          # multi-turn chat + hotkeys + copy/edit/interrupt + image send/receive
+│   ├── history_dialog.py       # history browsing + full-text search
+│   ├── agent_editor.py         # agent management (add/edit/delete + emoji picker)
+│   ├── settings_dialog.py      # runtime settings panel
 │   ├── markdown.py             # Markdown → HTML
-│   ├── styles.py               # QSS 常量（43 条集中管理，懒加载）
-│   ├── theme.py                # ColorSet 显式亮/暗色值
+│   ├── styles.py               # centralized QSS constants (48, lazy-loaded)
+│   ├── theme.py                # explicit light/dark ColorSet values
 │   ├── frameless_mixin.py      # FramelessDragMixin + TitleBar
 │   └── __init__.py
 ├── utils/
-│   ├── logging.py              # 日志配置
-│   ├── storage.py              # SQLite 持久化（对话/消息/设置/Agent）
-│   └── permissions.py          # AX + 输入监听权限检测/请求
+│   ├── images.py               # image storage / base64 / type detection
+│   ├── logging.py              # logging config
+│   ├── storage.py              # SQLite persistence (conversations/messages/settings/agents/image paths)
+│   └── permissions.py          # Accessibility + Input Monitoring permission check/request
 └── scripts/
-    └── aide.spec               # PyInstaller 打包配置
+    └── aide.spec               # PyInstaller packaging config
 tests/
-├── conftest.py                 # 共享 fixture（qapp, mocker）
-├── test_smoke.py               # 文本规范化 + Markdown 渲染（5 项）
-├── test_storage.py             # DB CRUD 测试（12 项）
-├── test_chat_client.py         # 流式解析测试（9 项）
-├── test_main_entry.py          # python -m 入口测试（1 项）
-├── test_settings_manager.py    # 配置加载/应用/验证（8 项）
-├── test_agent_manager.py       # Agent 初始化/切换/保存（7 项）
-├── test_chat_dialog.py         # 对话窗口信号/状态/数据流（19 项）
-├── test_settings_dialog.py     # 设置面板验证/信号（6 项）
-├── test_history_dialog.py      # 历史加载/搜索/删除（6 项）
-├── test_agent_editor.py        # Agent 编辑器 CRUD（8 项）
-├── test_float_button.py        # 悬浮按钮菜单/信号（8 项）
-└── test_menubar_icon.py        # 菜单栏 Agent 菜单/信号（8 项）
+├── conftest.py                 # shared fixtures (qapp, mocker)
+├── test_smoke.py               # text normalization + Markdown rendering (5)
+├── test_storage.py             # DB CRUD + image round-trip (23)
+├── test_chat_client.py         # stream parsing + multimodal message building (12)
+├── test_main_entry.py          # python -m entry point (1)
+├── test_settings_manager.py    # config load/apply/validate (8)
+├── test_agent_manager.py       # agent init/switch/save (10)
+├── test_chat_dialog.py         # chat window signals/state/image attachments (42)
+├── test_settings_dialog.py     # settings panel validation/signals (6)
+├── test_history_dialog.py      # history load/search/delete (6)
+├── test_agent_editor.py        # agent editor CRUD + add-dialog (10)
+├── test_float_button.py        # floating button menu/signals (8)
+├── test_menubar_icon.py        # menu bar agent menu/signals (9)
+├── test_images.py              # image storage/base64 (5)
+├── test_screenshot.py          # screenshot success/cancel/permission error (4)
+├── test_menu_contrast.py       # menu selected-item contrast (4)
+├── test_theme.py               # light/dark ColorSet contrast (8)
+├── test_frameless_mixin.py     # drag / frameless (2)
+├── test_clipboard_monitor.py   # clipboard capture (2)
+├── test_hotkey_listener.py     # hotkey parsing/registration (3)
+├── test_nsevent_monitor.py     # NSEvent backend (7)
+├── test_permissions.py         # permission detection (4)
+├── test_update_checker.py      # update checking (9)
+└── test_crash_handler.py       # crash diagnostics (2)
 ```
 
 ---
 
-## 测试
+## Testing
 
-项目包含 **143 项自动化测试**，覆盖 UI 信号/状态、数据层、工具函数和入口：
+The project has **190 automated tests** covering UI signals/state, the data layer, utilities, and the entry point:
 
 ```bash
-# 安装开发依赖
+# Install dev dependencies
 pip install -r requirements-dev.txt
 
-# 运行全部测试
-pytest tests/ -v    # 143 项测试
+# Run all tests
+pytest tests/ -v    # 190 tests
 
-# 按类别运行
-pytest tests/test_chat_dialog.py -v        # 对话窗口（19 项）
-pytest tests/test_storage.py -v            # 数据库（12 项）
-pytest tests/test_settings_manager.py -v   # 配置管理（8 项）
-pytest tests/test_agent_manager.py -v      # Agent 管理（7 项）
-pytest tests/test_settings_dialog.py -v    # 设置面板（6 项）
-pytest tests/test_history_dialog.py -v     # 历史浏览（6 项）
-pytest tests/test_agent_editor.py -v       # Agent 编辑器（8 项）
-pytest tests/test_float_button.py -v       # 悬浮按钮（8 项）
-pytest tests/test_menubar_icon.py -v       # 菜单栏图标（8 项）
-pytest tests/test_chat_client.py -v        # LLM 流式解析（10 项）
-pytest tests/test_main_entry.py -v         # 入口点（1 项）
-pytest tests/test_smoke.py -v              # 工具函数（5 项）
+# By category
+pytest tests/test_chat_dialog.py -v        # chat window (42)
+pytest tests/test_storage.py -v            # database (23)
+pytest tests/test_chat_client.py -v        # LLM stream parsing + multimodal (12)
+pytest tests/test_agent_manager.py -v      # agent management (10)
+pytest tests/test_agent_editor.py -v       # agent editor + add dialog (10)
+pytest tests/test_settings_manager.py -v   # config management (8)
+pytest tests/test_settings_dialog.py -v    # settings panel (6)
+pytest tests/test_history_dialog.py -v     # history browsing (6)
+pytest tests/test_float_button.py -v       # floating button (8)
+pytest tests/test_menubar_icon.py -v       # menu bar icon (9)
+pytest tests/test_images.py -v             # image storage/base64 (5)
+pytest tests/test_screenshot.py -v         # screenshot success/cancel/permission error (4)
+pytest tests/test_theme.py -v              # light/dark contrast (8)
+pytest tests/test_main_entry.py -v         # entry point (1)
+pytest tests/test_smoke.py -v              # utilities (5)
 ```
 
-测试使用 `pytest-qt` 进行真实的 PyQt5 窗口渲染，外部依赖（Ollama HTTP、剪贴板、macOS ctypes）均通过 mock 隔离。
+Tests use `pytest-qt` for real PyQt5 window rendering; external dependencies (Ollama HTTP, clipboard, macOS ctypes, screencapture) are isolated via mocks.
