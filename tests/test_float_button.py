@@ -50,11 +50,25 @@ class TestFloatButtonSignals:
         menu = _get_context_menu(button)
         assert menu is not None
         action_texts = [a.text() for a in menu.actions()]
-        assert action_texts[:4] == ["最近快捷动作", "⚡  翻译", "⚡  解释", "⚡  改写"]
+        assert action_texts[:2] == ["截图到对话…", ""]
+        assert action_texts[2:6] == ["最近快捷动作", "⚡  翻译", "⚡  解释", "⚡  改写"]
         assert "设置…" in action_texts
         assert "桌面宠物形态" in action_texts
         assert "隐藏桌面宠物" in action_texts
         assert "退出" in action_texts
+
+    def test_screenshot_action_emits_signal(self, qtbot, button):
+        menu = _get_context_menu(button)
+        action = next(item for item in menu.actions() if item.data() == "screenshot")
+        with qtbot.waitSignal(button.screenshot_requested, timeout=1000):
+            action.trigger()
+
+        button.set_listening(True)
+        busy_menu = _get_context_menu(button)
+        busy_action = next(
+            item for item in busy_menu.actions() if item.data() == "screenshot"
+        )
+        assert not busy_action.isEnabled()
 
     def test_recent_action_signal_and_busy_state(self, qtbot, button):
         button.set_quick_actions(
@@ -238,6 +252,33 @@ class TestFloatButtonState:
         assert button._effective_state() == "listening"
         button.set_listening(False)
         assert button._effective_state() == "idle"
+
+    def test_semantic_states_have_distinct_motion(self, button):
+        button._animation_phase = 3
+        idle = button._motion_for_state("idle")
+        listening = button._motion_for_state("listening")
+        working = button._motion_for_state("working")
+        success = button._motion_for_state("success")
+        error = button._motion_for_state("error")
+
+        assert idle != listening
+        assert working != success
+        assert error[0] != 0
+
+        button.set_reduce_motion(True)
+        assert button._motion_for_state("working") == (0.0, 0.0, 0.0, 1.0)
+
+    def test_new_semantic_state_restarts_animation(self, button):
+        button._animation_phase = 7
+        button.set_listening(True)
+        assert button._animation_phase == 0
+        button._animation_phase = 7
+        button.set_listening(False)
+        button.set_responding(True)
+        assert button._animation_phase == 0
+        button._animation_phase = 7
+        button.show_result(True)
+        assert button._animation_phase == 0
 
     def test_result_state_returns_to_idle(self, qtbot, button):
         button.show_result(True)

@@ -189,6 +189,7 @@ class ChatController(QObject):
         self.float_btn.auto_hide_toggled.connect(self._on_auto_hide_toggled)
         self.float_btn.pet_mode_toggled.connect(self._on_pet_mode_toggled)
         self.float_btn.quick_action_requested.connect(self._on_pet_action_requested)
+        self.float_btn.screenshot_requested.connect(self._on_screenshot_hotkey)
         self.float_btn.placement_changed.connect(self._schedule_window_state_save)
         self.float_btn.placement_changed.connect(self._reposition_result_bubble)
         self.float_btn.set_auto_hide_state(self._auto_hide)

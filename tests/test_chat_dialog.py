@@ -211,14 +211,21 @@ class TestChatDialogState:
         assert dialog._input.isEnabled()
 
     @pytest.mark.parametrize(("capability", "label"), [
-        (ImageCapability.SUPPORTED, "图片 ✓"),
-        (ImageCapability.UNSUPPORTED, "图片 ×"),
-        (ImageCapability.UNKNOWN, "图片 ?"),
+        (ImageCapability.SUPPORTED, "支持图片"),
+        (ImageCapability.UNSUPPORTED, "不支持图片"),
+        (ImageCapability.UNKNOWN, "图片待确认"),
     ])
     def test_image_capability_badge(self, dialog, capability, label):
         dialog.set_image_capability(capability)
         assert dialog._model_capability_badge.text() == label
         assert dialog._model_capability_badge.toolTip() in dialog._attach_btn.toolTip()
+
+    def test_model_profile_is_rendered_as_status_text(self, dialog):
+        dialog.set_model_profile_summary("", "使用全局参数")
+        assert dialog._model_profile_badge.text() == "全局配置"
+        dialog.set_model_profile_summary("翻译专用", "使用专属参数")
+        assert dialog._model_profile_badge.text() == "专属配置"
+        assert "翻译专用" in dialog._model_profile_badge.toolTip()
 
     def test_clear_messages(self, qtbot, dialog):
         """Add messages → clear_messages() → restore the onboarding state."""

@@ -347,15 +347,15 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._model_combo.currentTextChanged.connect(self._on_model_combo)
         tb.addWidget(self._model_combo, stretch=1)
 
-        self._model_capability_badge = QLabel("图片 ?")
+        self._model_capability_badge = QLabel("图片待确认")
         self._model_capability_badge.setObjectName("model_capability_badge")
-        self._model_capability_badge.setStyleSheet(styles.STATUS_BADGE)
+        self._model_capability_badge.setStyleSheet(styles.STATUS_TEXT)
         self._model_capability_badge.setToolTip("当前模型的图片输入能力尚未确认")
         tb.addWidget(self._model_capability_badge)
 
-        self._model_profile_badge = QLabel("全局")
+        self._model_profile_badge = QLabel("全局配置")
         self._model_profile_badge.setObjectName("model_profile_badge")
-        self._model_profile_badge.setStyleSheet(styles.STATUS_BADGE)
+        self._model_profile_badge.setStyleSheet(styles.STATUS_TEXT)
         self._model_profile_badge.setToolTip("请求将使用全局模型设置")
         tb.addWidget(self._model_profile_badge)
 
@@ -607,8 +607,10 @@ class ChatDialog(FramelessDragMixin, QWidget):
     def set_model_profile_summary(self, profile_name: str, summary: str,
                                   warnings: tuple[str, ...] = ()) -> None:
         """Show the effective request settings before submission."""
-        self._model_profile_badge.setText(profile_name or "全局")
+        self._model_profile_badge.setText("专属配置" if profile_name else "全局配置")
         tooltip = summary
+        if profile_name:
+            tooltip = f"当前配置：{profile_name}\n{tooltip}"
         if warnings:
             tooltip += "\n" + "\n".join(f"⚠ {warning}" for warning in warnings)
         self._model_profile_badge.setToolTip(tooltip)
@@ -1076,16 +1078,16 @@ class ChatDialog(FramelessDragMixin, QWidget):
         """Show the selected model's declared image-input capability."""
         self._image_capability = capability
         if checking:
-            text = "图片 …"
+            text = "图片检测中"
             detail = "正在检查当前模型的图片输入能力"
         elif capability == ImageCapability.SUPPORTED:
-            text = "图片 ✓"
+            text = "支持图片"
             detail = "当前模型已声明支持图片输入"
         elif capability == ImageCapability.UNSUPPORTED:
-            text = "图片 ×"
+            text = "不支持图片"
             detail = "当前模型已声明不支持图片输入"
         else:
-            text = "图片 ?"
+            text = "图片待确认"
             detail = "当前模型的图片输入能力尚未确认"
         if cached and not checking:
             detail += "（缓存结果）"

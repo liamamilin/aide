@@ -285,9 +285,9 @@ def _generate() -> dict[str, str]:
     s["TITLE_NAME"] = f"font-weight: 700; font-size: 13px; background: none; color: {c.text};"
     s["TITLE_AGENT"] = f"font-size: 11px; background: none; color: {c.text_secondary};"
 
-    s["STATUS_BADGE"] = (
-        f"background: {c.button}; color: {c.text_secondary}; border: none; "
-        f"border-radius: 7px; padding: 3px 7px; font-size: 10px;"
+    s["STATUS_TEXT"] = (
+        f"background: transparent; color: {c.text_secondary}; border: none; "
+        f"padding: 2px 0; font-size: 10px;"
     )
 
     # ── 模型下拉框（窄版）──

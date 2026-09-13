@@ -106,6 +106,7 @@ class FloatButton(QPushButton):
     auto_hide_toggled = pyqtSignal(bool)
     pet_mode_toggled = pyqtSignal(bool)
     quick_action_requested = pyqtSignal(str)
+    screenshot_requested = pyqtSignal()
     placement_changed = pyqtSignal()
 
     def __init__(
@@ -283,24 +284,35 @@ class FloatButton(QPushButton):
         def px(value: float) -> int:
             return max(1, round(value * scale))
 
-        bob = 0 if self._reduce_motion else round(
-            math.sin(self._animation_phase * math.pi / 6) * 1.5 * scale
-        )
-        extra = px(2) if self._hovered else 0
-        target = self.rect().adjusted(
-            px(4) - extra,
-            px(5) + bob - extra,
-            -px(4) + extra,
-            -px(7) + extra,
+        state = self._effective_state()
+        offset_x, offset_y, rotation, motion_scale = self._motion_for_state(state)
+        if self._hovered and not self._reduce_motion:
+            motion_scale += 0.025
+        target = QRectF(self.rect()).adjusted(
+            px(4),
+            px(5),
+            -px(4),
+            -px(7),
         )
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor(14, 24, 55, 38))
         painter.drawEllipse(
             px(24), self.height() - px(10), self.width() - px(48), px(6)
         )
-        painter.drawPixmap(target, self._pet_content)
+        self._draw_working_glow(painter, state)
 
-        state = self._effective_state()
+        center = target.center()
+        painter.save()
+        painter.translate(center.x() + offset_x * scale, center.y() + offset_y * scale)
+        painter.rotate(rotation)
+        painter.scale(motion_scale, motion_scale)
+        painter.translate(-center.x(), -center.y())
+        painter.drawPixmap(target, self._pet_content, QRectF(self._pet_content.rect()))
+        painter.restore()
+
+        if state == "success":
+            self._draw_success_sparkles(painter, px)
+
         if state != "idle":
             bubble_width = px(38 if state == "working" else 30)
             bubble = QRectF(
@@ -375,6 +387,45 @@ class FloatButton(QPushButton):
                 )
         painter.end()
 
+    def _motion_for_state(self, state: str) -> tuple[float, float, float, float]:
+        """Return x/y movement, rotation and scale for a semantic pet state."""
+        if self._reduce_motion:
+            return (0.0, 0.0, 0.0, 1.0)
+        wave = math.sin(self._animation_phase * math.pi / 6)
+        if state == "listening":
+            return (wave * 0.7, -abs(wave) * 0.8, -wave * 1.6, 1.005)
+        if state == "working":
+            return (0.0, wave * 1.8, 0.0, 1.0 + (wave + 1.0) * 0.004)
+        if state == "success":
+            bounce = -abs(math.sin(self._animation_phase * math.pi / 8)) * 4.0
+            return (0.0, bounce, 0.0, 1.0 + max(0.0, -bounce) * 0.006)
+        if state == "error":
+            shake = (0.0, -2.2, 2.2, -1.5, 1.5, -0.7, 0.7, 0.0)
+            return (shake[min(self._animation_phase, len(shake) - 1)], 0.0, 0.0, 1.0)
+        return (0.0, wave * 1.15, 0.0, 1.0)
+
+    def _draw_working_glow(self, painter: QPainter, state: str) -> None:
+        if state != "working":
+            return
+        pulse = (math.sin(self._animation_phase * math.pi / 6) + 1.0) / 2.0
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(67, 207, 255, round(18 + pulse * 28)))
+        painter.drawEllipse(
+            QRectF(
+                self.width() * 0.43,
+                self.height() * 0.50,
+                self.width() * 0.51,
+                self.height() * 0.34,
+            )
+        )
+
+    def _draw_success_sparkles(self, painter: QPainter, px) -> None:
+        pulse = (math.sin(self._animation_phase * math.pi / 4) + 1.0) / 2.0
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(73, 220, 145, round(130 + pulse * 110)))
+        for x, y, radius in ((18, 25, 2.2), (26, 13, 1.4), (96, 45, 1.8)):
+            painter.drawEllipse(QRectF(px(x), px(y), px(radius * 2), px(radius * 2)))
+
     def _effective_state(self) -> str:
         if self._responding:
             return "working"
@@ -432,6 +483,8 @@ class FloatButton(QPushButton):
 
     def set_responding(self, responding: bool) -> None:
         """设置 AI 生成状态。"""
+        if responding and not self._responding:
+            self._animation_phase = 0
         self._responding = responding
         if responding:
             self._result_timer.stop()
@@ -443,6 +496,7 @@ class FloatButton(QPushButton):
 
     def show_result(self, succeeded: bool) -> None:
         """短暂显示本次请求结果，然后恢复空闲状态。"""
+        self._animation_phase = 0
         self._result_state = "success" if succeeded else "error"
         if self.isVisible():
             self._result_timer.start(1600)
@@ -458,6 +512,8 @@ class FloatButton(QPushButton):
 
     def set_listening(self, listening: bool) -> None:
         """设置选区或截图捕获状态；生成状态始终优先。"""
+        if listening and not self._listening:
+            self._animation_phase = 0
         self._listening = listening
         self.setToolTip(self._state_tooltip())
         self.update()
@@ -564,10 +620,15 @@ class FloatButton(QPushButton):
     def _create_context_menu(self) -> QMenu:
         menu = QMenu(self)
         menu.setStyleSheet(styles.menu_style())
+        busy = self._responding or self._listening
+        screenshot_action = menu.addAction("截图到对话…")
+        screenshot_action.setData("screenshot")
+        screenshot_action.setEnabled(not busy)
+        screenshot_action.triggered.connect(self.screenshot_requested.emit)
+        menu.addSeparator()
         if self._pet_enabled and self._quick_actions:
             heading = menu.addAction("最近快捷动作")
             heading.setEnabled(False)
-            busy = self._responding or self._listening
             for action_id, name in self._quick_actions:
                 action = menu.addAction(f"⚡  {name}")
                 action.setData(action_id)
