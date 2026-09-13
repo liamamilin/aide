@@ -223,6 +223,7 @@ class TestFloatButtonState:
         assert button.reduce_motion
         assert not button._animation_timer.isActive()
         assert button._animation_phase == 0
+        assert button._hover_phase == 0
         button._advance_animation()
         assert button._animation_phase == 0
 
@@ -267,6 +268,60 @@ class TestFloatButtonState:
 
         button.set_reduce_motion(True)
         assert button._motion_for_state("working") == (0.0, 0.0, 0.0, 1.0)
+
+    def test_idle_cycle_has_five_distinct_clips(self, button):
+        phases = (3, 27, 43, 60, 78)
+        motions = []
+        for phase in phases:
+            button._animation_phase = phase
+            motions.append(button._motion_for_state("idle"))
+
+        assert len(set(motions)) == len(phases)
+        assert motions[1][2] != 0  # 左右观察
+        assert motions[2][3] > 1  # 舒展
+        assert motions[3][1] > motions[0][1]  # 轻点头
+        assert motions[4][0] != 0  # 整理羽毛
+
+    def test_hover_cycle_has_five_friendly_clips(self, button):
+        button._hovered = True
+        phases = (4, 14, 24, 34, 44)
+        motions = []
+        for phase in phases:
+            button._hover_phase = phase
+            motions.append(button._hover_motion())
+
+        assert len(set(motions)) == len(phases)
+        assert motions[0][1] < 0  # 致意
+        assert motions[1][2] != 0  # 专注侧倾
+        assert motions[2][3] > 1  # 开心跳跃
+        assert motions[3][0] != 0  # 轻挥翅膀
+        assert motions[4][1] < 0  # 回望
+
+        button.set_reduce_motion(True)
+        assert button._hover_motion() == (0.0, 0.0, 0.0, 1.0)
+
+    def test_hover_animation_does_not_change_task_motion(self, button):
+        button._animation_phase = 5
+        before = button._motion_for_state("working")
+        button._hovered = True
+        button._hover_phase = 18
+        after = button._motion_for_state("working")
+        assert after == before
+
+    def test_generated_sprite_sheets_load_five_consistent_frames(self, button):
+        assert len(button._pet_idle_frames) == 5
+        assert len(button._pet_hover_frames) == 5
+        idle_sizes = {(frame.width(), frame.height()) for frame in button._pet_idle_frames}
+        hover_sizes = {(frame.width(), frame.height()) for frame in button._pet_hover_frames}
+        assert len(idle_sizes) == 1
+        assert len(hover_sizes) == 1
+        assert button._pet_for_state("working") == button._pet_content
+
+        button._animation_phase = 45
+        assert button._pet_for_state("idle") == button._pet_idle_frames[2]
+        button._hovered = True
+        button._hover_phase = 31
+        assert button._pet_for_state("idle") == button._pet_hover_frames[3]
 
     def test_new_semantic_state_restarts_animation(self, button):
         button._animation_phase = 7

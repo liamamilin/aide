@@ -34,6 +34,9 @@ _ICON_PATH = next(
     resource_path("ai_desktop", "图标.png"),
 )
 _PET_PATH = resource_path("ai_desktop", "桌面宠物.png")
+_PET_IDLE_FRAMES_PATH = resource_path("ai_desktop", "pet_frames", "idle.png")
+_PET_HOVER_FRAMES_PATH = resource_path("ai_desktop", "pet_frames", "hover.png")
+_PET_FRAME_COUNT = 5
 
 _COMPACT_SIZE = 44
 _PET_SIZES = {
@@ -65,6 +68,29 @@ def _make_circular_icon(path: str, size: int) -> QIcon:
     painter.drawPixmap(0, 0, cropped)
     painter.end()
     return QIcon(result)
+
+
+def _load_pet_frames(path: str) -> list[QPixmap]:
+    """Load a horizontal transparent sprite sheet and normalize its frame bounds."""
+    if not os.path.exists(path):
+        return []
+    sheet = QPixmap(path)
+    if sheet.isNull() or sheet.width() < _PET_FRAME_COUNT:
+        return []
+
+    frames: list[QPixmap] = []
+    bounds = QRegion()
+    frame_width = sheet.width() // _PET_FRAME_COUNT
+    for index in range(_PET_FRAME_COUNT):
+        frame = sheet.copy(index * frame_width, 0, frame_width, sheet.height())
+        frame_bounds = QRegion(frame.mask()).boundingRect()
+        if frame_bounds.isNull():
+            return []
+        frames.append(frame)
+        bounds = QRegion(frame_bounds) if bounds.isEmpty() else bounds.united(frame_bounds)
+
+    common = bounds.boundingRect()
+    return [frame.copy(common.intersected(frame.rect())) for frame in frames]
 
 
 def pin_to_all_spaces(widget) -> None:
@@ -130,8 +156,11 @@ class FloatButton(QPushButton):
         self._hovered = False
         self._quick_actions: list[tuple[str, str]] = []
         self._animation_phase = 0
+        self._hover_phase = 0
         self._pet_source = QPixmap(_PET_PATH) if os.path.exists(_PET_PATH) else QPixmap()
         self._pet_content = self._cropped_pet(self._pet_source)
+        self._pet_idle_frames = _load_pet_frames(_PET_IDLE_FRAMES_PATH)
+        self._pet_hover_frames = _load_pet_frames(_PET_HOVER_FRAMES_PATH)
         self._animation_timer = QTimer(self)
         self._animation_timer.setInterval(180)
         self._animation_timer.timeout.connect(self._advance_animation)
@@ -238,6 +267,7 @@ class FloatButton(QPushButton):
         self._reduce_motion = bool(enabled)
         if self._reduce_motion:
             self._animation_phase = 0
+            self._hover_phase = 0
             self.setWindowOpacity(1.0)
         self._sync_animation_timer()
         self.update()
@@ -286,8 +316,12 @@ class FloatButton(QPushButton):
 
         state = self._effective_state()
         offset_x, offset_y, rotation, motion_scale = self._motion_for_state(state)
-        if self._hovered and not self._reduce_motion:
-            motion_scale += 0.025
+        if state == "idle" and self._hovered and not self._reduce_motion:
+            hover_x, hover_y, hover_rotation, hover_scale = self._hover_motion()
+            offset_x += hover_x
+            offset_y += hover_y
+            rotation += hover_rotation
+            motion_scale *= hover_scale
         target = QRectF(self.rect()).adjusted(
             px(4),
             px(5),
@@ -299,6 +333,7 @@ class FloatButton(QPushButton):
         painter.drawEllipse(
             px(24), self.height() - px(10), self.width() - px(48), px(6)
         )
+        self._draw_hover_halo(painter, state, scale)
         self._draw_working_glow(painter, state)
 
         center = target.center()
@@ -307,7 +342,8 @@ class FloatButton(QPushButton):
         painter.rotate(rotation)
         painter.scale(motion_scale, motion_scale)
         painter.translate(-center.x(), -center.y())
-        painter.drawPixmap(target, self._pet_content, QRectF(self._pet_content.rect()))
+        pet_content = self._pet_for_state(state)
+        painter.drawPixmap(target, pet_content, QRectF(pet_content.rect()))
         painter.restore()
 
         if state == "success":
@@ -402,7 +438,76 @@ class FloatButton(QPushButton):
         if state == "error":
             shake = (0.0, -2.2, 2.2, -1.5, 1.5, -0.7, 0.7, 0.0)
             return (shake[min(self._animation_phase, len(shake) - 1)], 0.0, 0.0, 1.0)
-        return (0.0, wave * 1.15, 0.0, 1.0)
+        idle_phase = self._animation_phase % 96
+        # Five low-key idle clips.  The longer breathing intervals leave ample
+        # quiet time between the little observations and grooming gestures.
+        if 24 <= idle_phase < 32:  # 左右观察
+            progress = (idle_phase - 24) / 7
+            look = math.sin(progress * math.pi)
+            return (
+                math.sin(progress * math.pi * 2) * 0.9,
+                wave * 1.15 - look * 0.6,
+                math.sin(progress * math.pi * 2) * 2.0,
+                1.0,
+            )
+        if 40 <= idle_phase < 48:  # 舒展
+            stretch = math.sin((idle_phase - 40) * math.pi / 7)
+            return (0.0, wave * 1.15 - stretch * 2.2, 0.0, 1.0 + stretch * 0.018)
+        if 58 <= idle_phase < 64:  # 轻点头
+            nod = math.sin((idle_phase - 58) * math.pi / 5)
+            return (0.0, wave * 1.15 + nod * 1.5, 0.0, 1.0 - nod * 0.009)
+        if 74 <= idle_phase < 84:  # 整理羽毛
+            groom = math.sin((idle_phase - 74) * math.pi / 9)
+            return (groom * 1.1, wave * 1.15 - groom * 0.7, groom * 1.5, 1.0)
+        return (0.0, wave * 1.15, 0.0, 1.0)  # 呼吸
+
+    def _pet_for_state(self, state: str) -> QPixmap:
+        """Select a generated frame while keeping the original asset as fallback."""
+        if state == "idle":
+            if self._hovered and self._pet_hover_frames:
+                return self._pet_hover_frames[min(self._hover_phase // 10, _PET_FRAME_COUNT - 1)]
+            if self._pet_idle_frames:
+                return self._pet_idle_frames[min(self._animation_phase // 20, _PET_FRAME_COUNT - 1)]
+        return self._pet_content
+
+    def _hover_motion(self) -> tuple[float, float, float, float]:
+        """Return one of five friendly hover clips for the idle pet."""
+        if self._reduce_motion or not self._hovered:
+            return (0.0, 0.0, 0.0, 1.0)
+        phase = self._hover_phase % 50
+        if phase < 10:  # 抬头致意
+            greeting = math.sin(phase * math.pi / 9)
+            return (0.0, -greeting * 2.8, -greeting * 1.2, 1.0 + greeting * 0.028)
+        if phase < 20:  # 专注侧倾
+            focus = math.sin((phase - 10) * math.pi / 9)
+            return (focus * 0.5, -1.5 - focus * 0.5, focus * 2.3, 1.028)
+        if phase < 30:  # 开心跳跃
+            bounce = math.sin((phase - 20) * math.pi / 9)
+            return (0.0, -bounce * 3.2, 0.0, 1.0 + bounce * 0.036)
+        if phase < 40:  # 轻挥翅膀
+            wave = math.sin((phase - 30) * math.pi * 2 / 9)
+            return (wave * 0.8, -1.2, -wave * 2.2, 1.024)
+        # 安静回望，给下一轮致意留出过渡。
+        settle = math.sin((phase - 40) * math.pi / 9)
+        return (0.0, -settle * 1.2, -settle * 0.8, 1.0 + settle * 0.014)
+
+    def _draw_hover_halo(self, painter: QPainter, state: str, scale: float) -> None:
+        """Draw a quiet hover halo without changing task states."""
+        if state != "idle" or not self._hovered or self._reduce_motion:
+            return
+        phase = self._hover_phase % 50
+        if not 10 <= phase < 30:
+            return
+        pulse = (math.sin((phase - 10) * math.pi / 10) + 1.0) / 2.0
+        bounds = QRectF(
+            self.width() * 0.17,
+            self.height() * 0.14,
+            self.width() * 0.66,
+            self.height() * 0.68,
+        )
+        painter.setPen(QPen(QColor(92, 207, 255, round(52 + pulse * 48)), 1.2 * scale))
+        painter.setBrush(QColor(92, 207, 255, round(5 + pulse * 10)))
+        painter.drawEllipse(bounds)
 
     def _draw_working_glow(self, painter: QPainter, state: str) -> None:
         if state != "working":
@@ -448,20 +553,29 @@ class FloatButton(QPushButton):
         if self._reduce_motion:
             self._animation_timer.stop()
             return
-        self._animation_phase = (self._animation_phase + 1) % 12
+        # 96 keeps the original 12-frame task waves intact and leaves enough
+        # room for five relaxed idle clips before the sequence repeats.
+        self._animation_phase = (self._animation_phase + 1) % 96
+        if self._hovered and self._effective_state() == "idle":
+            self._hover_phase = (self._hover_phase + 1) % 50
         if not self._pet_enabled:
             if self._responding:
-                self.setWindowOpacity(0.55 if self._animation_phase < 6 else 1.0)
+                self.setWindowOpacity(
+                    0.55 if self._animation_phase % 12 < 6 else 1.0
+                )
             return
         self.update()
 
     def enterEvent(self, event) -> None:
+        if not self._hovered:
+            self._hover_phase = 0
         self._hovered = True
         self.update()
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
         self._hovered = False
+        self._hover_phase = 0
         self.update()
         super().leaveEvent(event)
 

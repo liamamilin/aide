@@ -14,6 +14,8 @@ a = Analysis(
         (os.path.join(ROOT, "ai_desktop", "图标.icns"), "ai_desktop"),
         (os.path.join(ROOT, "ai_desktop", "图标.png"), "ai_desktop"),
         (os.path.join(ROOT, "ai_desktop", "桌面宠物.png"), "ai_desktop"),
+        (os.path.join(ROOT, "ai_desktop", "pet_frames", "idle.png"), "ai_desktop/pet_frames"),
+        (os.path.join(ROOT, "ai_desktop", "pet_frames", "hover.png"), "ai_desktop/pet_frames"),
     ],
     hiddenimports=[
         'PyQt5.QtNetwork',
