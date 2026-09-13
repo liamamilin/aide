@@ -5,6 +5,7 @@ from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from PyQt5.QtCore import QRect
 from PyQt5.QtGui import QColor, QImage
 from PyQt5.QtWidgets import QLabel
 
@@ -23,6 +24,12 @@ def controller(qtbot, tmp_db):
     with patch("ai_desktop.main.FloatButton"), patch("ai_desktop.main.MenuBarIcon"):
         with patch.object(ChatController, "_create_hotkey_backend", return_value=MagicMock()):
             ctl = ChatController()
+        ctl._result_bubble.hide()
+        ctl._result_bubble.deleteLater()
+        ctl._result_bubble = MagicMock()
+        ctl.float_btn.isVisible.return_value = True
+        ctl.float_btn.pet_enabled = True
+        ctl.float_btn.frameGeometry.return_value = QRect(700, 300, 116, 122)
         ctl._dialog = ChatDialog(ctl._all_agents, ctl._active_agent, [ctl._model], ctl._model)
         ctl._image_capability = ImageCapability.SUPPORTED
         ctl._dialog.set_image_capability(ImageCapability.SUPPORTED)
@@ -193,6 +200,68 @@ def test_normal_reply_with_cannot_prefix_is_saved(qtbot, controller, ollama_serv
     assert [(m.role, m.content) for m in conversation.messages] == [("user", "question"), ("assistant", text)]
     assert_input_ready(controller)
     assert text in bubble_text(controller)
+
+
+def test_hidden_dialog_uses_pet_bubble_without_duplicate_tray(qtbot, controller, ollama_server):
+    text = "后台任务已经完成，这是完整结果。"
+    send_and_wait(
+        qtbot,
+        controller,
+        ollama_server,
+        [{"message": {"content": text}, "done": True}],
+    )
+
+    call = controller._result_bubble.show_result.call_args
+    assert call.args[:3] == ("success", "任务完成", text)
+    assert call.kwargs["timeout_ms"] == 7000
+    controller._tray.showMessage.assert_not_called()
+
+
+def test_visible_background_dialog_keeps_system_notification(
+    qtbot, controller, ollama_server,
+):
+    controller._dialog.show()
+    controller._result_bubble.reset_mock()
+    with patch.object(controller._dialog, "isActiveWindow", return_value=False):
+        send_and_wait(
+            qtbot,
+            controller,
+            ollama_server,
+            [{"message": {"content": "visible result"}, "done": True}],
+        )
+
+    controller._result_bubble.show_result.assert_not_called()
+    controller._tray.showMessage.assert_called_once()
+
+
+def test_compact_entry_keeps_system_notification(qtbot, controller, ollama_server):
+    controller.float_btn.pet_enabled = False
+    controller._result_bubble.reset_mock()
+    send_and_wait(
+        qtbot,
+        controller,
+        ollama_server,
+        [{"message": {"content": "compact result"}, "done": True}],
+    )
+
+    controller._result_bubble.show_result.assert_not_called()
+    controller._tray.showMessage.assert_called_once()
+
+
+def test_hidden_dialog_service_failure_uses_action_bubble(
+    qtbot, controller, ollama_server,
+):
+    controller._result_bubble.reset_mock()
+    send_and_wait(qtbot, controller, ollama_server, [{"error": "model service unavailable"}])
+
+    call = controller._result_bubble.show_result.call_args
+    assert call.args[:3] == (
+        "action",
+        "需要处理",
+        "model service unavailable",
+    )
+    assert call.kwargs["timeout_ms"] == 9000
+    controller._tray.showMessage.assert_not_called()
 
 
 @pytest.mark.parametrize("events,display", [

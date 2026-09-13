@@ -24,7 +24,7 @@ from ai_desktop.agent_manager import AgentManager
 from ai_desktop.capture.clipboard_monitor import SelectionCaptureTask
 from ai_desktop.capture.screenshot import ScreenshotResult, ScreenshotStatus
 from ai_desktop.config import Agent
-from ai_desktop.llm.events import ChatResult, ResultStatus, StreamEvent
+from ai_desktop.llm.events import ChatResult, ErrorCode, ResultStatus, StreamEvent
 from ai_desktop.llm.service_checks import (
     AsyncServiceChecks,
     ImageCapability,
@@ -46,6 +46,7 @@ from ai_desktop.ui.chat_dialog import ChatDialog
 from ai_desktop.ui.float_button import FloatButton, pin_to_all_spaces
 from ai_desktop.ui.history_dialog import HistoryDialog
 from ai_desktop.ui.menubar_icon import MenuBarIcon
+from ai_desktop.ui.result_bubble import ResultBubble
 from ai_desktop.ui.settings_dialog import SettingsDialog
 from ai_desktop.utils import logging as log_util
 from ai_desktop.utils.permissions import PermissionStatus
@@ -173,16 +174,19 @@ class ChatController(QObject):
 
         # 悬浮按钮
         self.float_btn = FloatButton(pet_enabled=config.DESKTOP_PET_ENABLED)
+        self._result_bubble = ResultBubble()
         self.float_btn.restore_placement(get_setting("float_button_placement"))
         self.float_btn.clicked.connect(self._toggle_dialog)
         self.float_btn.exit_requested.connect(self._on_exit)
-        self.float_btn.hide_requested.connect(self.float_btn.hide)
+        self.float_btn.hide_requested.connect(self._hide_float_entry)
         self.float_btn.about_requested.connect(self._show_about)
         self.float_btn.settings_requested.connect(self._on_settings_requested)
         self.float_btn.auto_hide_toggled.connect(self._on_auto_hide_toggled)
         self.float_btn.pet_mode_toggled.connect(self._on_pet_mode_toggled)
         self.float_btn.placement_changed.connect(self._schedule_window_state_save)
+        self.float_btn.placement_changed.connect(self._reposition_result_bubble)
         self.float_btn.set_auto_hide_state(self._auto_hide)
+        self._result_bubble.activated.connect(self._show_dialog)
         self._connect_screen_signals()
 
         # 菜单栏图标
@@ -238,6 +242,7 @@ class ChatController(QObject):
         self._tray.refresh_theme()
         if self._dialog is not None:
             self._dialog.refresh_theme()
+        self._result_bubble.refresh_theme()
         logger.info("Theme refreshed (%d widget styles updated)", refreshed)
 
     @staticmethod
@@ -287,6 +292,7 @@ class ChatController(QObject):
         self.hotkey.stop()
         self.hotkey_img.stop()
         self.float_btn.hide()
+        self._result_bubble.hide()
         self._startup_service_check = None
         self._service_checks.cancel_all()
         for notice in list(self._notices):
@@ -331,6 +337,7 @@ class ChatController(QObject):
         if self._dialog:
             self._dialog.deleteLater()
             self._dialog = None
+        self._result_bubble.deleteLater()
         self._stopped = True
         logger.info("ChatController 已退出")
         self.exit_ready.emit()
@@ -480,6 +487,7 @@ class ChatController(QObject):
     def _show_dialog(self) -> None:
         if self._stopping or self._stopped:
             return
+        self._result_bubble.hide()
         if self._dialog is None:
             cached_models = self._load_cached_models(config.OLLAMA_BASE_URL)
             self._dialog = ChatDialog(
@@ -559,6 +567,15 @@ class ChatController(QObject):
         self.float_btn.ensure_visible()
         if self._dialog is not None and self._dialog.isVisible():
             self._dialog.ensure_visible()
+        self._reposition_result_bubble()
+
+    def _reposition_result_bubble(self) -> None:
+        if self._result_bubble.isVisible():
+            self._result_bubble.position_near(self.float_btn.frameGeometry())
+
+    def _hide_float_entry(self) -> None:
+        self._result_bubble.hide()
+        self.float_btn.hide()
 
     def _save_window_state(self) -> None:
         float_state = self.float_btn.placement_state()
@@ -584,6 +601,8 @@ class ChatController(QObject):
         config.DESKTOP_PET_ENABLED = checked
         save_setting("desktop_pet_enabled", "true" if checked else "false")
         self.float_btn.set_pet_enabled(checked)
+        if not checked:
+            self._result_bubble.hide()
         logger.info("Desktop pet mode %s", "enabled" if checked else "disabled")
 
     # ── 退出 / 关于 ───────────────────────────────────
@@ -627,6 +646,8 @@ class ChatController(QObject):
             self._dialog.set_actions_enabled(config.QUICK_ACTIONS_ENABLED)
         if "desktop_pet" in changed:
             self.float_btn.set_pet_enabled(config.DESKTOP_PET_ENABLED)
+            if not config.DESKTOP_PET_ENABLED:
+                self._result_bubble.hide()
         if "base_url" in changed:
             self._startup_service_check = None
             self._service_checks.cancel_service()
@@ -1243,6 +1264,7 @@ class ChatController(QObject):
                 self._dialog.restore_draft(text, images)
                 self._dialog.flash_busy()
             return
+        self._result_bubble.hide()
         request_agent = request_agent or self._active_agent
         resolved = self._resolve_model_config(action_profile_id, request_agent)
         image_capability = self._image_capability_for_model(resolved.model)
@@ -1407,24 +1429,73 @@ class ChatController(QObject):
             except Exception:
                 logger.exception("Failed to save assistant message")
 
-            # 窗口在后台时发通知
-            if self._dialog and not self._dialog.isActiveWindow():
-                preview = text[:80].replace("\n", " ") + ("…" if len(text) > 80 else "")
-                self._tray.showMessage(
-                    f"{self._active_agent.icon} {self._active_agent.name}",
-                    preview,
-                    QSystemTrayIcon.Information,
-                    3000,
-                )
-
         if self._dialog:
             self._dialog.finalize_assistant_stream(
                 text, ok, error=result.error, cancelled=result.status == ResultStatus.CANCELLED,
             )
 
+        bubble_shown = False
+        if result.status != ResultStatus.CANCELLED:
+            bubble_shown = self._show_result_bubble(result)
+
+        # 完整窗口仍可见或宠物气泡不可用时，沿用系统通知。
+        if (
+            ok
+            and text
+            and self._dialog
+            and not self._dialog.isActiveWindow()
+            and not bubble_shown
+        ):
+            preview = ResultBubble.summarize(text, "回复已完成", limit=80)
+            self._tray.showMessage(
+                f"{self._active_agent.icon} {self._active_agent.name}",
+                preview,
+                QSystemTrayIcon.Information,
+                3000,
+            )
+
         self._worker = None
         self._retire_worker(worker)
         self._finish_stop_if_ready()
+
+    def _show_result_bubble(self, result: ChatResult) -> bool:
+        if (
+            self._dialog is None
+            or self._dialog.isVisible()
+            or not self.float_btn.isVisible()
+            or not self.float_btn.pet_enabled
+        ):
+            return False
+
+        if result.ok:
+            kind = "success"
+            title = "任务完成"
+            source = result.text
+            fallback = "回复已完成，点击查看完整内容。"
+            timeout_ms = 7000
+        else:
+            needs_action = result.error_code in {
+                ErrorCode.CONNECTION,
+                ErrorCode.HTTP,
+                ErrorCode.SERVER,
+                ErrorCode.TIMEOUT,
+            }
+            kind = "action" if needs_action else "error"
+            title = "需要处理" if needs_action else "生成失败"
+            source = result.error or result.text
+            fallback = "请点击查看详情后重试。"
+            timeout_ms = 9000
+
+        summary = ResultBubble.summarize(source, fallback)
+        self._result_bubble.show_result(
+            kind,
+            title,
+            summary,
+            self.float_btn.frameGeometry(),
+            timeout_ms=timeout_ms,
+        )
+        pin_to_all_spaces(self._result_bubble)
+        return True
 
 
 # ═══════════════════════════════════════════════════════

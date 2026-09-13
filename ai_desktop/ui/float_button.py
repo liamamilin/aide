@@ -3,6 +3,7 @@ import ctypes
 import ctypes.util
 import math
 import os
+import sys
 
 from PyQt5.QtCore import QPoint, QRectF, QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import (
@@ -63,6 +64,9 @@ def _make_circular_icon(path: str, size: int) -> QIcon:
 
 def pin_to_all_spaces(widget) -> None:
     """设置 NSWindow collection behavior，使窗口出现在所有 macOS Spaces 上"""
+    app = QApplication.instance()
+    if sys.platform != "darwin" or app is None or app.platformName() != "cocoa":
+        return
     try:
         lib_path = ctypes.util.find_library("objc")
         if not lib_path:
@@ -185,6 +189,10 @@ class FloatButton(QPushButton):
         self._apply_mode()
         self.move(anchor.x() - self.width() + 1, anchor.y() - self.height() + 1)
         self.ensure_visible()
+
+    @property
+    def pet_enabled(self) -> bool:
+        return self._pet_enabled
 
     def paintEvent(self, event) -> None:
         if not self._pet_enabled or self._pet_content.isNull():

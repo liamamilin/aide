@@ -28,6 +28,15 @@ def _get_context_menu(button):
     return button._create_context_menu()
 
 
+def test_native_spaces_pin_is_skipped_outside_cocoa(qapp):
+    from ai_desktop.ui.float_button import pin_to_all_spaces
+
+    with patch("ai_desktop.ui.float_button.sys.platform", "darwin"), \
+            patch("ai_desktop.ui.float_button.ctypes.util.find_library") as find_library:
+        pin_to_all_spaces(object())
+    find_library.assert_not_called()
+
+
 # ── L1: Signal Tests ───────────────────────────────────
 
 class TestFloatButtonSignals:
