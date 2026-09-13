@@ -77,10 +77,12 @@ aide
 ```
 
 `ai_desktop/version.py` is the authoritative version source for Python packaging,
-the running app, `Info.plist`, and DMG names. Local builds use an ad-hoc signature
-by default. Set `AIDE_SIGN_IDENTITY` to a Developer ID identity when producing a
-signed distribution candidate. The read-only preflight never commits, tags, or
-pushes:
+the running app, `Info.plist`, and DMG names. Builds prefer an available stable
+code-signing identity (Developer ID, Apple Development, or the project's local
+`AI Desktop Assistant` certificate) and fall back to ad-hoc only when none is
+available. Set `AIDE_SIGN_IDENTITY` to choose an identity; use `-` to force
+ad-hoc. Stable signing keeps macOS permissions attached to the same app across
+rebuilds. The read-only preflight never commits, tags, or pushes:
 
 ```bash
 python scripts/release_check.py --version 1.5.0 --require-new-tag

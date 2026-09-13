@@ -76,7 +76,7 @@ aide
 ./scripts/build.sh --test --smoke --dmg
 ```
 
-`ai_desktop/version.py` 是 Python 包、运行时、`Info.plist` 与 DMG 文件名的唯一版本来源。本地构建默认使用 ad-hoc 签名；生成开发者签名的分发候选包时，通过 `AIDE_SIGN_IDENTITY` 指定 Developer ID。只读预检不会提交、打标签或推送：
+`ai_desktop/version.py` 是 Python 包、运行时、`Info.plist` 与 DMG 文件名的唯一版本来源。构建会优先使用本机可用的稳定代码签名身份（Developer ID、Apple Development 或项目本地证书 `AI Desktop Assistant`），找不到时才退回 ad-hoc。也可以通过 `AIDE_SIGN_IDENTITY` 显式指定签名身份；设置为 `-` 才强制使用 ad-hoc。稳定签名能让 macOS 持续识别同一个应用，避免每次重建都重新申请辅助功能、输入监控和录屏权限。只读预检不会提交、打标签或推送：
 
 ```bash
 python scripts/release_check.py --version 1.5.0 --require-new-tag
