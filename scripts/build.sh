@@ -40,7 +40,7 @@ echo "    PyInstaller: $($PYTHON_BIN -m PyInstaller --version)"
 
 if $RUN_TESTS; then
     echo "==> [1/6] 运行 ruff 检查..."
-    "$PYTHON_BIN" -m ruff check ai_desktop/ tests/ scripts/release_check.py
+    "$PYTHON_BIN" -m ruff check ai_desktop/ tests/ scripts/release_check.py scripts/restore_database.py scripts/benchmark_m2.py
 
     echo "==> [2/6] 运行 pytest..."
     QT_QPA_PLATFORM=offscreen "$PYTHON_BIN" -m pytest tests/ -q
@@ -70,6 +70,7 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 if $SMOKE; then
     echo "==> [6/6] 运行隔离冒烟测试..."
     "${ROOT}/scripts/smoke_test.sh"
+    "${ROOT}/scripts/upgrade_smoke_test.sh"
 else
     echo "==> [6/6] 跳过冒烟测试（使用 --smoke 启用）"
 fi

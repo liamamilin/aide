@@ -4,6 +4,25 @@ This project follows source-controlled release versions. A version listed as
 "Candidate" has been built for verification but has not been published as a
 GitHub Release.
 
+## 1.5.0 — Candidate
+
+- Added managed attachment validation, reference tracking, inference copies, and
+  safe garbage collection while preserving legacy image history.
+- Added asynchronous Ollama image-capability checks with supported,
+  unsupported, and unknown states before image submission.
+- Added stable cursor pagination and validated title renaming for all history,
+  including custom Agent identity display.
+- Persisted chat-window geometry and floating-button placement, with recovery
+  after monitor removal, resolution changes, or invalid saved state.
+- Added explicit SQLite schema versions, consistent online backups before
+  upgrades, transactional rollback, future-version rejection, and a guarded
+  restore utility that retains the current database as a safety backup.
+- Added a reproducible M2 benchmark for 1,000-conversation history, long
+  conversations, attachment processing, window construction, and request
+  preparation.
+
+No `v1.5.0` tag or GitHub Release has been created yet.
+
 ## 1.4.1 — Candidate
 
 - Added explicit request/result contracts and isolated late stream events by

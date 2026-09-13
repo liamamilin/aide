@@ -89,9 +89,15 @@ def test_ci_and_local_build_use_one_definition():
     )
     build_script = (ROOT / "scripts" / "build.sh").read_text(encoding="utf-8")
     smoke_script = (ROOT / "scripts" / "smoke_test.sh").read_text(encoding="utf-8")
+    upgrade_smoke_script = (ROOT / "scripts" / "upgrade_smoke_test.sh").read_text(encoding="utf-8")
 
     assert "bash scripts/build.sh --smoke --dmg" in workflow
     assert "pyinstaller --windowed" not in workflow.lower()
     assert "scripts/aide.spec" in build_script
     assert "Contents/MacOS/AI桌面助手" in smoke_script
+    assert "PRAGMA user_version" in smoke_script
+    assert "SCHEMA_VERSION" in smoke_script
     assert "pgrep" not in smoke_script
+    assert "AIDE_DATA_DIR" in upgrade_smoke_script
+    assert "PRAGMA user_version" in upgrade_smoke_script
+    assert "backups" in upgrade_smoke_script

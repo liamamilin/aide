@@ -83,7 +83,7 @@ signed distribution candidate. The read-only preflight never commits, tags, or
 pushes:
 
 ```bash
-python scripts/release_check.py --version 1.4.1 --require-new-tag
+python scripts/release_check.py --version 1.5.0 --require-new-tag
 ```
 
 ---
@@ -95,7 +95,7 @@ python scripts/release_check.py --version 1.4.1 --require-new-tag
 - **Thinking process** — LLM reasoning shown live, collapsed into `💭 Thinking` when complete
 - **Markdown rendering** — code blocks, lists, bold, headings; headings use the accent blue
 - **Multi-turn conversation** — follow-ups and corrections, persisted in SQLite
-- **Image understanding (multimodal)** — send images by pasting, drag-and-drop, 📎 attach, or `⌘⌃S` region screenshot; images persist with the conversation and can be clicked for a full view. Select a vision-capable multimodal model (e.g. `llava`, `qwen2.5vl`) in the model dropdown; images are processed locally only
+- **Image understanding (multimodal)** — validated managed attachments, missing-file recovery, and visible model capability checks for paste, drag-and-drop, 📎 attach, or `⌘⌃S` region screenshot
 - **Interrupt ⏹** — stop streaming generation at any time
 - **Edit ✏️** — hover a user message for the edit button; click to refill the input and resend
 - **Copy 📋** — hover an assistant reply for the copy button
@@ -109,14 +109,30 @@ python scripts/release_check.py --version 1.4.1 --require-new-tag
 - **Quick switch from menu bar** — switch agents directly from the menu bar icon's right-click menu
 
 ### History
-- **Browse conversations** — open the history window to see all conversations with message counts
+- **Browse conversations** — stable pagination reaches all conversations and shows message counts
 - **Full-text search** — search conversation titles and message contents, 300ms debounce
-- **Delete / Load** — load a conversation from history, or delete the ones you don't need
+- **Rename / Delete / Load** — edit validated titles, load a conversation, or delete it
 
 ### Settings
 - **Runtime configuration** — right-click the floating button → Settings… → change Ollama URL, timeout, context window, hotkeys
-- **Persistence** — all settings, agents, and model selection survive restarts
+- **Persistence** — settings, agents, model selection, chat geometry, and floating-button placement survive restarts and recover onto an available display
 - **Auto-restore** — loads the last conversation on startup, keeping your selected agent
+
+### Database upgrades and recovery
+
+Before upgrading an existing unversioned database, the app creates a consistent
+SQLite backup in the data directory's `backups/` folder. Schema changes commit as
+one transaction; a failed migration leaves the old schema and data intact. Stop
+the app before restoring a matching older backup:
+
+```bash
+python scripts/restore_database.py "/path/to/backup.sqlite3"
+```
+
+The restore utility first keeps the current database as a `before-restore`
+safety backup. Starting a newer app after restoring an older schema upgrades it
+again, so use the application version that matches the restored backup when
+downgrading.
 
 ---
 

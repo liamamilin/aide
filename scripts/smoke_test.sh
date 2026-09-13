@@ -67,10 +67,17 @@ if [ ! -f "${TEMP_ROOT}/data/chat_history.db" ]; then
     cat "$OUTPUT" >&2
     exit 1
 fi
+EXPECTED_SCHEMA="$($PYTHON_BIN -c 'from ai_desktop.utils.storage import SCHEMA_VERSION; print(SCHEMA_VERSION)')"
+ACTUAL_SCHEMA="$($PYTHON_BIN -c 'import sqlite3, sys; db = sqlite3.connect(sys.argv[1]); print(db.execute("PRAGMA user_version").fetchone()[0]); db.close()' "${TEMP_ROOT}/data/chat_history.db")"
+if [ "$ACTUAL_SCHEMA" != "$EXPECTED_SCHEMA" ]; then
+    echo "ERROR: isolated database schema ${ACTUAL_SCHEMA}, expected ${EXPECTED_SCHEMA}" >&2
+    cat "$OUTPUT" >&2
+    exit 1
+fi
 if [ ! -f "${TEMP_ROOT}/logs/app.log" ]; then
     echo "ERROR: isolated application log was not created" >&2
     cat "$OUTPUT" >&2
     exit 1
 fi
 
-echo "==> Packaged app initialized and exited cleanly — SMOKE TEST PASSED"
+echo "==> Packaged app initialized schema ${ACTUAL_SCHEMA} and exited cleanly — SMOKE TEST PASSED"

@@ -4,7 +4,6 @@ SQLite 持久化存储：对话记录
 import json
 import logging
 import os
-import shutil
 import sqlite3
 import sys
 import threading
@@ -14,6 +13,33 @@ from pathlib import Path
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
+
+SCHEMA_VERSION = 1
+
+
+class UnsupportedSchemaVersionError(RuntimeError):
+    """Raised when a database was created by a newer application version."""
+
+
+def _copy_sqlite_database(source: Path, destination: Path) -> None:
+    """Copy a SQLite database, including committed WAL content, through backup()."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    source_uri = f"{source.resolve().as_uri()}?mode=ro"
+    source_db = sqlite3.connect(source_uri, uri=True)
+    target_db = sqlite3.connect(str(temporary))
+    try:
+        source_db.backup(target_db)
+        if target_db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            raise sqlite3.DatabaseError("SQLite backup integrity check failed")
+        target_db.close()
+        source_db.close()
+        os.replace(temporary, destination)
+    except Exception:
+        target_db.close()
+        source_db.close()
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def _resolve_db_path() -> Path:
@@ -38,7 +64,7 @@ def _resolve_db_path() -> Path:
     # Migrate from old dev path if it exists and prod path doesn't yet
     if dev_path.exists() and not prod_path.exists():
         try:
-            shutil.copy2(str(dev_path), str(prod_path))
+            _copy_sqlite_database(dev_path, prod_path)
             logger.info("Migrated DB from %s to %s", dev_path, prod_path)
         except Exception:
             logger.exception("Failed to migrate DB, falling back to dev path")
@@ -71,8 +97,105 @@ def _conn() -> sqlite3.Connection:
     return _local.conn
 
 
-def init_db() -> None:
-    db = _conn()
+def _schema_version(db: sqlite3.Connection) -> int:
+    return int(db.execute("PRAGMA user_version").fetchone()[0])
+
+
+def _has_existing_schema(db: sqlite3.Connection) -> bool:
+    row = db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' LIMIT 1"
+    ).fetchone()
+    return row is not None
+
+
+def _schema_backup_path(source_version: int, target_version: int) -> Path:
+    directory = DB_PATH.parent / "backups"
+    directory.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    return directory / (
+        f"{DB_PATH.stem}.schema-{source_version}-to-{target_version}."
+        f"{stamp}-{time.time_ns() % 1_000_000_000:09d}.sqlite3"
+    )
+
+
+def _create_schema_backup(
+    db: sqlite3.Connection,
+    source_version: int,
+    target_version: int,
+) -> Path:
+    path = _schema_backup_path(source_version, target_version)
+    destination = sqlite3.connect(str(path))
+    try:
+        db.backup(destination)
+        if destination.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            raise sqlite3.DatabaseError("SQLite schema backup integrity check failed")
+    except Exception:
+        destination.close()
+        path.unlink(missing_ok=True)
+        raise
+    destination.close()
+    logger.info("Created schema %d backup at %s", source_version, path)
+    return path
+
+
+def _database_version(path: Path) -> int:
+    uri = f"{path.resolve().as_uri()}?mode=ro"
+    db = sqlite3.connect(uri, uri=True)
+    try:
+        if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            raise sqlite3.DatabaseError(f"数据库完整性检查失败：{path}")
+        return _schema_version(db)
+    finally:
+        db.close()
+
+
+def close_db() -> None:
+    """Close this thread's cached connection before replacing its database file."""
+    connection = getattr(_local, "conn", None)
+    if connection is not None:
+        connection.close()
+        _local.conn = None
+
+
+def restore_database_backup(backup_path: str | Path) -> Path | None:
+    """Restore an explicit SQLite backup and retain a safety copy of the current DB.
+
+    The application must be stopped before this function is called. A restored older
+    schema is intended for its matching older application; starting this version again
+    will migrate it forward.
+    """
+    source = Path(backup_path).expanduser().resolve()
+    destination = DB_PATH.expanduser().resolve()
+    if not source.is_file():
+        raise FileNotFoundError(f"备份文件不存在：{source}")
+    if source == destination:
+        raise ValueError("备份文件不能与当前数据库相同。")
+    backup_version = _database_version(source)
+    if backup_version > SCHEMA_VERSION:
+        raise UnsupportedSchemaVersionError(
+            f"备份 schema {backup_version} 高于当前工具支持的 {SCHEMA_VERSION}。"
+        )
+
+    safety_backup = None
+    if destination.is_file():
+        directory = destination.parent / "backups"
+        directory.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        safety_backup = directory / (
+            f"{destination.stem}.before-restore.{stamp}-"
+            f"{time.time_ns() % 1_000_000_000:09d}.sqlite3"
+        )
+        _copy_sqlite_database(destination, safety_backup)
+
+    close_db()
+    for suffix in ("-wal", "-shm"):
+        Path(f"{destination}{suffix}").unlink(missing_ok=True)
+    _copy_sqlite_database(source, destination)
+    logger.info("Restored schema %d backup %s to %s", backup_version, source, destination)
+    return safety_backup
+
+
+def _migrate_v0_to_v1(db: sqlite3.Connection) -> None:
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS conversations (
@@ -155,7 +278,42 @@ def init_db() -> None:
         """
     )
     _migrate_legacy_attachments(db)
-    db.commit()
+
+
+_MIGRATIONS = {0: _migrate_v0_to_v1}
+
+
+def init_db() -> None:
+    db = _conn()
+    current = _schema_version(db)
+    if current > SCHEMA_VERSION:
+        raise UnsupportedSchemaVersionError(
+            f"数据库 schema {current} 高于当前应用支持的 {SCHEMA_VERSION}；"
+            "请使用匹配版本的应用，或恢复升级前备份。"
+        )
+    if current < SCHEMA_VERSION:
+        db.commit()
+        if _has_existing_schema(db):
+            _create_schema_backup(db, current, SCHEMA_VERSION)
+        try:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                while current < SCHEMA_VERSION:
+                    migration = _MIGRATIONS.get(current)
+                    if migration is None:
+                        raise RuntimeError(f"缺少从 schema {current} 开始的迁移。")
+                    migration(db)
+                    current += 1
+                    db.execute(f"PRAGMA user_version={current}")
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
+        except Exception:
+            logger.exception("Database migration to schema %d failed", SCHEMA_VERSION)
+            raise
+    with db:
+        _migrate_legacy_attachments(db)
     if _db_uses_app_data_root():
         collect_attachment_garbage()
 
@@ -165,7 +323,6 @@ def _ensure_column(db, table: str, column: str, definition: str) -> None:
     cols = {r["name"] for r in db.execute(f"PRAGMA table_info({table})").fetchall()}
     if column not in cols:
         db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
-        db.commit()
 
 
 @dataclass
