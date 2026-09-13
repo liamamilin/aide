@@ -98,6 +98,7 @@ python scripts/release_check.py --version 1.5.0 --require-new-tag
 - **Safe selection capture** — preserves enumerable text, rich-text, and image clipboard formats, and never overwrites a newer user copy
 - **Quick actions** — after selecting text, run Translate, Explain, Summarize, or Rewrite with number keys, arrows, and Enter
 - **Image understanding (multimodal)** — validated managed attachments, missing-file recovery, and visible model capability checks for paste, drag-and-drop, 📎 attach, or `⌘⌃S` region screenshot
+- **On-device OCR** — extract text from any pending image with Apple Vision, edit or copy the result, then choose text only or text plus the original image before sending
 - **Interrupt ⏹** — stop streaming generation at any time
 - **Edit ✏️** — hover a user message for the edit button; click to refill the input and resend
 - **Copy 📋** — hover an assistant reply for the copy button
@@ -210,10 +211,13 @@ ai_desktop/
 │   └── text_normalizer.py      # text cleaning + truncation
 ├── llm/
 │   └── chat_client.py          # Ollama /api/chat (streaming + thinking + multimodal images)
+├── services/
+│   └── ocr_service.py          # Apple Vision OCR + cancellable background tasks + layout assembly
 ├── ui/
 │   ├── float_button.py         # floating circular button (drag / cross-screen / right-click)
 │   ├── menubar_icon.py         # macOS menu bar icon + agent menu
 │   ├── chat_dialog.py          # multi-turn chat + hotkeys + copy/edit/interrupt + image send/receive
+│   ├── ocr_preview_dialog.py   # editable OCR preview + explicit image retention choice
 │   ├── history_dialog.py       # history browsing + full-text search
 │   ├── agent_editor.py         # agent management (add/edit/delete + emoji picker)
 │   ├── settings_dialog.py      # runtime settings panel

@@ -94,6 +94,7 @@ python scripts/release_check.py --version 1.5.0 --require-new-tag
 - **安全选取文字** — 保留剪贴板中可枚举的文本、富文本和图片格式，捕获期间出现用户新复制时不覆盖
 - **快捷动作** — 选中文字后可用数字键、方向键和 Enter 直接执行翻译、解释、摘要或改写
 - **图片理解（多模态）** — 粘贴 / 拖拽 / 📎 附件 / `⌘⌃S` 框选截图四种方式发图，附件经过真实解码校验和受管生命周期处理，历史缺图可识别，并显示当前模型的图片能力状态
+- **设备端 OCR** — 使用 Apple Vision 提取任一待发送图片的文字，可编辑或复制结果，并在发送前明确选择仅用文字或文字加原图
 - **中断 ⏹** — 流式生成时可随时停止
 - **编辑 ✏️** — 用户消息 hover 可见编辑按钮，点击回填输入框重新发送
 - **复制 📋** — 助手回复 hover 可见复制按钮
@@ -200,10 +201,13 @@ ai_desktop/
 │   └── text_normalizer.py      # 文本清洗 + 截断
 ├── llm/
 │   └── chat_client.py          # Ollama /api/chat（流式 + thinking + 多模态 images）
+├── services/
+│   └── ocr_service.py          # Apple Vision OCR + 可取消后台任务 + 版面合并
 ├── ui/
 │   ├── float_button.py         # 悬浮圆形按钮（拖拽/跨屏/右键）
 │   ├── menubar_icon.py         # macOS 菜单栏图标 + Agent 菜单
 │   ├── chat_dialog.py          # 多轮对话 + 快捷键 + 复制/编辑/中断 + 图片收发
+│   ├── ocr_preview_dialog.py   # 可编辑 OCR 预览 + 原图保留选择
 │   ├── history_dialog.py       # 历史浏览 + 全文搜索
 │   ├── agent_editor.py         # Agent 管理（增删改 + emoji 选择）
 │   ├── settings_dialog.py      # 运行时设置面板
