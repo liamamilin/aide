@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import NamedTuple
 
 import requests
@@ -16,21 +17,48 @@ class UpdateInfo(NamedTuple):
     body: str
 
 
+def update_check_due(now: float | None = None) -> bool:
+    """Return whether the persisted release-check interval has elapsed."""
+    last_check = get_setting("last_update_check", "0")
+    try:
+        elapsed = (time.time() if now is None else now) - float(last_check)
+    except (ValueError, TypeError):
+        return True
+    return elapsed >= config.UPDATE_CHECK_INTERVAL
+
+
+def mark_update_check_started(now: float | None = None) -> None:
+    save_setting("last_update_check", str(time.time() if now is None else now))
+
+
+def parse_update_info(data: dict, current_version: str | None = None) -> UpdateInfo | None:
+    """Parse a GitHub latest-release object and return only a newer release."""
+    if not isinstance(data, dict):
+        raise TypeError("release response must be an object")
+    tag_name = data.get("tag_name", "")
+    if not isinstance(tag_name, str):
+        raise TypeError("release tag must be a string")
+    latest = tag_name.lstrip("v")
+    current = (current_version or __version__).lstrip("v")
+    if _compare_versions(latest, current) <= 0:
+        return None
+    return UpdateInfo(
+        version=latest,
+        url=data.get("html_url", ""),
+        body=data.get("body", ""),
+    )
+
+
 def check_for_update() -> UpdateInfo | None:
     """检查 GitHub Releases 是否有新版本
 
     返回 UpdateInfo（有新版）或 None（已最新或检查失败）。
     """
     # 频率限制：上次检查距今超过间隔才执行
-    last_check = get_setting("last_update_check", "0")
-    try:
-        elapsed = __import__("time").time() - float(last_check)
-    except (ValueError, TypeError):
-        elapsed = float("inf")
-    if elapsed < config.UPDATE_CHECK_INTERVAL:
+    if not update_check_due():
         return None
 
-    save_setting("last_update_check", str(__import__("time").time()))
+    mark_update_check_started()
 
     try:
         resp = requests.get(
@@ -40,16 +68,7 @@ def check_for_update() -> UpdateInfo | None:
         if resp.status_code != 200:
             logger.debug("Update check returned %d", resp.status_code)
             return None
-        data = resp.json()
-        latest = data.get("tag_name", "").lstrip("v")
-        current = __version__.lstrip("v")
-        if _compare_versions(latest, current) <= 0:
-            return None
-        return UpdateInfo(
-            version=latest,
-            url=data.get("html_url", ""),
-            body=data.get("body", ""),
-        )
+        return parse_update_info(resp.json())
     except Exception:
         logger.debug("Update check failed", exc_info=True)
         return None

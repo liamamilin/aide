@@ -8,10 +8,18 @@ Agent 管理器 —— 管理 Agent 列表、切换、保存
 - 提供当前活跃 Agent 和完整列表的访问
 """
 import logging
+from dataclasses import replace
 
 from ai_desktop.config import AGENTS, DEFAULT_AGENT_INDEX, Agent
 from ai_desktop.ui.agent_editor import AgentDef
-from ai_desktop.utils.storage import get_setting, load_custom_agents, save_custom_agents, save_setting
+from ai_desktop.utils.storage import (
+    get_setting,
+    load_agent_profile_assignments,
+    load_custom_agents,
+    save_agent_profile_assignment,
+    save_custom_agents,
+    save_setting,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +29,8 @@ def _normalize_custom_agent(data: dict) -> dict | None:
     if not isinstance(data, dict):
         return None
     normalized = {key: str(data.get(key, "")).strip() for key in required}
+    profile_id = data.get("profile_id")
+    normalized["profile_id"] = str(profile_id).strip() if profile_id else None
     if not normalized["id"] or not normalized["name"] or not normalized["system_prompt"]:
         return None
     if not normalized["icon"]:
@@ -49,12 +59,20 @@ class AgentManager:
 
     def __init__(self) -> None:
         # 合并内置 + 自定义 Agent
-        self._all_agents: list[Agent] = list(AGENTS)
+        self._builtin_agents: list[Agent] = [replace(agent) for agent in AGENTS]
+        self._all_agents: list[Agent] = list(self._builtin_agents)
         self._custom_agents: list[AgentDef] = []
+        assignments = load_agent_profile_assignments()
+        for agent in self._all_agents:
+            agent.profile_id = assignments.get(agent.id)
         for d in _normalize_custom_agents(load_custom_agents()):
-            ag = Agent(id=d["id"], name=d["name"], icon=d["icon"], system_prompt=d["system_prompt"])
+            # 绑定表是唯一可信来源。这样删除配置后的 ON DELETE SET NULL
+            # 不会被 custom_agents 设置中的旧副本重新带回来。
+            profile_id = assignments.get(d["id"])
+            ag = Agent(id=d["id"], name=d["name"], icon=d["icon"],
+                       system_prompt=d["system_prompt"], profile_id=profile_id)
             a_def = AgentDef(id=d["id"], name=d["name"], icon=d["icon"],
-                            system_prompt=d["system_prompt"], builtin=False)
+                            system_prompt=d["system_prompt"], builtin=False, profile_id=profile_id)
             self._all_agents.append(ag)
             self._custom_agents.append(a_def)
 
@@ -70,7 +88,7 @@ class AgentManager:
     @property
     def builtin_agents(self) -> list[Agent]:
         """返回内置 Agent 列表"""
-        return list(AGENTS)
+        return list(self._builtin_agents)
 
     @property
     def all_agents(self) -> list[Agent]:
@@ -119,17 +137,27 @@ class AgentManager:
             data: 自定义 Agent 数据列表，每项包含 id, name, icon, system_prompt
         """
         data = _normalize_custom_agents(data)
-        save_custom_agents(data)
+        previous_ids = {definition.id for definition in self._custom_agents}
+        assignments = load_agent_profile_assignments()
+        save_custom_agents([
+            {key: item[key] for key in ("id", "name", "icon", "system_prompt")}
+            for item in data
+        ])
 
         # 重建合并列表
-        self._all_agents = list(AGENTS)
+        self._all_agents = list(self._builtin_agents)
         self._custom_agents.clear()
+        current_ids = {item["id"] for item in data}
+        for removed_id in previous_ids - current_ids:
+            save_agent_profile_assignment(removed_id, None)
         for d in data:
-            ag = Agent(id=d["id"], name=d["name"], icon=d["icon"], system_prompt=d["system_prompt"])
+            profile_id = assignments.get(d["id"])
+            ag = Agent(id=d["id"], name=d["name"], icon=d["icon"],
+                       system_prompt=d["system_prompt"], profile_id=profile_id)
             self._all_agents.append(ag)
             self._custom_agents.append(
                 AgentDef(id=d["id"], name=d["name"], icon=d["icon"],
-                         system_prompt=d["system_prompt"], builtin=False)
+                         system_prompt=d["system_prompt"], builtin=False, profile_id=profile_id)
             )
 
         # 确保当前 Agent 仍在列表中
@@ -137,3 +165,22 @@ class AgentManager:
             self._active_agent = self._all_agents[DEFAULT_AGENT_INDEX]
 
         logger.info("Custom agents saved (%d custom)", len(data))
+
+    def assign_profile(self, agent_id: str, profile_id: str | None) -> None:
+        found = next((agent for agent in self._all_agents if agent.id == agent_id), None)
+        if found is None:
+            raise LookupError("Agent 不存在。")
+        save_agent_profile_assignment(agent_id, profile_id)
+        found.profile_id = profile_id
+        for definition in self._custom_agents:
+            if definition.id == agent_id:
+                definition.profile_id = profile_id
+                break
+
+    def refresh_profile_assignments(self) -> None:
+        """Reload bindings after profiles were deleted or replaced."""
+        assignments = load_agent_profile_assignments()
+        for agent in self._all_agents:
+            agent.profile_id = assignments.get(agent.id)
+        for definition in self._custom_agents:
+            definition.profile_id = assignments.get(definition.id)

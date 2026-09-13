@@ -12,46 +12,131 @@ import logging
 import os
 import subprocess
 import tempfile
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from enum import Enum
 from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 
-def capture_region() -> Tuple[Optional[str], str]:
-    """交互式框选截图。
+class ScreenshotStatus(str, Enum):
+    SUCCEEDED = "succeeded"
+    CANCELLED = "cancelled"
+    PERMISSION_DENIED = "permission_denied"
+    TIMED_OUT = "timed_out"
+    COMMAND_FAILED = "command_failed"
 
-    返回 (path, error)：
-      - 成功：用户选中的 PNG 临时路径 + ""
-      - 取消（ESC）：None + ""
-      - 失败（如屏幕录制权限未授予）：None + 错误信息
-    """
+
+@dataclass(frozen=True)
+class ScreenshotResult:
+    status: ScreenshotStatus
+    path: str = ""
+    error: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.status == ScreenshotStatus.SUCCEEDED
+
+
+def _stop_process(proc: subprocess.Popen) -> None:
+    """Terminate only the screencapture process created by this call."""
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=0.5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=0.5)
+
+
+def capture_region_result(cancelled: Callable[[], bool] | None = None, *,
+                          timeout_seconds: float = 30) -> ScreenshotResult:
+    """Run interactive capture and return an explicit terminal state."""
+    if cancelled and cancelled():
+        return ScreenshotResult(ScreenshotStatus.CANCELLED)
+
     fd, path = tempfile.mkstemp(suffix=".png")
     os.close(fd)
-    err = ""
+    proc = None
+    result = None
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             ["screencapture", "-i", "-x", path],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=30,
         )
-        err = (proc.stderr or proc.stdout or "").strip()
-        if err:
-            logger.warning("screencapture: %s", err)
+        deadline = time.monotonic() + timeout_seconds
+        while proc.poll() is None:
+            if cancelled and cancelled():
+                result = ScreenshotResult(ScreenshotStatus.CANCELLED)
+                _stop_process(proc)
+                break
+            if time.monotonic() >= deadline:
+                result = ScreenshotResult(
+                    ScreenshotStatus.TIMED_OUT,
+                    error=f"截图在 {timeout_seconds:g} 秒内未完成，请重试。",
+                )
+                _stop_process(proc)
+                break
+            time.sleep(0.02)
+        try:
+            stdout, stderr = proc.communicate()
+        except Exception:
+            if result is None:
+                raise
+            stdout, stderr = "", ""
+        output = (stderr or stdout or "").strip()
+        if result is None and os.path.exists(path) and os.path.getsize(path) > 0:
+            result = ScreenshotResult(ScreenshotStatus.SUCCEEDED, path=path)
+        elif result is None and is_permission_error(output):
+            result = ScreenshotResult(ScreenshotStatus.PERMISSION_DENIED, error=output)
+        elif result is None and output:
+            result = ScreenshotResult(ScreenshotStatus.COMMAND_FAILED, error=output)
+        elif result is None:
+            # macOS screencapture exits without a file or message when Esc is used.
+            result = ScreenshotResult(ScreenshotStatus.CANCELLED)
     except Exception as e:
-        err = str(e)
+        if proc is not None:
+            try:
+                _stop_process(proc)
+            except Exception:
+                logger.warning("Failed to stop screencapture", exc_info=True)
+        result = ScreenshotResult(ScreenshotStatus.COMMAND_FAILED, error=str(e))
         logger.warning("screencapture failed: %s", e)
+    finally:
+        if result is None or not result.ok:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
-    if os.path.exists(path) and os.path.getsize(path) > 0:
-        return path, ""
+    if result is None:
+        return ScreenshotResult(ScreenshotStatus.COMMAND_FAILED, error="截图命令未返回结果。")
+    if result.error:
+        logger.warning("screencapture: %s", result.error)
+    return result
 
-    try:
-        os.remove(path)
-    except OSError:
-        pass
-    return None, err
+
+def capture_region(cancelled: Callable[[], bool] | None = None) -> Tuple[Optional[str], str]:
+    """Compatibility wrapper returning the original ``(path, error)`` tuple."""
+    result = capture_region_result(cancelled)
+    if result.ok:
+        return result.path, ""
+    if result.status == ScreenshotStatus.CANCELLED:
+        return None, ""
+    return None, result.error
 
 
 def is_permission_error(err: str) -> bool:
     """判断错误是否属于「屏幕录制权限未授予」"""
-    return "could not create image" in err.lower()
+    value = err.lower()
+    return any(marker in value for marker in (
+        "could not create image",
+        "screen recording permission",
+        "not authorized to capture",
+        "not permitted to capture",
+    ))

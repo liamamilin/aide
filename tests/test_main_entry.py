@@ -1,11 +1,23 @@
-"""Test that python -m ai_desktop entry point exists"""
-import importlib
+"""Tests for the lightweight command-line entry point."""
+
+import subprocess
+import sys
+from pathlib import Path
+
+from ai_desktop import __version__
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_main_module_entry_point():
-    """Verify __main__.py can be imported and delegates to main()"""
-    mod = importlib.import_module("ai_desktop.__main__")
-    assert hasattr(mod, "__name__")
-    # The module should define a way to call main
-    # We don't actually call main() (it starts a Qt app),
-    # just verify the import chain works
+def test_main_module_reports_version_without_loading_gui():
+    result = subprocess.run(
+        [sys.executable, "-m", "ai_desktop", "--version"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == __version__
+    assert result.stderr == ""

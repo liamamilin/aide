@@ -1,0 +1,62 @@
+{
+  "recorded_at": "2026-09-13T14:58:18+0800",
+  "environment": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.10.13",
+    "qt_platform": "offscreen"
+  },
+  "dataset": {
+    "history_conversations": 1000,
+    "history_messages": 2000,
+    "long_conversation_messages": 1000,
+    "attachment_pixels": 1440000
+  },
+  "targets_ms": {
+    "history_first_page_p95": 300,
+    "history_search_p95": 300,
+    "chat_window_construct_show_p95": 300
+  },
+  "metrics": {
+    "history_first_page": {
+      "samples": 30,
+      "p50_ms": 0.064,
+      "p95_ms": 0.081,
+      "max_ms": 0.094
+    },
+    "history_search": {
+      "samples": 30,
+      "p50_ms": 0.665,
+      "p95_ms": 0.853,
+      "max_ms": 1.051
+    },
+    "long_conversation_load": {
+      "samples": 20,
+      "p50_ms": 5.282,
+      "p95_ms": 5.919,
+      "max_ms": 8.552
+    },
+    "attachment_validate_store_gc": {
+      "samples": 10,
+      "p50_ms": 4.968,
+      "p95_ms": 5.753,
+      "max_ms": 5.753
+    },
+    "chat_window_construct_show": {
+      "samples": 10,
+      "p50_ms": 3.306,
+      "p95_ms": 4.09,
+      "max_ms": 4.09
+    },
+    "request_snapshot_and_json": {
+      "samples": 100,
+      "p50_ms": 0.794,
+      "p95_ms": 0.944,
+      "max_ms": 1.396,
+      "retained_kib": 5.979,
+      "peak_kib": 487.219,
+      "messages_per_request": 200
+    }
+  },
+  "scope": "Local offscreen baseline. Request metric covers immutable snapshot and JSON preparation without model inference or network latency."
+}

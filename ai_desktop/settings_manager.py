@@ -27,6 +27,10 @@ _SETTING_MAP = [
     ("max_rounds",      "OLLAMA_MAX_ROUNDS",     int),
     ("hotkey",          "HOTKEY",                str),
     ("think",           "OLLAMA_THINK",          bool),
+    ("quick_actions",   "QUICK_ACTIONS_ENABLED", bool),
+    ("desktop_pet",     "DESKTOP_PET_ENABLED",   bool),
+    ("pet_reduce_motion", "DESKTOP_PET_REDUCE_MOTION", bool),
+    ("pet_size",        "DESKTOP_PET_SIZE",      str),
 ]
 
 _DB_KEY_MAP = {
@@ -41,7 +45,13 @@ _DB_KEY_MAP = {
     "max_rounds":     "ollama_max_rounds",
     "hotkey":         "hotkey",
     "think":          "ollama_think",
+    "quick_actions":  "quick_actions_enabled",
+    "desktop_pet":    "desktop_pet_enabled",
+    "pet_reduce_motion": "desktop_pet_reduce_motion",
+    "pet_size":       "desktop_pet_size",
 }
+
+_PET_SIZES = frozenset({"small", "medium", "large"})
 
 
 class SettingsManager:
@@ -57,7 +67,10 @@ class SettingsManager:
                     if conv is bool:
                         setattr(config, attr, val.lower() == "true")
                     else:
-                        setattr(config, attr, conv(val))
+                        converted = conv(val)
+                        if dict_key == "pet_size" and converted not in _PET_SIZES:
+                            raise ValueError("invalid pet size")
+                        setattr(config, attr, converted)
                 except (ValueError, TypeError):
                     logger.warning("Invalid setting %s=%s, keeping default", db_key, val)
 
@@ -82,6 +95,10 @@ class SettingsManager:
             # 类型转换后比较
             try:
                 converted = conv(new_value) if not isinstance(new_value, conv) else new_value
+                if dict_key == "pet_size":
+                    converted = converted.strip().lower()
+                    if converted not in _PET_SIZES:
+                        raise ValueError("invalid pet size")
             except (ValueError, TypeError):
                 logger.warning("Invalid value for %s: %s", dict_key, new_value)
                 continue

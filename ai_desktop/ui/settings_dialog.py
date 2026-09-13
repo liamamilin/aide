@@ -4,6 +4,7 @@
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
@@ -28,6 +29,10 @@ class SettingsDialog(FramelessDragMixin, QDialog):
     FIELDS = [
         ("base_url",    "Ollama 服务地址",   str,   ""),
         ("think",       "模型思考推理",      bool,  True),
+        ("quick_actions", "选中文字后显示快捷动作", bool, True),
+        ("desktop_pet", "使用桌面宠物悬浮入口", bool, True),
+        ("pet_reduce_motion", "减少宠物动画", bool, False),
+        ("pet_size", "桌面宠物尺寸", str, "medium"),
         ("timeout",     "超时 (秒)",         int,   10),
         ("num_ctx",     "上下文窗口",        int,   2048),
         ("num_predict", "最大输出 token",    int,   256),
@@ -48,7 +53,9 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         self._load()
 
     def _setup_window(self):
-        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setWindowFlags(
+            Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
         self.setMinimumSize(380, 440)
         self.resize(400, 460)
         self.setStyleSheet(styles.DIALOG_BASE)
@@ -108,7 +115,14 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         _widget_style = styles.FORM_WIDGET
 
         for key, label, typ, _ in self.FIELDS:
-            if typ is float:
+            if key == "pet_size":
+                w = QComboBox()
+                w.addItem("小", "small")
+                w.addItem("中", "medium")
+                w.addItem("大", "large")
+                w.setStyleSheet(f"QComboBox {{ {_widget_style} }}")
+                self._widgets[key] = w
+            elif typ is float:
                 w = QDoubleSpinBox()
                 lo, hi = _float_ranges.get(key, (0.0, 1.0))
                 w.setRange(lo, hi)
@@ -128,10 +142,7 @@ class SettingsDialog(FramelessDragMixin, QDialog):
                 self._widgets[key] = w
             else:
                 w = QLineEdit()
-                w.setStyleSheet(
-                    f"QLineEdit {{ {_widget_style} }}"
-                    "QLineEdit:focus { border-color: #007AFF; }"
-                )
+                w.setStyleSheet(styles.FORM_INPUT)
                 self._widgets[key] = w
             lbl = QLabel(label)
             lbl.setStyleSheet(styles.LABEL)
@@ -161,7 +172,10 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         for key, label, typ, default in self.FIELDS:
             val = self._current.get(key, default)
             w = self._widgets[key]
-            if typ is float:
+            if key == "pet_size":
+                index = w.findData(str(val))
+                w.setCurrentIndex(index if index >= 0 else w.findData(default))
+            elif typ is float:
                 w.setValue(float(val) if val else float(default))
             elif typ is int:
                 w.setValue(int(val) if val else default)
@@ -174,7 +188,9 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         data = {}
         for key, label, typ, default in self.FIELDS:
             w = self._widgets[key]
-            if typ is float:
+            if key == "pet_size":
+                data[key] = w.currentData()
+            elif typ is float:
                 data[key] = w.value()
             elif typ is int:
                 data[key] = w.value()

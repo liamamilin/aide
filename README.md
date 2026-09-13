@@ -24,7 +24,7 @@
 
 ### Option 1: DMG Install (Recommended)
 
-1. Download the latest `AI桌面助手-v*.dmg` from [Releases](https://github.com/liamamilin/aide/releases)
+1. Download the latest `AI桌面助手-*.dmg` from [Releases](https://github.com/liamamilin/aide/releases)
 2. Double-click the DMG and drag `AI桌面助手` into Applications
 3. On first launch, allow it to run in System Settings → Privacy & Security
 4. Make sure [Ollama](https://ollama.com) is installed and running
@@ -76,6 +76,16 @@ aide
 ./scripts/build.sh --test --smoke --dmg
 ```
 
+`ai_desktop/version.py` is the authoritative version source for Python packaging,
+the running app, `Info.plist`, and DMG names. Local builds use an ad-hoc signature
+by default. Set `AIDE_SIGN_IDENTITY` to a Developer ID identity when producing a
+signed distribution candidate. The read-only preflight never commits, tags, or
+pushes:
+
+```bash
+python scripts/release_check.py --version 1.5.0 --require-new-tag
+```
+
 ---
 
 ## Features
@@ -85,7 +95,9 @@ aide
 - **Thinking process** — LLM reasoning shown live, collapsed into `💭 Thinking` when complete
 - **Markdown rendering** — code blocks, lists, bold, headings; headings use the accent blue
 - **Multi-turn conversation** — follow-ups and corrections, persisted in SQLite
-- **Image understanding (multimodal)** — send images by pasting, drag-and-drop, 📎 attach, or `⌘⌃S` region screenshot; images persist with the conversation and can be clicked for a full view. Select a vision-capable multimodal model (e.g. `llava`, `qwen2.5vl`) in the model dropdown; images are processed locally only
+- **Safe selection capture** — preserves enumerable text, rich-text, and image clipboard formats, and never overwrites a newer user copy
+- **Quick actions** — after selecting text, run Translate, Explain, Summarize, or Rewrite with number keys, arrows, and Enter
+- **Image understanding (multimodal)** — validated managed attachments, missing-file recovery, and visible model capability checks for paste, drag-and-drop, 📎 attach, or `⌘⌃S` region screenshot
 - **Interrupt ⏹** — stop streaming generation at any time
 - **Edit ✏️** — hover a user message for the edit button; click to refill the input and resend
 - **Copy 📋** — hover an assistant reply for the copy button
@@ -96,17 +108,34 @@ aide
 ### Agent
 - **5 built-in agents**: Code Expert 💻 / Translator 🌐 / General Assistant 🤖 / Summarizer 📄 / Polisher ✍️
 - **Custom agents** — create / edit / delete with custom emoji icon and prompt
+- **Task model profiles** — assign a reusable model, thinking mode, temperature, and output limit to each agent; every field can inherit the global setting
 - **Quick switch from menu bar** — switch agents directly from the menu bar icon's right-click menu
 
 ### History
-- **Browse conversations** — open the history window to see all conversations with message counts
+- **Browse conversations** — stable pagination reaches all conversations and shows message counts
 - **Full-text search** — search conversation titles and message contents, 300ms debounce
-- **Delete / Load** — load a conversation from history, or delete the ones you don't need
+- **Rename / Delete / Load** — edit validated titles, load a conversation, or delete it
 
 ### Settings
 - **Runtime configuration** — right-click the floating button → Settings… → change Ollama URL, timeout, context window, hotkeys
-- **Persistence** — all settings, agents, and model selection survive restarts
+- **Persistence** — settings, agents, model selection, chat geometry, and floating-button placement survive restarts and recover onto an available display
 - **Auto-restore** — loads the last conversation on startup, keeping your selected agent
+
+### Database upgrades and recovery
+
+Before upgrading an existing unversioned database, the app creates a consistent
+SQLite backup in the data directory's `backups/` folder. Schema changes commit as
+one transaction; a failed migration leaves the old schema and data intact. Stop
+the app before restoring a matching older backup:
+
+```bash
+python scripts/restore_database.py "/path/to/backup.sqlite3"
+```
+
+The restore utility first keeps the current database as a `before-restore`
+safety backup. Starting a newer app after restoring an older schema upgrades it
+again, so use the application version that matches the restored backup when
+downgrading.
 
 ---
 
@@ -170,6 +199,7 @@ ai_desktop/
 ├── main.py                     # Entry point + ChatController
 ├── config.py                   # LLM / hotkey / agent config
 ├── __main__.py                 # python -m ai_desktop support
+├── version.py                  # authoritative application version
 ├── settings_manager.py         # Persisted config load / apply
 ├── agent_manager.py            # Agent list management / switch / save
 ├── capture/
@@ -197,64 +227,32 @@ ai_desktop/
 │   ├── logging.py              # logging config
 │   ├── storage.py              # SQLite persistence (conversations/messages/settings/agents/image paths)
 │   └── permissions.py          # Accessibility + Input Monitoring permission check/request
-└── scripts/
-    └── aide.spec               # PyInstaller packaging config
+scripts/
+├── aide.spec                   # shared local/CI PyInstaller definition
+├── build.sh                    # build, sign, validate, smoke, package
+├── build_dmg.sh                # versioned DMG creation
+├── release_check.py            # read-only source/bundle preflight
+└── smoke_test.sh               # isolated packaged-app launch
 tests/
-├── conftest.py                 # shared fixtures (qapp, mocker)
-├── test_smoke.py               # text normalization + Markdown rendering (5)
-├── test_storage.py             # DB CRUD + image round-trip (23)
-├── test_chat_client.py         # stream parsing + multimodal message building (12)
-├── test_main_entry.py          # python -m entry point (1)
-├── test_settings_manager.py    # config load/apply/validate (8)
-├── test_agent_manager.py       # agent init/switch/save (10)
-├── test_chat_dialog.py         # chat window signals/state/image attachments (42)
-├── test_settings_dialog.py     # settings panel validation/signals (6)
-├── test_history_dialog.py      # history load/search/delete (6)
-├── test_agent_editor.py        # agent editor CRUD + add-dialog (10)
-├── test_float_button.py        # floating button menu/signals (8)
-├── test_menubar_icon.py        # menu bar agent menu/signals (9)
-├── test_images.py              # image storage/base64 (5)
-├── test_screenshot.py          # screenshot success/cancel/permission error (4)
-├── test_menu_contrast.py       # menu selected-item contrast (4)
-├── test_theme.py               # light/dark ColorSet contrast (8)
-├── test_frameless_mixin.py     # drag / frameless (2)
-├── test_clipboard_monitor.py   # clipboard capture (2)
-├── test_hotkey_listener.py     # hotkey parsing/registration (3)
-├── test_nsevent_monitor.py     # NSEvent backend (7)
-├── test_permissions.py         # permission detection (4)
-├── test_update_checker.py      # update checking (9)
-└── test_crash_handler.py       # crash diagnostics (2)
+├── conftest.py                 # shared fixtures (qapp, storage, mocks)
+├── fake_ollama.py              # local HTTP test server
+└── test_*.py                   # UI, lifecycle, transport, data, and release tests
 ```
 
 ---
 
 ## Testing
 
-The project has **190 automated tests** covering UI signals/state, the data layer, utilities, and the entry point:
+The automated suite covers UI state, request/session lifecycles, cancellable
+transport, capture, persistence, theming, entry points, and release packaging:
 
 ```bash
 # Install dev dependencies
 pip install -r requirements-dev.txt
 
-# Run all tests
-pytest tests/ -v    # 190 tests
-
-# By category
-pytest tests/test_chat_dialog.py -v        # chat window (42)
-pytest tests/test_storage.py -v            # database (23)
-pytest tests/test_chat_client.py -v        # LLM stream parsing + multimodal (12)
-pytest tests/test_agent_manager.py -v      # agent management (10)
-pytest tests/test_agent_editor.py -v       # agent editor + add dialog (10)
-pytest tests/test_settings_manager.py -v   # config management (8)
-pytest tests/test_settings_dialog.py -v    # settings panel (6)
-pytest tests/test_history_dialog.py -v     # history browsing (6)
-pytest tests/test_float_button.py -v       # floating button (8)
-pytest tests/test_menubar_icon.py -v       # menu bar icon (9)
-pytest tests/test_images.py -v             # image storage/base64 (5)
-pytest tests/test_screenshot.py -v         # screenshot success/cancel/permission error (4)
-pytest tests/test_theme.py -v              # light/dark contrast (8)
-pytest tests/test_main_entry.py -v         # entry point (1)
-pytest tests/test_smoke.py -v              # utilities (5)
+# Run the same checks used by CI
+python -m ruff check ai_desktop/ tests/ scripts/release_check.py
+QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q
 ```
 
 Tests use `pytest-qt` for real PyQt5 window rendering; external dependencies (Ollama HTTP, clipboard, macOS ctypes, screencapture) are isolated via mocks.

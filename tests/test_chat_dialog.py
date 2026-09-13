@@ -6,6 +6,8 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QTextCursor
 
 from ai_desktop.config import Agent
+from ai_desktop.llm.service_checks import ImageCapability, ServiceState
+from ai_desktop.services.action_service import BUILTIN_ACTIONS
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -98,6 +100,43 @@ class TestChatDialogSignals:
         with qtbot.waitSignal(dialog.stop_requested, timeout=1000):
             qtbot.mouseClick(dialog._send_btn, Qt.LeftButton)
 
+    def test_action_signal_includes_current_conversation_mode(self, qtbot):
+        from ai_desktop.ui.chat_dialog import ChatDialog
+
+        dialog = ChatDialog(
+            AGENTS,
+            ACTIVE,
+            MODELS,
+            MODELS[0],
+            actions=list(BUILTIN_ACTIONS),
+        )
+        qtbot.addWidget(dialog)
+        dialog.set_action_context(True, "current")
+        dialog.show_actions("material")
+        with qtbot.waitSignal(dialog.action_requested, timeout=1000) as signal:
+            dialog._action_panel._trigger(0)
+        assert signal.args == ["translate", "material", "current"]
+
+    def test_disabling_actions_hides_button_and_panel(self, qtbot):
+        from ai_desktop.ui.chat_dialog import ChatDialog
+
+        dialog = ChatDialog(
+            AGENTS,
+            ACTIVE,
+            MODELS,
+            MODELS[0],
+            actions=list(BUILTIN_ACTIONS),
+        )
+        qtbot.addWidget(dialog)
+        dialog.show()
+        dialog.show_actions("material")
+        assert dialog._action_panel.isVisible()
+        dialog.set_actions_enabled(False)
+        assert not dialog._action_btn.isVisible()
+        assert not dialog._action_panel.isVisible()
+        dialog.show_actions("other")
+        assert not dialog._action_panel.isVisible()
+
 
 # ── L2: State Transition Tests ──────────────────────────
 
@@ -173,6 +212,16 @@ class TestChatDialogState:
         assert dialog._send_btn.text() == "发送"
         assert dialog._input.isEnabled()
 
+    @pytest.mark.parametrize(("capability", "label"), [
+        (ImageCapability.SUPPORTED, "图片 ✓"),
+        (ImageCapability.UNSUPPORTED, "图片 ×"),
+        (ImageCapability.UNKNOWN, "图片 ?"),
+    ])
+    def test_image_capability_badge(self, dialog, capability, label):
+        dialog.set_image_capability(capability)
+        assert dialog._model_capability_badge.text() == label
+        assert dialog._model_capability_badge.toolTip() in dialog._attach_btn.toolTip()
+
     def test_clear_messages(self, qtbot, dialog):
         """Add messages → clear_messages() → layout only has stretch."""
         dialog.add_user_message("Hello")
@@ -220,16 +269,24 @@ class TestChatDialogDataFlow:
             ChatDialog._copy_to_clipboard("test text")
             mock_clipboard.setText.assert_called_once_with("test text")
 
-    def test_ollama_ping_mocked(self, qtbot, dialog):
-        """_OllamaPingWorker should emit result via mocked requests."""
-        from ai_desktop.ui.chat_dialog import _OllamaPingWorker
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        with patch("requests.get", return_value=mock_resp):
-            worker = _OllamaPingWorker()
-            with qtbot.waitSignal(worker.result, timeout=3000) as spy:
-                worker.run()
-            assert spy.args == [True]
+    def test_periodic_service_check_emits_without_worker(self, qtbot, dialog):
+        """The window timer delegates checks without creating a blocking worker."""
+        dialog._ollama_timer.setInterval(1)
+        with qtbot.waitSignal(dialog.service_check_requested, timeout=1000):
+            dialog._ollama_timer.start()
+        dialog.hide()
+        assert not dialog._ollama_timer.isActive()
+
+    @pytest.mark.parametrize("state,tooltip", [
+        (ServiceState.CHECKING, "正在检测"),
+        (ServiceState.ONLINE, "已连接"),
+        (ServiceState.EMPTY, "没有可用模型"),
+        (ServiceState.OFFLINE, "未连接"),
+        (ServiceState.INVALID, "格式错误"),
+    ])
+    def test_service_states_are_distinct(self, dialog, state, tooltip):
+        dialog.set_service_status(state)
+        assert tooltip in dialog._ollama_dot.toolTip()
 
 
 # ── L4: refresh_models Tests ─────────────────────────────

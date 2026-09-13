@@ -1,8 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec for AI 桌面助手 — macOS .app bundle"""
 import os
+import runpy
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(SPEC)), ".."))
+VERSION = runpy.run_path(os.path.join(ROOT, "ai_desktop", "version.py"))["__version__"]
 
 a = Analysis(
     [os.path.join(ROOT, "ai_desktop", "main.py")],
@@ -11,8 +13,10 @@ a = Analysis(
     datas=[
         (os.path.join(ROOT, "ai_desktop", "图标.icns"), "ai_desktop"),
         (os.path.join(ROOT, "ai_desktop", "图标.png"), "ai_desktop"),
+        (os.path.join(ROOT, "ai_desktop", "桌面宠物.png"), "ai_desktop"),
     ],
     hiddenimports=[
+        'PyQt5.QtNetwork',
         'pynput.keyboard._darwin',
         'pynput.mouse._darwin',
         'pynput.keyboard._base',
@@ -24,6 +28,9 @@ a = Analysis(
         'HIServices',
         'objc',
         'Quartz',
+        # F02 local OCR (Vision pulls CoreML as its native model bridge)
+        'CoreML',
+        'Vision',
         'PyObjCTools',
     ],
     hookspath=[],
@@ -87,8 +94,8 @@ app = BUNDLE(
     icon=os.path.join(ROOT, "ai_desktop", "图标.icns"),
     bundle_identifier='com.milin.ai-desktop-assistant',
     info_plist={
-        'CFBundleShortVersionString': '1.0.0',
-        'CFBundleVersion': '1.0.0',
+        'CFBundleShortVersionString': VERSION,
+        'CFBundleVersion': VERSION,
         'CFBundleName': 'AI 桌面助手',
         'CFBundleDisplayName': 'AI 桌面助手',
         'NSHighResolutionCapable': True,

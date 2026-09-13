@@ -1,0 +1,128 @@
+{
+  "runtime": {
+    "engine": "apple-vision",
+    "revision": 3,
+    "languages": [
+      "en-US",
+      "fr-FR",
+      "it-IT",
+      "de-DE",
+      "es-ES",
+      "pt-BR",
+      "zh-Hans",
+      "zh-Hant",
+      "yue-Hans",
+      "yue-Hant",
+      "ko-KR",
+      "ja-JP",
+      "ru-RU",
+      "uk-UA",
+      "th-TH",
+      "vi-VT",
+      "ar-SA",
+      "ars-SA",
+      "tr-TR",
+      "id-ID",
+      "cs-CZ",
+      "da-DK",
+      "nl-NL",
+      "no-NO",
+      "nn-NO",
+      "nb-NO",
+      "ms-MY",
+      "pl-PL",
+      "ro-RO",
+      "sv-SE"
+    ]
+  },
+  "platform": "25.6.0",
+  "samples": {
+    "english": {
+      "elapsed_ms": 207.6,
+      "text": "Local OCR keeps screenshots private.\nCopy text, then ask the assistant.",
+      "blocks": [
+        {
+          "text": "Local OCR keeps screenshots private.",
+          "confidence": 1.0,
+          "x": 0.050872,
+          "y": 0.796154,
+          "width": 0.722384,
+          "height": 0.090565
+        },
+        {
+          "text": "Copy text, then ask the assistant.",
+          "confidence": 1.0,
+          "x": 0.049419,
+          "y": 0.621094,
+          "width": 0.684593,
+          "height": 0.109675
+        }
+      ],
+      "truth": "Local OCR keeps screenshots private.\nCopy text, then ask the assistant.",
+      "cer": 0.0
+    },
+    "chinese": {
+      "elapsed_ms": 140.2,
+      "text": "本地识字保护截图隐私。\n提取文字后可以复制或提问。",
+      "blocks": [
+        {
+          "text": "本地识字保护截图隐私。",
+          "confidence": 1.0,
+          "x": 0.047965,
+          "y": 0.788462,
+          "width": 0.359012,
+          "height": 0.102163
+        },
+        {
+          "text": "提取文字后可以复制或提问。",
+          "confidence": 1.0,
+          "x": 0.049419,
+          "y": 0.632692,
+          "width": 0.424419,
+          "height": 0.101923
+        }
+      ],
+      "truth": "本地识字保护截图隐私。\n提取文字后可以复制或提问。",
+      "cer": 0.0
+    },
+    "mixed_code": {
+      "elapsed_ms": 65.5,
+      "text": "def greet(name: str) -> str:\nreturn f\"fTt7, {name}!\"\nprint(greet(\"Codex\"))",
+      "blocks": [
+        {
+          "text": "def greet(name: str) -> str:",
+          "confidence": 1.0,
+          "x": 0.049419,
+          "y": 0.8,
+          "width": 0.418605,
+          "height": 0.090625
+        },
+        {
+          "text": "return f\"fTt7, {name}!\"",
+          "confidence": 1.0,
+          "x": 0.079612,
+          "y": 0.629429,
+          "width": 0.359831,
+          "height": 0.125066
+        },
+        {
+          "text": "print(greet(\"Codex\"))",
+          "confidence": 1.0,
+          "x": 0.049419,
+          "y": 0.488281,
+          "width": 0.340116,
+          "height": 0.09375
+        }
+      ],
+      "truth": "def greet(name: str) -> str:\n    return f\"你好, {name}!\"\nprint(greet(\"Codex\"))",
+      "cer": 0.1053
+    },
+    "blank": {
+      "elapsed_ms": 19.2,
+      "text": "",
+      "blocks": [],
+      "truth": "",
+      "cer": 0.0
+    }
+  }
+}

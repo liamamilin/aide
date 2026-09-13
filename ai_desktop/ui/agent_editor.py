@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
+    QComboBox,
     QDialog,
     QGridLayout,
     QHBoxLayout,
@@ -17,8 +18,12 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from ai_desktop.services.action_service import Action
+from ai_desktop.services.model_profiles import ModelProfile
 from ai_desktop.ui import styles
+from ai_desktop.ui.action_settings_dialog import ActionSettingsDialog
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
+from ai_desktop.ui.model_profile_dialog import ModelProfileDialog
 
 
 @dataclass
@@ -28,24 +33,35 @@ class AgentDef:
     icon: str
     system_prompt: str
     builtin: bool = False
+    profile_id: str | None = None
 
 
 class AgentEditor(FramelessDragMixin, QDialog):
 
     agents_saved = pyqtSignal(list)
+    profiles_saved = pyqtSignal(list)
+    agent_profile_changed = pyqtSignal(str, object)
+    actions_saved = pyqtSignal(list)
 
     def __init__(self, builtin_agents: list[AgentDef], custom_agents: list[AgentDef],
-                 parent=None):
+                 parent=None, *, profiles: list[ModelProfile] | None = None,
+                 models: list[str] | None = None,
+                 actions: list[Action] | None = None):
         super().__init__(parent)
         self._setup_drag(40)
         self._builtin = builtin_agents
         self._custom = list(custom_agents)
+        self._profiles = list(profiles or [])
+        self._models = list(models or [])
+        self._actions = list(actions or [])
         self._setup_window()
         self._setup_ui()
         self._load()
 
     def _setup_window(self):
-        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setWindowFlags(
+            Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setMinimumSize(420, 340)
         self.resize(440, 400)
@@ -103,6 +119,18 @@ class AgentEditor(FramelessDragMixin, QDialog):
         add_btn.clicked.connect(self._on_add)
         al.addWidget(add_btn)
 
+        profiles_btn = QPushButton("模型配置…")
+        profiles_btn.setFixedHeight(28)
+        profiles_btn.setStyleSheet(styles.AGENT_EDIT_BUTTON)
+        profiles_btn.clicked.connect(self._on_manage_profiles)
+        al.addWidget(profiles_btn)
+
+        actions_btn = QPushButton("快捷动作…")
+        actions_btn.setFixedHeight(28)
+        actions_btn.setStyleSheet(styles.AGENT_EDIT_BUTTON)
+        actions_btn.clicked.connect(self._on_manage_actions)
+        al.addWidget(actions_btn)
+
         root.addWidget(add_bar)
 
     # ── 加载 ───────────────────────────────────────────
@@ -138,6 +166,18 @@ class AgentEditor(FramelessDragMixin, QDialog):
         name.setStyleSheet(styles.LABEL)
         rl.addWidget(name, stretch=1)
 
+        profile = next((item for item in self._profiles if item.id == agent.profile_id), None)
+        profile_tag = QLabel(profile.name if profile else "全局设置")
+        profile_tag.setStyleSheet(styles.LABEL_SECONDARY)
+        profile_tag.setToolTip("此 Agent 使用的模型配置")
+        rl.addWidget(profile_tag)
+
+        profile_btn = QPushButton("配置")
+        profile_btn.setFixedHeight(24)
+        profile_btn.setStyleSheet(styles.AGENT_EDIT_BUTTON)
+        profile_btn.clicked.connect(lambda checked, a=agent: self._on_profile(a))
+        rl.addWidget(profile_btn)
+
         if agent.builtin:
             tag = QLabel("内置")
             tag.setStyleSheet(styles.LABEL_SECONDARY)
@@ -168,6 +208,7 @@ class AgentEditor(FramelessDragMixin, QDialog):
                 icon=dlg.icon_text(),
                 system_prompt=dlg.prompt(),
                 builtin=False,
+                profile_id=None,
             )
             self._custom.append(new)
             self._refresh()
@@ -187,9 +228,49 @@ class AgentEditor(FramelessDragMixin, QDialog):
         self._refresh()
         self._emit_save()
 
+    def _on_profile(self, agent: AgentDef) -> None:
+        dialog = _AgentProfileDialog(agent, self._profiles, self)
+        if dialog.exec_() != QDialog.Accepted:
+            return
+        agent.profile_id = dialog.profile_id()
+        self.agent_profile_changed.emit(agent.id, agent.profile_id)
+        if not agent.builtin:
+            self._emit_save()
+        self._refresh()
+
+    def _on_manage_profiles(self) -> None:
+        dialog = ModelProfileDialog(self._profiles, self._models, self)
+        dialog.profiles_saved.connect(self._on_profiles_updated)
+        dialog.exec_()
+
+    def _on_manage_actions(self) -> None:
+        dialog = ActionSettingsDialog(
+            self._actions,
+            list(self._builtin) + self._custom,
+            self._profiles,
+            self,
+        )
+        dialog.actions_saved.connect(self._on_actions_updated)
+        dialog.exec_()
+
+    def _on_actions_updated(self, actions: list[Action]) -> None:
+        self._actions = list(actions)
+        self.actions_saved.emit(self._actions)
+
+    def _on_profiles_updated(self, profiles: list[ModelProfile]) -> None:
+        self._profiles = list(profiles)
+        self.profiles_saved.emit(self._profiles)
+        valid_ids = {profile.id for profile in self._profiles}
+        for agent in list(self._builtin) + self._custom:
+            if agent.profile_id and agent.profile_id not in valid_ids:
+                agent.profile_id = None
+                self.agent_profile_changed.emit(agent.id, None)
+        self._refresh()
+
     def _emit_save(self) -> None:
         data = [
-            {"id": a.id, "name": a.name, "icon": a.icon, "system_prompt": a.system_prompt}
+            {"id": a.id, "name": a.name, "icon": a.icon,
+             "system_prompt": a.system_prompt, "profile_id": a.profile_id}
             for a in self._custom
         ]
         self.agents_saved.emit(data)
@@ -201,7 +282,62 @@ class AgentEditor(FramelessDragMixin, QDialog):
             i += 1
         return f"custom_{i}"
 
-    # ── 拖拽 / Esc ──（由 FramelessDragMixin 处理）──
+# ── 拖拽 / Esc ──（由 FramelessDragMixin 处理）──
+
+
+class _AgentProfileDialog(FramelessDragMixin, QDialog):
+    def __init__(self, agent: AgentDef, profiles: list[ModelProfile], parent=None):
+        super().__init__(parent)
+        self._setup_drag(36)
+        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setMinimumWidth(360)
+        self.setStyleSheet(styles.DIALOG_BASE)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        title = QWidget()
+        title.setFixedHeight(36)
+        title.setStyleSheet(styles.TITLE_BAR)
+        tl = QHBoxLayout(title)
+        tl.setContentsMargins(12, 0, 8, 0)
+        tl.addWidget(QLabel(f"{agent.icon} {agent.name} · 模型配置"))
+        tl.addStretch()
+        close = QPushButton("×")
+        close.setFixedSize(24, 24)
+        close.setStyleSheet(styles.CLOSE_BUTTON)
+        close.clicked.connect(self.reject)
+        tl.addWidget(close)
+        root.addWidget(title)
+
+        body = QWidget()
+        body.setStyleSheet(styles.DIALOG_BODY)
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.addWidget(QLabel("选择配置；全局设置会跟随主窗口当前模型。"))
+        self._combo = QComboBox()
+        self._combo.setStyleSheet(styles.COMBO_BOX)
+        self._combo.addItem("全局设置", None)
+        for profile in profiles:
+            self._combo.addItem(profile.name, profile.id)
+        self._combo.setCurrentIndex(max(0, self._combo.findData(agent.profile_id)))
+        layout.addWidget(self._combo)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        cancel = QPushButton("取消")
+        cancel.setStyleSheet(styles.CANCEL_BUTTON)
+        cancel.clicked.connect(self.reject)
+        buttons.addWidget(cancel)
+        save = QPushButton("应用")
+        save.setStyleSheet(styles.SAVE_BUTTON)
+        save.clicked.connect(self.accept)
+        buttons.addWidget(save)
+        layout.addLayout(buttons)
+        root.addWidget(body)
+
+    def profile_id(self) -> str | None:
+        return self._combo.currentData()
 
 
 class _AgentEditDialog(FramelessDragMixin, QDialog):
@@ -211,7 +347,9 @@ class _AgentEditDialog(FramelessDragMixin, QDialog):
         self.setWindowTitle(title)
         self.setMinimumSize(360, 300)
         self.resize(380, 360)
-        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setWindowFlags(
+            Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setStyleSheet(styles.DIALOG_BASE)
         self._setup_drag(36)
@@ -333,7 +471,9 @@ class _EmojiPicker(FramelessDragMixin, QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.selected_emoji = "🤖"
-        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setWindowFlags(
+            Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setMinimumSize(370, 300)
         self.resize(370, 320)

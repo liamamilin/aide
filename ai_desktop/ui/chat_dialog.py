@@ -3,17 +3,19 @@
 """
 import html
 import logging
+from pathlib import Path
 
-import requests
-from PyQt5.QtCore import QEvent, QPoint, QRectF, Qt, QThread, QTimer, pyqtSignal
+from PyQt5.QtCore import QEvent, QPoint, QRectF, QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QKeyEvent, QPainterPath, QPixmap, QRegion, QTextCursor
 from PyQt5.QtWidgets import (
     QApplication,
     QComboBox,
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMenu,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -25,10 +27,21 @@ from PyQt5.QtWidgets import (
 from ai_desktop import config
 from ai_desktop.capture.text_normalizer import normalize
 from ai_desktop.config import Agent
-from ai_desktop.ui import markdown, styles
+from ai_desktop.llm.service_checks import ImageCapability, ServiceState
+from ai_desktop.services.action_service import Action
+from ai_desktop.ui import markdown, styles, theme
+from ai_desktop.ui.action_panel import ActionPanel
 from ai_desktop.ui.float_button import pin_to_all_spaces
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
+from ai_desktop.ui.ocr_preview_dialog import OCRPreviewDialog
 from ai_desktop.utils import images as image_utils
+from ai_desktop.utils.window_state import (
+    ScreenArea,
+    WindowState,
+    fit_window_state,
+    parse_window_state,
+    serialize_window_state,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +51,7 @@ class _ChatInputEdit(QPlainTextEdit):
 
     def contextMenuEvent(self, event) -> None:
         menu = self.createStandardContextMenu()
-        menu.setStyleSheet(styles.MENU)
+        menu.setStyleSheet(styles.menu_style())
         menu.exec_(event.globalPos())
 
     def insertFromMimeData(self, source) -> None:
@@ -83,21 +96,35 @@ class ChatDialog(FramelessDragMixin, QWidget):
     stop_requested = pyqtSignal()
     agent_changed = pyqtSignal(Agent)
     model_changed = pyqtSignal(str)
-    ollama_online = pyqtSignal()
+    service_check_requested = pyqtSignal()
+    action_requested = pyqtSignal(str, str, str)
     closed = pyqtSignal()
+    geometry_changed = pyqtSignal()
+    ocr_requested = pyqtSignal(str)
+    ocr_cancel_requested = pyqtSignal()
+    pending_images_changed = pyqtSignal(list)
 
     def __init__(self, agents: list[Agent], active_agent: Agent,
                  models: list[str] | None = None, active_model: str = "",
-                 auto_hide: bool = False, parent=None):
+                 auto_hide: bool = False, parent=None,
+                 actions: list[Action] | None = None,
+                 actions_enabled: bool = True):
         super().__init__(parent)
         self._setup_drag(40)
         self._agents = agents
         self._active_agent = active_agent
         self._auto_hide = auto_hide
         self._models = list(models) if models else []
+        self._actions = list(actions or [])
+        self._actions_enabled = actions_enabled
+        self._action_has_conversation = False
+        self._action_mode = "new"
         self._active_model = active_model
+        self._image_capability = ImageCapability.UNKNOWN
+        self._placement_initialized = False
         self._user_scrolled_up: bool = False
         self._pending_images: list[str] = []     # 发送前暂存的图片（应用数据目录路径）
+        self._ocr_preview_dialog: OCRPreviewDialog | None = None
         self._stream_bubble: QLabel | None = None
         self._stream_copy_btn: QPushButton | None = None
         self._stream_text: str = ""
@@ -107,9 +134,21 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._stream_timer = QTimer(self)
         self._stream_timer.setInterval(50)          # 50ms 刷新一次
         self._stream_timer.timeout.connect(self._flush_stream_buffer)
+        self._scroll_timer = QTimer(self)
+        self._scroll_timer.setSingleShot(True)
+        self._scroll_timer.timeout.connect(self._apply_scroll_to_bottom)
+        self._busy_feedback_timer = QTimer(self)
+        self._busy_feedback_timer.setSingleShot(True)
+        self._busy_feedback_timer.timeout.connect(self._reset_input_placeholder)
+        self._export_feedback_timer = QTimer(self)
+        self._export_feedback_timer.setSingleShot(True)
+        self._export_feedback_timer.timeout.connect(self._reset_export_button)
+        self._auto_hide_timer = QTimer(self)
+        self._auto_hide_timer.setSingleShot(True)
+        self._auto_hide_timer.timeout.connect(self._apply_auto_hide)
         self._ollama_timer = QTimer(self)
         self._ollama_timer.setInterval(30000)       # 每 30 秒探活
-        self._ollama_timer.timeout.connect(self._check_ollama_status)
+        self._ollama_timer.timeout.connect(self.service_check_requested.emit)
         # 输入历史浏览状态
         self._input_history: list[str] = []         # 最新在前
         self._hist_index = -1                       # -1 = 未在浏览
@@ -145,6 +184,47 @@ class ChatDialog(FramelessDragMixin, QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._apply_rounded_mask()
+        self.geometry_changed.emit()
+
+    def moveEvent(self, event) -> None:
+        super().moveEvent(event)
+        self.geometry_changed.emit()
+
+    @staticmethod
+    def _screen_areas() -> list[ScreenArea]:
+        return [ScreenArea(screen.name(), screen.availableGeometry()) for screen in QApplication.screens()]
+
+    def _screen_name(self) -> str:
+        screen = QApplication.screenAt(self.geometry().center()) or QApplication.primaryScreen()
+        return screen.name() if screen is not None else ""
+
+    def geometry_state(self) -> str:
+        return serialize_window_state(self.geometry(), self._screen_name(), include_size=True)
+
+    def _apply_fitted_state(self, state: WindowState) -> bool:
+        fitted = fit_window_state(
+            state,
+            self._screen_areas(),
+            fallback_size=self.size(),
+            minimum_size=QSize(400, 460),
+        )
+        if fitted is None:
+            return False
+        rect, screen = fitted
+        self.setMinimumSize(min(400, screen.geometry.width()), min(460, screen.geometry.height()))
+        self.setGeometry(rect)
+        self._placement_initialized = True
+        return True
+
+    def restore_geometry(self, raw: str) -> bool:
+        state = parse_window_state(raw, include_size=True)
+        return state is not None and self._apply_fitted_state(state)
+
+    def ensure_visible(self) -> None:
+        state = WindowState(
+            self.x(), self.y(), self.width(), self.height(), self._screen_name()
+        )
+        self._apply_fitted_state(state)
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -218,6 +298,17 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._model_combo.currentTextChanged.connect(self._on_model_combo)
         tb.addWidget(self._model_combo)
 
+        self._model_capability_badge = QLabel("图片 ?")
+        self._model_capability_badge.setObjectName("model_capability_badge")
+        self._model_capability_badge.setToolTip("当前模型的图片输入能力尚未确认")
+        tb.addWidget(self._model_capability_badge)
+
+        self._model_profile_badge = QLabel("配置: 全局")
+        self._model_profile_badge.setObjectName("model_profile_badge")
+        self._model_profile_badge.setStyleSheet(styles.LABEL_SECONDARY)
+        self._model_profile_badge.setToolTip("请求将使用全局模型设置")
+        tb.addWidget(self._model_profile_badge)
+
         tb.addStretch()
 
         new_btn = QPushButton("＋ 新对话")
@@ -265,6 +356,11 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._scroll.verticalScrollBar().valueChanged.connect(self._on_scroll_changed)
         root.addWidget(scroll, stretch=1)
 
+        self._action_panel = ActionPanel(self._actions, self)
+        self._action_panel.action_selected.connect(self._on_action_selected)
+        self._action_panel.cancelled.connect(self._focus_free_input)
+        root.addWidget(self._action_panel)
+
         # ── 图片预览行（发送前暂存已附图片）──
         self._image_preview = QWidget()
         self._image_preview.setStyleSheet("background: transparent;")
@@ -294,13 +390,23 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._input._on_image_attach = self._attach_pixmap
         self._input._on_image_paths = self._attach_image_paths
 
+        action_btn = QPushButton("⚡")
+        action_btn.setFixedSize(28, 36)
+        action_btn.setStyleSheet(styles.ICON_BUTTON)
+        action_btn.setToolTip("显示快捷动作")
+        action_btn.clicked.connect(lambda: self.show_actions())
+        self._action_btn = action_btn
+        action_btn.setVisible(self._actions_enabled and bool(self._actions))
+        il.addWidget(action_btn)
+
         # 图片附件按钮（📎 菜单：选择文件 / 截图 / 粘贴剪贴板图片）
         attach_btn = QPushButton("📎")
         attach_btn.setFixedSize(28, 36)
         attach_btn.setStyleSheet(styles.ICON_BUTTON)
         attach_btn.setToolTip("添加图片")
+        self._attach_btn = attach_btn
         attach_menu = QMenu(attach_btn)
-        attach_menu.setStyleSheet(styles.MENU)
+        attach_menu.setStyleSheet(styles.menu_style())
         a_file = attach_menu.addAction("选择图片文件…")
         a_shot = attach_menu.addAction("截图…")
         a_paste = attach_menu.addAction("粘贴剪贴板图片")
@@ -348,6 +454,34 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._active_model = text
         self.model_changed.emit(text)
 
+    @property
+    def active_model(self) -> str:
+        return self._active_model
+
+    def set_cached_models(self, models: list[str], active_model: str) -> None:
+        """Replace entries for a service address without claiming they are current."""
+        cached = list(dict.fromkeys(models))
+        display = list(cached)
+        if active_model and active_model not in display:
+            display.insert(0, active_model)
+        self._models = cached
+        self._active_model = active_model
+        self._model_combo.blockSignals(True)
+        self._model_combo.clear()
+        if display:
+            self._model_combo.addItems(display)
+            self._model_combo.setCurrentText(active_model or display[0])
+            self._model_combo.setEnabled(True)
+            if cached:
+                self._model_combo.setToolTip("缓存模型；正在验证服务状态")
+            else:
+                self._model_combo.setToolTip("当前模型尚未通过服务验证")
+        else:
+            self._model_combo.addItem("加载中…")
+            self._model_combo.setEnabled(False)
+            self._model_combo.setToolTip("正在加载模型列表")
+        self._model_combo.blockSignals(False)
+
     def refresh_models(self, models: list[str]) -> None:
         """外部传入新模型列表时刷新 combo，尽量保留当前选中。
 
@@ -367,9 +501,16 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if current in self._models:
             self._model_combo.setCurrentText(current)
             changed = False
+            self._model_combo.setToolTip("选择模型")
         else:
             self._model_combo.setCurrentText(self._models[0])
             changed = True
+            if current and current != "加载中…":
+                self._model_combo.setToolTip(
+                    f"模型 {current} 已不可用，已切换到 {self._models[0]}"
+                )
+            else:
+                self._model_combo.setToolTip("选择模型")
         self._active_model = self._model_combo.currentText()
         self._model_combo.blockSignals(False)
         if changed:
@@ -384,6 +525,15 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._agent_combo.setCurrentIndex(idx)
         self._agent_combo.blockSignals(False)
 
+    def set_model_profile_summary(self, profile_name: str, summary: str,
+                                  warnings: tuple[str, ...] = ()) -> None:
+        """Show the effective request settings before submission."""
+        self._model_profile_badge.setText(f"配置: {profile_name or '全局'}")
+        tooltip = summary
+        if warnings:
+            tooltip += "\n" + "\n".join(f"⚠ {warning}" for warning in warnings)
+        self._model_profile_badge.setToolTip(tooltip)
+
     def refresh_agents(self, agents: list[Agent]) -> None:
         """刷新 Agent 下拉列表（自定义 Agent 变更后调用）"""
         self._agents = agents
@@ -397,6 +547,20 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     def set_auto_hide(self, enabled: bool) -> None:
         self._auto_hide = enabled
+        if not enabled:
+            self._auto_hide_timer.stop()
+
+    def refresh_theme(self) -> None:
+        """Re-render theme-dependent rich text without changing message state."""
+        for label in self._msg_container.findChildren(QLabel):
+            source = getattr(label, "_markdown_source", None)
+            if source is None:
+                continue
+            thinking = getattr(label, "_thinking_source", "")
+            body, code_map = self._render_assistant_body(source, thinking)
+            label.setText(self._wrap_assistant_html(body))
+            label.code_map = code_map
+        self.update()
 
     # ── 输入 ───────────────────────────────────────────
 
@@ -404,6 +568,45 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._input.setPlainText(text)
         self._input.setFocus()
         self._input.selectAll()
+
+    def show_actions(self, material: str | None = None,
+                     selected_id: str | None = None) -> None:
+        if not self._actions_enabled or not self._actions:
+            return
+        if material is not None:
+            self.set_input_text(material)
+        self._action_panel.show_for_material(
+            self._input.toPlainText(),
+            selected_id,
+            has_conversation=self._action_has_conversation,
+            mode=self._action_mode,
+        )
+
+    def refresh_actions(self, actions: list[Action]) -> None:
+        self._actions = list(actions)
+        self._action_panel.refresh_actions(self._actions)
+        self._action_btn.setVisible(self._actions_enabled and bool(self._actions))
+        if not self._actions:
+            self._action_panel.hide()
+
+    def set_action_context(self, has_conversation: bool, mode: str = "new") -> None:
+        self._action_has_conversation = has_conversation
+        self._action_mode = mode if mode in {"new", "current"} else "new"
+
+    def set_actions_enabled(self, enabled: bool) -> None:
+        self._actions_enabled = bool(enabled)
+        self._action_btn.setVisible(self._actions_enabled and bool(self._actions))
+        if not self._actions_enabled:
+            self._action_panel.hide()
+
+    def _on_action_selected(self, action_id: str, material: str, mode: str) -> None:
+        self._input.clear()
+        self._exit_input_browsing()
+        self._action_mode = mode
+        self.action_requested.emit(action_id, material, mode)
+
+    def _focus_free_input(self) -> None:
+        self._input.setFocus(Qt.ShortcutFocusReason)
 
     def set_input_history(self, entries: list[str]) -> None:
         """灌入历史输入（最新在前），供上下键浏览。"""
@@ -433,47 +636,80 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     def flash_busy(self) -> None:
         self._input.setPlaceholderText("⏳ 等待回复完成...")
-        QTimer.singleShot(
-            1500,
-            lambda: self._input.setPlaceholderText(
-                "输入消息... (Enter 发送, Shift+Enter 换行, ⌘V 粘贴图片)"
-            ),
+        self._busy_feedback_timer.start(1500)
+
+    def _reset_input_placeholder(self) -> None:
+        self._input.setPlaceholderText(
+            "输入消息... (Enter 发送, Shift+Enter 换行, ⌘V 粘贴图片)"
         )
 
     def flash_export_btn(self) -> None:
         self._export_btn.setText("✅ 已复制")
-        QTimer.singleShot(1500, lambda: self._export_btn.setText("📤 导出"))
+        self._export_feedback_timer.start(1500)
+
+    def _reset_export_button(self) -> None:
+        self._export_btn.setText("📤 导出")
 
     def _on_send(self) -> None:
         text = normalize(self._input.toPlainText())
         images = list(self._pending_images)
         if not text and not images:
             return
-        self.message_sent.emit(text, images)
+        self._action_panel.hide()
+        # Clear before the synchronous signal. A rejected submission restored
+        # by the controller must remain after this method returns.
         self._input.clear()
-        self.add_input_history(text)
         self._exit_input_browsing()
-        self.clear_pending_images()
+        self._pending_images = []
+        self._refresh_image_preview()
+        self.message_sent.emit(text, images)
 
     # ── 图片附件 ───────────────────────────────────────
 
     def attach_image_paths(self, paths: list[str]) -> None:
         """外部（截图/历史恢复）传入图片文件路径：复制到应用数据目录并加入待发列表。"""
+        errors: list[str] = []
         for p in paths:
+            if len(self._pending_images) >= image_utils.MAX_ATTACHMENTS_PER_MESSAGE:
+                errors.append(
+                    f"每条消息最多添加 {image_utils.MAX_ATTACHMENTS_PER_MESSAGE} 张图片。"
+                )
+                break
             try:
                 if not p or not image_utils.is_image_file(p):
+                    if p:
+                        errors.append(f"{Path(p).name}：格式不受支持。")
                     continue
                 stored = image_utils.store_image(p)
                 if stored not in self._pending_images:
                     self._pending_images.append(stored)
+            except (image_utils.AttachmentError, FileNotFoundError) as exc:
+                errors.append(f"{Path(p).name}：{exc}")
             except Exception:
                 logger.exception("Failed to attach image %s", p)
+                errors.append(f"{Path(p).name}：读取失败，请重试。")
+        self._refresh_image_preview()
+        if errors:
+            self._show_attachment_errors(errors)
+
+    def restore_draft(self, text: str, image_paths: list[str]) -> None:
+        """Restore paths already stored by this dialog without copying again."""
+        self.set_input_text(text)
+        self._pending_images = [
+            path for path in image_paths
+            if path and image_utils.is_image_file(path) and Path(path).is_file()
+        ]
         self._refresh_image_preview()
 
     def _attach_image_paths(self, paths: list[str]) -> None:
         self.attach_image_paths(paths)
 
     def _attach_pixmap(self, pixmap) -> None:
+        if len(self._pending_images) >= image_utils.MAX_ATTACHMENTS_PER_MESSAGE:
+            self._show_attachment_errors(
+                [f"每条消息最多添加 {image_utils.MAX_ATTACHMENTS_PER_MESSAGE} 张图片。"]
+            )
+            return
         try:
             if pixmap.isNull():
                 return
@@ -481,8 +717,15 @@ class ChatDialog(FramelessDragMixin, QWidget):
             if stored not in self._pending_images:
                 self._pending_images.append(stored)
             self._refresh_image_preview()
+        except image_utils.AttachmentError as exc:
+            self._show_attachment_errors([str(exc)])
         except Exception:
             logger.exception("Failed to attach pasted pixmap")
+            self._show_attachment_errors(["剪贴板图片读取失败，请重试。"])
+
+    def _show_attachment_errors(self, errors: list[str]) -> None:
+        unique = list(dict.fromkeys(errors))
+        QMessageBox.warning(self, "无法添加图片", "\n".join(unique))
 
     def _pick_image_files(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(
@@ -500,10 +743,16 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._attach_pixmap(pix)
 
     def clear_pending_images(self) -> None:
+        for path in self._pending_images:
+            try:
+                image_utils.discard_staged_image(path)
+            except Exception:
+                logger.warning("Failed to discard draft image %s", path, exc_info=True)
         self._pending_images = []
         self._refresh_image_preview()
 
     def _refresh_image_preview(self) -> None:
+        self.pending_images_changed.emit(list(self._pending_images))
         layout = self._preview_layout
         while layout.count():
             item = layout.takeAt(0)
@@ -515,18 +764,38 @@ class ChatDialog(FramelessDragMixin, QWidget):
             return
         for idx, path in enumerate(self._pending_images):
             item = QWidget()
-            item.setFixedSize(64, 64)
-            il = QVBoxLayout(item)
-            il.setContentsMargins(0, 0, 0, 0)
-            il.setSpacing(0)
+            item.setFixedSize(68, 68)
+            il = QGridLayout(item)
+            il.setContentsMargins(2, 2, 2, 2)
             thumb = QLabel()
+            thumb.setFixedSize(64, 64)
             pix = QPixmap(path)
             if not pix.isNull():
                 thumb.setPixmap(
                     pix.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 )
+            try:
+                info = image_utils.inspect_image(path, enforce_limits=False)
+                tooltip = (
+                    f"{info.original_name}\n{info.width} × {info.height}\n"
+                    f"{info.byte_size / (1024 * 1024):.1f} MiB"
+                )
+                if info.needs_inference_resize:
+                    tooltip += "\n发送时生成最长边 2048 像素的推理副本"
+                thumb.setToolTip(tooltip)
+            except Exception:
+                thumb.setToolTip(Path(path).name)
             thumb.setStyleSheet("border-radius: 4px;")
-            il.addWidget(thumb, 1)
+            il.addWidget(thumb, 0, 0)
+            ocr = QPushButton("识字")
+            ocr.setObjectName("ocr_image_btn")
+            ocr.setFixedSize(44, 20)
+            ocr.setToolTip("在本机提取这张图片中的文字")
+            ocr.setStyleSheet(styles.SECONDARY_BUTTON)
+            ocr.clicked.connect(
+                lambda checked=False, image_path=path: self.ocr_requested.emit(image_path)
+            )
+            il.addWidget(ocr, 0, 0, alignment=Qt.AlignBottom | Qt.AlignLeft)
             rm = QPushButton("✕")
             rm.setFixedSize(16, 16)
             rm.setStyleSheet(
@@ -535,13 +804,75 @@ class ChatDialog(FramelessDragMixin, QWidget):
                 "QPushButton:hover { background: #ff3b30; }"
             )
             rm.clicked.connect(lambda checked, i=idx: self._remove_pending_image(i))
-            il.addWidget(rm, alignment=Qt.AlignTop | Qt.AlignRight)
+            il.addWidget(rm, 0, 0, alignment=Qt.AlignTop | Qt.AlignRight)
             layout.addWidget(item)
         self._image_preview.setVisible(True)
 
+    def show_ocr_loading(self, image_path: str) -> None:
+        preview = self._ensure_ocr_preview()
+        preview.begin(image_path)
+
+    def show_ocr_result(
+        self,
+        image_path: str,
+        text: str,
+        *,
+        block_count: int,
+        elapsed_ms: float,
+        languages: tuple[str, ...],
+        low_confidence: bool,
+    ) -> None:
+        preview = self._ensure_ocr_preview()
+        if preview.image_path != image_path:
+            return
+        preview.show_result(
+            text,
+            block_count=block_count,
+            elapsed_ms=elapsed_ms,
+            languages=languages,
+            low_confidence=low_confidence,
+        )
+
+    def show_ocr_empty(self, image_path: str, elapsed_ms: float) -> None:
+        preview = self._ensure_ocr_preview()
+        if preview.image_path == image_path:
+            preview.show_empty(elapsed_ms)
+
+    def show_ocr_error(self, image_path: str, error: str) -> None:
+        preview = self._ensure_ocr_preview()
+        if preview.image_path == image_path:
+            preview.show_error(error)
+
+    def close_ocr_preview(self, image_path: str | None = None) -> None:
+        preview = self._ocr_preview_dialog
+        if preview is None:
+            return
+        if image_path is None or preview.image_path == image_path:
+            preview.close()
+
+    def _ensure_ocr_preview(self) -> OCRPreviewDialog:
+        if self._ocr_preview_dialog is None:
+            preview = OCRPreviewDialog(self)
+            preview.text_accepted.connect(self._insert_ocr_text)
+            preview.cancel_requested.connect(self.ocr_cancel_requested.emit)
+            self._ocr_preview_dialog = preview
+        return self._ocr_preview_dialog
+
+    def _insert_ocr_text(self, text: str) -> None:
+        cursor = self._input.textCursor()
+        if self._input.toPlainText() and cursor.position() > 0:
+            cursor.insertText("\n")
+        cursor.insertText(text)
+        self._input.setTextCursor(cursor)
+        self._input.setFocus()
+
     def _remove_pending_image(self, idx: int) -> None:
         if 0 <= idx < len(self._pending_images):
-            del self._pending_images[idx]
+            path = self._pending_images.pop(idx)
+            try:
+                image_utils.discard_staged_image(path)
+            except Exception:
+                logger.warning("Failed to discard draft image %s", path, exc_info=True)
             self._refresh_image_preview()
 
     def get_pending_images(self) -> list[str]:
@@ -591,31 +922,133 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if cur_h != new_h:
             self._input.setFixedHeight(new_h)
 
-    def _check_ollama_status(self) -> None:
-        self._ping_worker = _OllamaPingWorker()
-        self._ping_worker.result.connect(self._on_ollama_result)
-        self._ping_worker.start()
+    def take_shutdown_workers(self) -> list:
+        """Stop timers owned by the window during app shutdown."""
+        self._ollama_timer.stop()
+        self._stream_timer.stop()
+        self._scroll_timer.stop()
+        self._busy_feedback_timer.stop()
+        self._export_feedback_timer.stop()
+        self._auto_hide_timer.stop()
+        self.close_ocr_preview()
+        self.clear_pending_images()
+        return []
 
-    def _on_ollama_result(self, ok: bool) -> None:
-        if ok:
+    def set_service_status(self, state: ServiceState) -> None:
+        """Render service reachability independently from cached model entries."""
+        if state == ServiceState.ONLINE:
             self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_OK)
-            self._ollama_dot.setToolTip("Ollama 已连接")
-            self.ollama_online.emit()
-        else:
+            self._ollama_dot.setToolTip("Ollama 已连接，模型列表已更新")
+        elif state == ServiceState.EMPTY:
+            self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_WARN)
+            self._ollama_dot.setToolTip("Ollama 已连接，但没有可用模型")
+        elif state == ServiceState.INVALID:
+            self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_WARN)
+            self._ollama_dot.setToolTip("Ollama 响应格式错误")
+        elif state == ServiceState.OFFLINE:
             self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_ERR)
-            self._ollama_dot.setToolTip("Ollama 未连接")
+            self._ollama_dot.setToolTip("Ollama 未连接；模型列表可能来自缓存")
+        else:
+            self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS)
+            self._ollama_dot.setToolTip("正在检测 Ollama…")
 
-    def add_user_message(self, text: str, images: list[str] | None = None) -> None:
-        bubble = self._make_bubble(text, is_user=True, images=images)
+    def set_image_capability(
+        self,
+        capability: ImageCapability,
+        *,
+        checking: bool = False,
+        cached: bool = False,
+    ) -> None:
+        """Show the selected model's declared image-input capability."""
+        self._image_capability = capability
+        if checking:
+            text = "图片 …"
+            detail = "正在检查当前模型的图片输入能力"
+        elif capability == ImageCapability.SUPPORTED:
+            text = "图片 ✓"
+            detail = "当前模型已声明支持图片输入"
+        elif capability == ImageCapability.UNSUPPORTED:
+            text = "图片 ×"
+            detail = "当前模型已声明不支持图片输入"
+        else:
+            text = "图片 ?"
+            detail = "当前模型的图片输入能力尚未确认"
+        if cached and not checking:
+            detail += "（缓存结果）"
+        self._model_capability_badge.setText(text)
+        self._model_capability_badge.setToolTip(detail)
+        self._attach_btn.setToolTip(f"添加图片\n{detail}")
+
+    def confirm_unknown_image_capability(self, model: str) -> bool:
+        reply = QMessageBox.question(
+            self,
+            "图片能力尚未确认",
+            f"尚未确认模型 {model} 是否支持图片输入。\n仍要尝试发送吗？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        return reply == QMessageBox.Yes
+
+    def focus_model_selector(self) -> None:
+        self._model_combo.setFocus()
+
+    def add_user_message(
+        self,
+        text: str,
+        images: list[str] | None = None,
+        missing_images: list[str] | None = None,
+    ) -> None:
+        bubble = self._make_bubble(
+            text,
+            is_user=True,
+            images=images,
+            missing_images=missing_images,
+        )
         self._insert_widget(bubble)
 
     def add_assistant_message(self, text: str) -> None:
-        html, code_map = markdown.to_html(text)
-        bubble = self._make_bubble(html, is_user=False, is_html=True, code_map=code_map)
+        body, code_map = self._render_assistant_body(text)
+        bubble = self._make_bubble(
+            body,
+            is_user=False,
+            is_html=True,
+            code_map=code_map,
+            markdown_source=text,
+        )
         btn = bubble.findChild(QPushButton, "copy_btn_assistant")
         if btn:
             btn.clicked.connect(lambda checked, t=text: self._copy_to_clipboard(t))
         self._insert_widget(bubble)
+
+    @staticmethod
+    def _wrap_assistant_html(body: str) -> str:
+        return (
+            '<html><body style="font-size:13px; font-family:'
+            + config.FONT_FAMILY
+            + ';">'
+            + body
+            + "</body></html>"
+        )
+
+    @staticmethod
+    def _render_assistant_body(
+        text: str, thinking: str = "",
+    ) -> tuple[str, dict[str, str]]:
+        body, code_map = markdown.to_html(text)
+        if thinking.strip():
+            colors = theme.current()
+            escaped = html.escape(thinking, quote=False)
+            body = (
+                f'<details style="margin-bottom:10px;color:{colors.text_secondary};'
+                'font-size:12px;">'
+                f'<summary style="cursor:pointer;color:{colors.text_secondary};">'
+                "💭 思考过程</summary>"
+                '<pre style="white-space:pre-wrap;word-break:break-word;'
+                f'margin-top:4px;color:{colors.text};">{escaped}</pre>'
+                "</details>"
+                + body
+            )
+        return body, code_map
 
     # ── 流式输出 ───────────────────────────────────────
 
@@ -669,42 +1102,34 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._stream_bubble.setTextFormat(Qt.PlainText)
         self._scroll_to_bottom()
 
-    def finalize_assistant_stream(self, text: str, ok: bool) -> None:
+    def finalize_assistant_stream(self, text: str, ok: bool, *, error: str = "", cancelled: bool = False) -> None:
         """流式结束，刷新残留并转为 Markdown HTML"""
         self._stream_timer.stop()
         self._flush_stream_buffer()
         if self._stream_bubble is None:
             return
+        # 完成结果是权威正文；错误和取消提示不混入正文或后续推理上下文。
+        self._stream_text = text
         if ok and self._stream_text:
-            body, code_map = markdown.to_html(self._stream_text)
-            if self._thinking_text.strip():
-                thinking = html.escape(self._thinking_text, quote=False)
-                thinking_html = (
-                    '<details style="margin-bottom:10px;color:#888;font-size:12px;">'
-                    '<summary style="cursor:pointer;color:#666;">💭 思考过程</summary>'
-                    f'<pre style="white-space:pre-wrap;word-break:break-word;margin-top:4px;">{thinking}</pre>'
-                    '</details>'
-                )
-                body = thinking_html + body
-            full_html = (
-                '<html><body style="font-size:13px; font-family:'
-                + config.FONT_FAMILY
-                + ';">'
-                + body
-                + "</body></html>"
+            body, code_map = self._render_assistant_body(
+                self._stream_text, self._thinking_text,
             )
-            self._stream_bubble.setText(full_html)
+            self._stream_bubble.setText(self._wrap_assistant_html(body))
             self._stream_bubble.setTextFormat(Qt.RichText)
+            self._stream_bubble._markdown_source = self._stream_text
+            self._stream_bubble._thinking_source = self._thinking_text
             if code_map:
                 self._stream_bubble.code_map = code_map
                 self._stream_bubble.linkActivated.connect(self._on_link_activated)
-        elif not ok and self._stream_text:
-            self._stream_bubble.setText(f"❌ {self._stream_text}")
+        elif not ok:
+            status = "⏹ 已停止生成（未完成）" if cancelled else f"❌ {error or '生成失败，请重试。'}"
+            display = f"{text}\n\n{status}" if text else status
+            self._stream_bubble.setText(display)
             self._stream_bubble.setTextFormat(Qt.PlainText)
 
         # 连接复制按钮
         if self._stream_copy_btn:
-            copy_text = self._stream_text
+            copy_text = self._stream_text or error
             try:
                 self._stream_copy_btn.clicked.disconnect()
             except TypeError:
@@ -751,6 +1176,13 @@ class ChatDialog(FramelessDragMixin, QWidget):
             self._input.setFocus()
 
     def clear_messages(self) -> None:
+        self._stream_timer.stop()
+        self._stream_bubble = None
+        self._stream_copy_btn = None
+        self._stream_text = ""
+        self._stream_buffer = ""
+        self._thinking_text = ""
+        self._thinking_buffer = ""
         while self._msg_layout.count() > 1:  # keep the stretch
             item = self._msg_layout.takeAt(0)
             if item.widget():
@@ -763,6 +1195,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self, content: str, is_user: bool, is_html: bool = False,
         code_map: dict[str, str] | None = None,
         images: list[str] | None = None,
+        missing_images: list[str] | None = None,
+        markdown_source: str | None = None,
     ) -> QWidget:
         wrapper = QWidget()
         wrapper.setStyleSheet("background: transparent;")
@@ -778,6 +1212,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if is_html and code_map:
             lbl.linkActivated.connect(self._on_link_activated)
             lbl.code_map = code_map
+        if markdown_source is not None:
+            lbl._markdown_source = markdown_source
+            lbl._thinking_source = ""
 
         if is_user:
             lbl.setStyleSheet(styles.USER_BUBBLE)
@@ -785,8 +1222,10 @@ class ChatDialog(FramelessDragMixin, QWidget):
             v_layout = QVBoxLayout()
             v_layout.setContentsMargins(0, 0, 0, 0)
             v_layout.setSpacing(2)
-            if images:
-                v_layout.addWidget(self._build_bubble_images(images))
+            if images or missing_images:
+                v_layout.addWidget(
+                    self._build_bubble_images(images or [], missing_images or [])
+                )
             v_layout.addWidget(lbl)
 
             btn_bar = QWidget()
@@ -844,20 +1283,15 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if is_html:
             # QLabel doesn't support full HTML with inline styles well;
             # for assistant messages, embed the body into a full HTML string
-            full_html = (
-                '<html><body style="font-size:13px; font-family:'
-                + config.FONT_FAMILY
-                + ';">'
-                + content
-                + "</body></html>"
-            )
-            lbl.setText(full_html)
+            lbl.setText(self._wrap_assistant_html(content))
         else:
             lbl.setText(content)
 
         return wrapper
 
-    def _build_bubble_images(self, images: list[str]) -> QWidget:
+    def _build_bubble_images(
+        self, images: list[str], missing_images: list[str] | None = None,
+    ) -> QWidget:
         """构建气泡内图片展示区（缩略横排，点击可放大查看）"""
         box = QWidget()
         box.setStyleSheet("background: transparent;")
@@ -877,14 +1311,22 @@ class ChatDialog(FramelessDragMixin, QWidget):
             )
             thumb.clicked.connect(self._view_image_full)
             bl.addWidget(thumb, alignment=Qt.AlignLeft)
+        for path in missing_images or []:
+            missing = QLabel(f"⚠️ 图片缺失\n{Path(path).name}")
+            missing.setObjectName("missing_image_notice")
+            missing.setToolTip(path)
+            missing.setStyleSheet(
+                "padding: 8px; border-radius: 6px; "
+                "border: 1px dashed rgba(255,170,0,0.75); color: #b7791f;"
+            )
+            bl.addWidget(missing, alignment=Qt.AlignLeft)
         return box
 
-    @staticmethod
-    def _view_image_full(path: str) -> None:
+    def _view_image_full(self, path: str) -> None:
         """在新窗口预览大图（查看图片详情）"""
         try:
             from PyQt5.QtWidgets import QDialog, QScrollArea
-            dlg = QDialog()
+            dlg = QDialog(self)
             dlg.setWindowTitle("图片预览")
             dlg.setWindowFlag(Qt.WindowStaysOnTopHint)
             dlg.setMinimumSize(300, 300)
@@ -1001,9 +1443,12 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._scroll_to_bottom()
 
     def _scroll_to_bottom(self) -> None:
+        # Wait for layout without recursively processing worker/user signals.
+        self._scroll_timer.start(0)
+
+    def _apply_scroll_to_bottom(self) -> None:
         if self._user_scrolled_up:
             return
-        QApplication.processEvents()
         sb = self._scroll.verticalScrollBar()
         if sb:
             sb.setValue(sb.maximum())
@@ -1019,21 +1464,26 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     def show_near(self, anchor: QPoint) -> None:
         """在悬浮按钮左侧弹出"""
-        if not self.isVisible():
+        if not self._placement_initialized:
             w, h = self._default_size()
-            self.resize(w, h)
-        x = anchor.x() - self.width() - 12
-        y = anchor.y() - self.height() // 2
-        screen = QApplication.primaryScreen()
-        if screen:
-            geo = screen.availableGeometry()
-            if x < geo.left():
-                x = anchor.x() + 60
-            if y < geo.top():
-                y = geo.top() + 8
-            if y + self.height() > geo.bottom():
-                y = geo.bottom() - self.height() - 8
-        self.move(x, y)
+            x = anchor.x() - w - 12
+            y = anchor.y() - h // 2
+            screen = QApplication.screenAt(anchor) or QApplication.primaryScreen()
+            if screen:
+                geo = screen.availableGeometry()
+                if x < geo.left():
+                    x = anchor.x() + 60
+                if y < geo.top():
+                    y = geo.top() + 8
+                if y + h > geo.y() + geo.height():
+                    y = geo.y() + geo.height() - h - 8
+                self._apply_fitted_state(WindowState(x, y, w, h, screen.name()))
+            else:
+                self.resize(w, h)
+                self.move(x, y)
+                self._placement_initialized = True
+        else:
+            self.ensure_visible()
         self.show()
         pin_to_all_spaces(self)
         self.activateWindow()
@@ -1043,7 +1493,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._user_scrolled_up = False
         self._scroll_to_bottom()
         self._ollama_timer.start()
-        self._check_ollama_status()  # 打开时立即探活
+        self.service_check_requested.emit()  # 打开时立即探活
 
     # ── 事件 ───────────────────────────────────────────
 
@@ -1054,9 +1504,38 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if code:
             self._copy_to_clipboard(code)
 
-    def changeEvent(self, event) -> None:
-        if self._auto_hide and event.type() == QEvent.ActivationChange and not self.isActiveWindow():
+    def _owns_window(self, candidate: QWidget | None) -> bool:
+        widget = candidate
+        while widget is not None:
+            if widget is self:
+                return True
+            widget = widget.parentWidget()
+        return False
+
+    def _has_active_owned_window(self) -> bool:
+        """Return whether focus moved to a child window owned by this dialog."""
+        return any(
+            self._owns_window(candidate)
+            for candidate in (QApplication.activeModalWidget(), QApplication.activeWindow())
+        )
+
+    def _apply_auto_hide(self) -> None:
+        if (
+            self._auto_hide
+            and self.isVisible()
+            and not self.isActiveWindow()
+            and not self._has_active_owned_window()
+        ):
             self.hide()
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.ActivationChange:
+            if self.isActiveWindow() or not self._auto_hide:
+                self._auto_hide_timer.stop()
+            else:
+                # Active window ownership is only reliable after Qt completes
+                # the activation transition (for example opening HistoryDialog).
+                self._auto_hide_timer.start(0)
         super().changeEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
@@ -1072,15 +1551,3 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._ollama_timer.stop()
         self.closed.emit()
         super().hideEvent(event)
-
-
-class _OllamaPingWorker(QThread):
-    """后台线程探活 Ollama"""
-    result = pyqtSignal(bool)
-
-    def run(self) -> None:
-        try:
-            r = requests.get(f"{config.OLLAMA_BASE_URL}/api/tags", timeout=1)
-            self.result.emit(r.status_code == 200)
-        except Exception:
-            self.result.emit(False)

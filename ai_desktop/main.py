@@ -5,32 +5,57 @@ AI 桌面助手 —— 主入口
   选中文字 → ⌘⌃L → 自动打开对话窗口并粘贴选中文字
 """
 import functools
+import html
 import json
 import logging
+import os
 import signal
 import sys
+import threading
+from dataclasses import replace
+from pathlib import Path
 from typing import Optional
 
-import requests
-from PyQt5.QtCore import QObject, QThread, QTimer, pyqtSignal
+from PyQt5.QtCore import QObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 
-from ai_desktop import config
+from ai_desktop import __version__, config
 from ai_desktop.agent_manager import AgentManager
-from ai_desktop.capture.clipboard_monitor import read_selection
+from ai_desktop.capture.clipboard_monitor import SelectionCaptureTask
+from ai_desktop.capture.screenshot import ScreenshotResult, ScreenshotStatus
 from ai_desktop.config import Agent
-from ai_desktop.llm.chat_client import ChatClient, list_models
+from ai_desktop.llm.events import ChatResult, ErrorCode, ResultStatus, StreamEvent
+from ai_desktop.llm.service_checks import (
+    AsyncServiceChecks,
+    ImageCapability,
+    ModelCapabilityResult,
+    ServiceCheckResult,
+    ServiceState,
+    model_cache_key,
+    model_capability_cache_key,
+    model_versions_cache_key,
+    normalize_service_url,
+)
+from ai_desktop.llm.streaming_worker import StreamingChatWorker
+from ai_desktop.services.action_service import Action, ActionService
+from ai_desktop.services.model_profiles import ModelProfile, ModelProfileManager
+from ai_desktop.services.ocr_service import AsyncOCRService, OCRResult, OCRStatus
 from ai_desktop.settings_manager import SettingsManager
+from ai_desktop.ui import styles
 from ai_desktop.ui.agent_editor import AgentDef, AgentEditor
 from ai_desktop.ui.chat_dialog import ChatDialog
 from ai_desktop.ui.float_button import FloatButton, pin_to_all_spaces
 from ai_desktop.ui.history_dialog import HistoryDialog
 from ai_desktop.ui.menubar_icon import MenuBarIcon
+from ai_desktop.ui.result_bubble import ResultBubble
 from ai_desktop.ui.settings_dialog import SettingsDialog
 from ai_desktop.utils import logging as log_util
+from ai_desktop.utils.permissions import PermissionStatus
 from ai_desktop.utils.storage import (
     Message,
     create_conversation,
+    delete_conversation,
+    delete_message,
     get_conversation,
     get_setting,
     init_db,
@@ -58,62 +83,35 @@ def _safe_slot(fn):
 # LLM Worker
 # ═══════════════════════════════════════════════════════
 
-class StreamingChatWorker(QThread):
-    """流式聊天 Worker：分别发射 thinking / response chunk，完成后发射 done"""
-    thinking_chunk = pyqtSignal(str)  # 思考过程 token
-    chunk = pyqtSignal(str)           # 回复 token
-    done = pyqtSignal(str, bool)      # 完整回复文本（成功）或错误信息（失败）
-
-    def __init__(self, messages: list[Message], system_prompt: str, model: str = "", parent: QObject | None = None):
-        super().__init__(parent)
-        self.messages = messages
-        self.system_prompt = system_prompt
-        self._model = model
-
-    def run(self) -> None:
-        client = ChatClient(model=self._model)
-        stream = client.chat_stream(self.messages, self.system_prompt)
-        full_response = ""
-        for kind, token in stream:
-            if self.isInterruptionRequested():
-                break
-            if kind == "thinking":
-                self.thinking_chunk.emit(token)
-            elif kind == "response":
-                full_response += token
-                self.chunk.emit(token)
-            elif kind == "error":
-                self.chunk.emit(token)
-                full_response = token
-                break
-        is_error = (full_response.startswith("HTTP ")
-                     or full_response.startswith("无法")
-                     or full_response.startswith("响应超时"))
-        self.done.emit(full_response, not is_error)
-
-
 class ScreenshotWorker(QThread):
     """截图 Worker：后台运行 screencapture
 
-    - done(path): 成功时发射图片路径；用户取消时发射空串
-    - failed(error): 截图失败（如屏幕录制权限未授予）
+    - completed(result): 返回可区分成功、取消、权限、超时及命令错误的结果
     """
-    done = pyqtSignal(str)
-    failed = pyqtSignal(str)
+    completed = pyqtSignal(object)
+
+    def __init__(self, parent: QObject | None = None):
+        super().__init__(parent)
+        self._cancelled = threading.Event()
+
+    def cancel(self) -> None:
+        self._cancelled.set()
+        self.requestInterruption()
 
     def run(self) -> None:
-        from ai_desktop.capture.screenshot import capture_region
+        from ai_desktop.capture.screenshot import capture_region_result
+        if self._cancelled.is_set():
+            return
         try:
-            path, err = capture_region()
+            result = capture_region_result(self._cancelled.is_set)
         except Exception:
             logger.exception("Screenshot capture error")
-            path, err = None, "截图失败"
-        if path:
-            self.done.emit(path)
-        elif err:
-            self.failed.emit(err)
-        else:
-            self.done.emit("")  # 用户取消
+            result = ScreenshotResult(ScreenshotStatus.COMMAND_FAILED, error="截图任务异常。")
+        if self._cancelled.is_set():
+            if result.path:
+                Path(result.path).unlink(missing_ok=True)
+            return
+        self.completed.emit(result)
 
 
 # ═══════════════════════════════════════════════════════
@@ -125,6 +123,9 @@ class ChatController(QObject):
 
     # pynput 回调在后台线程，通过信号桥接到主线程
     _hotkey_triggered = pyqtSignal(str)
+    _screenshot_hotkey_triggered = pyqtSignal()
+    shutdown_started = pyqtSignal()
+    exit_ready = pyqtSignal()
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -133,6 +134,8 @@ class ChatController(QObject):
         # 加载持久化配置
         self._settings = SettingsManager()
         self._settings.load()
+        self._profile_mgr = ModelProfileManager()
+        self._action_service = ActionService()
 
         # 加载 Agent 列表
         self._agent_mgr = AgentManager()
@@ -145,23 +148,53 @@ class ChatController(QObject):
 
         self._model: str = saved_model or config.OLLAMA_MODEL
         self._auto_hide: bool = get_setting("auto_hide") == "true"  # 默认不收起
+        saved_action_mode = get_setting("action_conversation_mode")
+        self._action_mode = (
+            saved_action_mode
+            if saved_action_mode in {"new", "current"}
+            else "new"
+        )
 
         self._convo_id: int = 0
         self._messages: list[Message] = []
         self._restore_last: bool = True  # 首次打开自动恢复上次对话
         self._worker: Optional[StreamingChatWorker] = None
         self._stale_workers: list[StreamingChatWorker] = []
+        self._response_text = ""
         self._dialog: Optional[ChatDialog] = None
+        self._chat_geometry = get_setting("chat_window_geometry")
+
+        self._window_state_timer = QTimer(self)
+        self._window_state_timer.setSingleShot(True)
+        self._window_state_timer.setInterval(500)
+        self._window_state_timer.timeout.connect(self._save_window_state)
+        self._screen_recovery_timer = QTimer(self)
+        self._screen_recovery_timer.setSingleShot(True)
+        self._screen_recovery_timer.setInterval(100)
+        self._screen_recovery_timer.timeout.connect(self._ensure_windows_visible)
 
         # 悬浮按钮
-        self.float_btn = FloatButton()
+        self.float_btn = FloatButton(
+            pet_enabled=config.DESKTOP_PET_ENABLED,
+            reduce_motion=config.DESKTOP_PET_REDUCE_MOTION,
+            pet_size=config.DESKTOP_PET_SIZE,
+        )
+        self._result_bubble = ResultBubble()
+        self.float_btn.restore_placement(get_setting("float_button_placement"))
         self.float_btn.clicked.connect(self._toggle_dialog)
         self.float_btn.exit_requested.connect(self._on_exit)
-        self.float_btn.hide_requested.connect(self.float_btn.hide)
+        self.float_btn.hide_requested.connect(self._hide_float_entry)
         self.float_btn.about_requested.connect(self._show_about)
         self.float_btn.settings_requested.connect(self._on_settings_requested)
         self.float_btn.auto_hide_toggled.connect(self._on_auto_hide_toggled)
+        self.float_btn.pet_mode_toggled.connect(self._on_pet_mode_toggled)
+        self.float_btn.quick_action_requested.connect(self._on_pet_action_requested)
+        self.float_btn.placement_changed.connect(self._schedule_window_state_save)
+        self.float_btn.placement_changed.connect(self._reposition_result_bubble)
         self.float_btn.set_auto_hide_state(self._auto_hide)
+        self._result_bubble.activated.connect(self._show_dialog)
+        self._refresh_pet_actions()
+        self._connect_screen_signals()
 
         # 菜单栏图标
         self._tray = MenuBarIcon(self._all_agents, self._active_agent)
@@ -175,11 +208,53 @@ class ChatController(QObject):
         self.hotkey = self._create_hotkey_backend()
         self.hotkey.register(config.HOTKEY, self._on_global_hotkey)
         self._hotkey_triggered.connect(self._on_hotkey_triggered)
+        self._selection_delay_timer = QTimer(self)
+        self._selection_delay_timer.setSingleShot(True)
+        self._selection_delay_timer.timeout.connect(self._start_selection_capture)
+        self._selection_capture: SelectionCaptureTask | None = None
+        self._pending_pet_action_id: str | None = None
 
         # 全局快捷键：⌘⌃S → 截图并附加到对话
         self.hotkey_img = self._create_hotkey_backend()
-        self.hotkey_img.register(config.SCREENSHOT_HOTKEY, self._on_screenshot_hotkey)
+        self.hotkey_img.register(config.SCREENSHOT_HOTKEY, self._on_global_screenshot_hotkey)
+        self._screenshot_hotkey_triggered.connect(self._on_screenshot_hotkey)
         self._screenshot_worker: Optional[ScreenshotWorker] = None
+        self._ocr = AsyncOCRService(self)
+        self._ocr.completed.connect(self._on_ocr_completed)
+        self._ocr_image_path: str | None = None
+        self._shutdown_workers: list[QThread] = []
+        self._stopping = False
+        self._stopped = False
+        self._service_checks = AsyncServiceChecks(self)
+        self._service_checks.service_checked.connect(self._on_service_checked)
+        self._service_checks.model_capability_checked.connect(
+            self._on_model_capability_checked
+        )
+        self._service_checks.update_checked.connect(self._on_update_checked)
+        self._service_check_sequence = 0
+        self._service_check_url = normalize_service_url(config.OLLAMA_BASE_URL)
+        self._service_state = ServiceState.CHECKING
+        self._model_versions = self._load_cached_model_versions(
+            config.OLLAMA_BASE_URL
+        )
+        self._image_capability = self._load_cached_image_capability(
+            config.OLLAMA_BASE_URL,
+            self._model,
+            self._model_versions.get(self._model, ""),
+        )
+        self._capability_check: tuple[int, str, str, str] | None = None
+        self._startup_service_check: tuple[int, str] | None = None
+        self._notices: list[QMessageBox] = []
+
+    @_safe_slot
+    def refresh_theme(self, _palette=None) -> None:
+        """Refresh every live themed surface after a system palette change."""
+        refreshed = styles.refresh_all()
+        self._tray.refresh_theme()
+        if self._dialog is not None:
+            self._dialog.refresh_theme()
+        self._result_bubble.refresh_theme()
+        logger.info("Theme refreshed (%d widget styles updated)", refreshed)
 
     @staticmethod
     def _create_hotkey_backend():
@@ -195,30 +270,92 @@ class ChatController(QObject):
         return HotkeyListener()
 
     def start(self) -> None:
+        if self._stopping or self._stopped:
+            return
         init_db()
-        try:
-            self.hotkey.start()
-        except Exception as e:
-            logger.warning("Failed to start hotkey listener: %s", e)
-        try:
-            self.hotkey_img.start()
-        except Exception as e:
-            logger.warning("Failed to start screenshot hotkey listener: %s", e)
+        if os.environ.get("AIDE_SMOKE_TEST") != "1":
+            try:
+                self.hotkey.start()
+            except Exception as e:
+                logger.warning("Failed to start hotkey listener: %s", e)
+            try:
+                self.hotkey_img.start()
+            except Exception as e:
+                logger.warning("Failed to start screenshot hotkey listener: %s", e)
         self.float_btn.show()
         pin_to_all_spaces(self.float_btn)
         self._tray.show()
         logger.info("ChatController 已就绪（快捷键 %s / 截图 %s）", config.HOTKEY, config.SCREENSHOT_HOTKEY)
 
     def stop(self) -> None:
+        """Begin non-blocking shutdown and emit exit_ready after all tasks finish."""
+        if self._stopped:
+            return
+        if self._stopping:
+            self._finish_stop_if_ready()
+            return
+        self._stopping = True
+        self.shutdown_started.emit()
+        self._window_state_timer.stop()
+        self._screen_recovery_timer.stop()
+        self._save_window_state()
         self._tray.hide()
         self.hotkey.stop()
         self.hotkey_img.stop()
         self.float_btn.hide()
+        self._result_bubble.hide()
+        self._startup_service_check = None
+        self._service_checks.cancel_all()
+        for notice in list(self._notices):
+            notice.close()
+        self._selection_delay_timer.stop()
+        self._pending_pet_action_id = None
+        if self._selection_capture is not None:
+            self._selection_capture.cancel()
+        self._stop_worker(show_cancelled=False)
+        if self._screenshot_worker is not None:
+            worker = self._screenshot_worker
+            if worker.isFinished():
+                self._screenshot_worker = None
+                worker.deleteLater()
+            else:
+                worker.cancel()
+        self._ocr_image_path = None
+        for worker in self._ocr.take_shutdown_workers():
+            self._track_shutdown_worker(worker)
         if self._dialog:
             self._dialog.hide()
+            for worker in self._dialog.take_shutdown_workers():
+                self._track_shutdown_worker(worker)
+        self._finish_stop_if_ready()
+
+    def _track_shutdown_worker(self, worker: QThread) -> None:
+        if worker not in self._shutdown_workers:
+            self._shutdown_workers.append(worker)
+            worker.finished.connect(self._on_shutdown_worker_finished)
+        # Close the race where the thread finishes just before or during connect().
+        if worker.isFinished() and worker in self._shutdown_workers:
+            self._shutdown_workers.remove(worker)
+
+    def _on_shutdown_worker_finished(self) -> None:
+        worker = self.sender()
+        if worker in self._shutdown_workers:
+            self._shutdown_workers.remove(worker)
+        self._finish_stop_if_ready()
+
+    def _finish_stop_if_ready(self) -> None:
+        if (not self._stopping or self._worker is not None or self._stale_workers
+                or self._selection_capture is not None):
+            return
+        if self._screenshot_worker is not None or self._shutdown_workers:
+            return
+        if self._dialog:
             self._dialog.deleteLater()
             self._dialog = None
+        self._result_bubble.deleteLater()
+        self._stopped = True
         logger.info("ChatController 已退出")
+        self.exit_ready.emit()
 
     # ── 快捷键 ─────────────────────────────────────────
 
@@ -226,32 +363,62 @@ class ChatController(QObject):
         """热键回调：发射信号到主线程（pynput 后台线程 / NSEvent 主线程均适用）"""
         self._hotkey_triggered.emit("")
 
+    def _on_global_screenshot_hotkey(self) -> None:
+        """Bridge a native/global hotkey callback to the controller's Qt thread."""
+        self._screenshot_hotkey_triggered.emit()
+
     def _on_screenshot_hotkey(self) -> None:
         """截图热键回调：后台启动框选截图，完成后附加到对话窗口"""
-        if self._screenshot_worker and self._screenshot_worker.isRunning():
+        if self._stopping or self._stopped:
             return
-        self._screenshot_worker = ScreenshotWorker()
-        self._screenshot_worker.done.connect(self._on_screenshot_done)
-        self._screenshot_worker.failed.connect(self._on_screenshot_failed)
+        if self._screenshot_worker is not None:
+            return
+        self.float_btn.set_listening(True)
+        self._screenshot_worker = ScreenshotWorker(self)
+        self._screenshot_worker.completed.connect(self._on_screenshot_result)
+        self._screenshot_worker.finished.connect(self._on_screenshot_finished)
         self._screenshot_worker.start()
 
-    def _on_screenshot_done(self, path: str) -> None:
-        if not path:
+    @_safe_slot
+    def _on_screenshot_result(self, result: ScreenshotResult) -> None:
+        if self._stopping:
+            if result.path:
+                Path(result.path).unlink(missing_ok=True)
             return
-        if not self._dialog or not self._dialog.isVisible():
-            self._show_dialog()
-        else:
-            self._dialog.activateWindow()
-            self._dialog.raise_()
-        if self._dialog:
-            self._dialog.attach_image_paths([path])
+        if result.status == ScreenshotStatus.CANCELLED:
+            logger.info("Screenshot cancelled by user")
+            return
+        if result.ok:
+            try:
+                if not self._dialog or not self._dialog.isVisible():
+                    self._show_dialog()
+                else:
+                    self._dialog.activateWindow()
+                    self._dialog.raise_()
+                if self._dialog:
+                    self._dialog.attach_image_paths([result.path])
+            finally:
+                Path(result.path).unlink(missing_ok=True)
+            return
+        logger.warning("Screenshot failed (%s): %s", result.status.value, result.error)
+        if result.status == ScreenshotStatus.TIMED_OUT:
+            self._show_notice(
+                QMessageBox.Warning, "截图超时",
+                result.error or "截图长时间未完成，请重试。",
+            )
+            return
+        if result.status == ScreenshotStatus.COMMAND_FAILED:
+            detail = html.escape(result.error or "未知命令错误")
+            self._show_notice(
+                QMessageBox.Warning, "截图失败",
+                f"系统截图命令执行失败。<br><br><tt>{detail}</tt>",
+            )
+            return
 
-    def _on_screenshot_failed(self, err: str) -> None:
-        """截图失败：引导用户授予屏幕录制权限"""
-        logger.warning("Screenshot failed: %s", err)
+        # Only an explicit permission result offers the system settings action.
         box = QMessageBox(
             QMessageBox.Warning,
-            "截图失败",
+            "需要屏幕录制权限",
             "无法进行截图：屏幕录制权限未授予。\n\n"
             "请前往 系统设置 → 隐私与安全性 → 屏幕录制，\n"
             "勾选允许「AI 桌面助手」（开发模式为「终端」），授权后重新截图。",
@@ -262,6 +429,65 @@ class ChatController(QObject):
         if box.clickedButton() is settings_btn:
             self._open_screen_recording_prefs()
 
+    def _on_screenshot_finished(self) -> None:
+        worker = self.sender()
+        if worker is self._screenshot_worker:
+            self._screenshot_worker = None
+        self.float_btn.set_listening(False)
+        worker.deleteLater()
+        self._finish_stop_if_ready()
+
+    def _on_ocr_requested(self, image_path: str) -> None:
+        if self._stopping or self._stopped or self._dialog is None:
+            return
+        if image_path not in self._dialog.get_pending_images():
+            return
+        self._ocr_image_path = image_path
+        self._dialog.show_ocr_loading(image_path)
+        self._ocr.start(image_path)
+
+    @_safe_slot
+    def _on_ocr_completed(self, result: OCRResult) -> None:
+        if self._stopping or self._dialog is None:
+            return
+        if result.image_path != self._ocr_image_path:
+            return
+        if result.image_path not in self._dialog.get_pending_images():
+            return
+        self._ocr_image_path = None
+        if result.status == OCRStatus.SUCCEEDED:
+            low_confidence = any(
+                block.confidence < 0.5 for block in result.blocks
+            )
+            self._dialog.show_ocr_result(
+                result.image_path,
+                result.text,
+                block_count=len(result.blocks),
+                elapsed_ms=result.elapsed_ms,
+                languages=result.languages,
+                low_confidence=low_confidence,
+            )
+        elif result.status == OCRStatus.EMPTY:
+            self._dialog.show_ocr_empty(result.image_path, result.elapsed_ms)
+        elif result.status == OCRStatus.FAILED:
+            self._dialog.show_ocr_error(result.image_path, result.error)
+
+    def _on_ocr_cancel_requested(self) -> None:
+        self._ocr_image_path = None
+        self._ocr.cancel()
+
+    def _on_pending_images_changed(self, image_paths: list[str]) -> None:
+        image_path = self._ocr_image_path
+        if image_path is None or image_path in image_paths:
+            return
+        self._ocr_image_path = None
+        self._ocr.cancel()
+        if self._dialog:
+            self._dialog.close_ocr_preview(image_path)
+
+    def _on_dialog_closed(self) -> None:
+        self._on_ocr_cancel_requested()
+
     @staticmethod
     def _open_screen_recording_prefs() -> None:
         import subprocess
@@ -270,20 +496,76 @@ class ChatController(QObject):
         )
 
     def _on_hotkey_triggered(self, _text: str) -> None:
-        """主线程：延迟读取选中文字 → 打开对话窗口
+        """主线程：等待修饰键释放后启动异步文本捕获。
 
-        延迟 100ms 等待热键修饰键释放后再调用 read_selection()，
+        延迟 100ms 等待热键修饰键释放后再模拟复制，
         避免 Controller 模拟的 ⌘C 事件与仍按住的热键修饰键冲突。
         """
-        QTimer.singleShot(100, self._do_capture_and_show)
+        if not self._stopping:
+            self._selection_delay_timer.start(100)
 
-    def _do_capture_and_show(self) -> None:
-        """在 Qt 主线程执行：读取选中文字并显示对话窗口"""
-        try:
-            text = read_selection() or ""
-        except Exception:
-            logger.exception("Failed to read selection")
-            text = ""
+    @_safe_slot
+    def _start_selection_capture(self) -> None:
+        if self._stopping or self._stopped:
+            return
+        if self._selection_capture is not None:
+            return
+        self.float_btn.set_listening(True)
+        task = SelectionCaptureTask(self)
+        self._selection_capture = task
+        task.completed.connect(lambda text, task=task: self._on_selection_captured(task, text))
+        task.start()
+
+    @_safe_slot
+    def _on_pet_action_requested(self, action_id: str) -> None:
+        if self._stopping or self._stopped:
+            return
+        action = self._action_service.get(action_id)
+        if (
+            not config.QUICK_ACTIONS_ENABLED
+            or action is None
+            or not action.enabled
+            or "text" not in action.input_types
+        ):
+            self._refresh_pet_actions()
+            self._show_dialog()
+            self._show_notice(
+                QMessageBox.Warning,
+                "快捷动作不可用",
+                "该动作已隐藏、被禁用或不支持文字选区。",
+            )
+            return
+        if self._worker is not None or self._selection_capture is not None:
+            self._show_dialog()
+            if self._dialog:
+                self._dialog.flash_busy()
+            return
+        self._pending_pet_action_id = action_id
+        self._start_selection_capture()
+
+    @_safe_slot
+    def _on_selection_captured(self, task: SelectionCaptureTask, text: str) -> None:
+        if task is not self._selection_capture:
+            task.deleteLater()
+            return
+        self._selection_capture = None
+        action_id = self._pending_pet_action_id
+        self._pending_pet_action_id = None
+        self.float_btn.set_listening(False)
+        task.deleteLater()
+        if self._stopping or self._stopped:
+            self._finish_stop_if_ready()
+            return
+        if action_id:
+            logger.info("Pet action %s captured text length=%d", action_id, len(text))
+            if text.strip():
+                self._on_action_requested(action_id, text, "new")
+            else:
+                self._show_dialog()
+                if self._dialog:
+                    self._dialog.show_actions("", action_id)
+            self._finish_stop_if_ready()
+            return
         logger.info("Hotkey triggered, text length=%d", len(text))
         if not self._dialog or not self._dialog.isVisible():
             self._show_dialog()
@@ -292,23 +574,47 @@ class ChatController(QObject):
             self._dialog.activateWindow()
             self._dialog.raise_()
             self._dialog.set_input_text(text)
+            self._dialog.show_actions(text)
         elif not text:
             logger.info("No text captured — dialog shown without paste")
+        self._finish_stop_if_ready()
 
     # ── 对话框开关 ─────────────────────────────────────
 
     def _toggle_dialog(self) -> None:
+        if self._stopping or self._stopped:
+            return
         if self._dialog and self._dialog.isVisible():
             self._dialog.hide()
             return
         self._show_dialog()
 
     def _show_dialog(self) -> None:
+        if self._stopping or self._stopped:
+            return
+        self._result_bubble.hide()
         if self._dialog is None:
-            self._dialog = ChatDialog(self._all_agents, self._active_agent, [], self._model,
-                                     auto_hide=self._auto_hide)
+            cached_models = self._load_cached_models(config.OLLAMA_BASE_URL)
+            self._dialog = ChatDialog(
+                self._all_agents,
+                self._active_agent,
+                cached_models,
+                self._model,
+                auto_hide=self._auto_hide,
+                actions=self._action_service.visible_actions,
+                actions_enabled=config.QUICK_ACTIONS_ENABLED,
+            )
+            self._sync_action_context()
+            self._dialog.restore_geometry(self._chat_geometry)
+            self._dialog.geometry_changed.connect(self._schedule_window_state_save)
             self._dialog.message_sent.connect(self._on_user_message)
             self._dialog.screenshot_requested.connect(self._on_screenshot_hotkey)
+            self._dialog.ocr_requested.connect(self._on_ocr_requested)
+            self._dialog.ocr_cancel_requested.connect(self._on_ocr_cancel_requested)
+            self._dialog.pending_images_changed.connect(
+                self._on_pending_images_changed
+            )
+            self._dialog.closed.connect(self._on_dialog_closed)
             self._dialog.new_convo_requested.connect(self._new_conversation)
             self._dialog.history_requested.connect(self._on_history_requested)
             self._dialog.export_requested.connect(self._on_export_requested)
@@ -316,7 +622,14 @@ class ChatController(QObject):
             self._dialog.stop_requested.connect(self._on_stop_requested)
             self._dialog.agent_changed.connect(self._on_agent_changed)
             self._dialog.model_changed.connect(self._on_model_changed)
-            self._dialog.ollama_online.connect(self._refresh_model_list)
+            self._dialog.service_check_requested.connect(self._refresh_model_list)
+            self._dialog.action_requested.connect(self._on_action_requested)
+            self._dialog.set_cached_models(cached_models, self._model)
+            self._dialog.set_image_capability(
+                self._image_capability,
+                cached=self._image_capability != ImageCapability.UNKNOWN,
+            )
+            self._update_model_profile_summary()
             # 灌入输入历史（上下键浏览用）
             self._dialog.set_input_history(list_input_history())
             # 首次打开自动恢复上次对话
@@ -331,11 +644,7 @@ class ChatController(QObject):
                         self._active_agent = self._agent_mgr.switch(prev_agent)
                         self._dialog.set_active_agent(self._active_agent)
                         self._tray.set_active_agent(self._active_agent)
-            # 首次构造后立刻刷新模型列表（dialog combo 当前为占位"加载中…"）
-            self._refresh_model_list()
-        else:
-            # 复用现有 dialog，每次显示刷新模型列表
-            self._refresh_model_list()
+                        self._update_model_profile_summary()
         # 如果悬浮球被隐藏了，重新显示
         if self.float_btn.isHidden():
             self.float_btn.show()
@@ -343,6 +652,51 @@ class ChatController(QObject):
         self._dialog.show_near(
             self.float_btn.mapToGlobal(self.float_btn.rect().topLeft())
         )
+
+    def _schedule_window_state_save(self) -> None:
+        if not self._stopping and not self._stopped:
+            self._window_state_timer.start()
+
+    def _connect_screen_signals(self) -> None:
+        app = QApplication.instance()
+        if app is None:
+            return
+        app.screenAdded.connect(self._on_screen_added)
+        app.screenRemoved.connect(self._schedule_screen_recovery)
+        for screen in app.screens():
+            screen.availableGeometryChanged.connect(self._schedule_screen_recovery)
+
+    def _on_screen_added(self, screen) -> None:
+        screen.availableGeometryChanged.connect(self._schedule_screen_recovery)
+        self._schedule_screen_recovery()
+
+    def _schedule_screen_recovery(self, *_) -> None:
+        if not self._stopping and not self._stopped:
+            self._screen_recovery_timer.start()
+
+    def _ensure_windows_visible(self) -> None:
+        self.float_btn.ensure_visible()
+        if self._dialog is not None and self._dialog.isVisible():
+            self._dialog.ensure_visible()
+        self._reposition_result_bubble()
+
+    def _reposition_result_bubble(self) -> None:
+        if self._result_bubble.isVisible():
+            self._result_bubble.position_near(self.float_btn.frameGeometry())
+
+    def _hide_float_entry(self) -> None:
+        self._result_bubble.hide()
+        self.float_btn.hide()
+
+    def _save_window_state(self) -> None:
+        float_state = self.float_btn.placement_state()
+        if isinstance(float_state, str):
+            save_setting("float_button_placement", float_state)
+        if self._dialog is not None:
+            chat_state = self._dialog.geometry_state()
+            if isinstance(chat_state, str):
+                self._chat_geometry = chat_state
+                save_setting("chat_window_geometry", chat_state)
 
     @_safe_slot
     def _on_auto_hide_toggled(self, checked: bool) -> None:
@@ -353,11 +707,20 @@ class ChatController(QObject):
             self._dialog.set_auto_hide(checked)
         logger.info("Auto-hide %s", "enabled" if checked else "disabled")
 
+    @_safe_slot
+    def _on_pet_mode_toggled(self, checked: bool) -> None:
+        config.DESKTOP_PET_ENABLED = checked
+        save_setting("desktop_pet_enabled", "true" if checked else "false")
+        self.float_btn.set_pet_enabled(checked)
+        self._refresh_pet_actions()
+        if not checked:
+            self._result_bubble.hide()
+        logger.info("Desktop pet mode %s", "enabled" if checked else "disabled")
+
     # ── 退出 / 关于 ───────────────────────────────────
 
     def _on_exit(self) -> None:
         self.stop()
-        QApplication.instance().quit()
 
     @_safe_slot
     def _on_settings_requested(self) -> None:
@@ -374,6 +737,10 @@ class ChatController(QObject):
             "repeat_penalty": config.OLLAMA_REPEAT_PENALTY,
             "max_rounds": config.OLLAMA_MAX_ROUNDS,
             "hotkey": config.HOTKEY,
+            "quick_actions": config.QUICK_ACTIONS_ENABLED,
+            "desktop_pet": config.DESKTOP_PET_ENABLED,
+            "pet_reduce_motion": config.DESKTOP_PET_REDUCE_MOTION,
+            "pet_size": config.DESKTOP_PET_SIZE,
         }
         dlg = SettingsDialog(current, parent=self._dialog)
         dlg.settings_applied.connect(self._on_settings_applied)
@@ -389,14 +756,41 @@ class ChatController(QObject):
                 logger.info("Hotkey changed to %s", config.HOTKEY)
             except Exception as e:
                 logger.warning("Failed to change hotkey: %s", e)
+        if "quick_actions" in changed and self._dialog:
+            self._dialog.set_actions_enabled(config.QUICK_ACTIONS_ENABLED)
+        if "quick_actions" in changed:
+            self._refresh_pet_actions()
+        if "desktop_pet" in changed:
+            self.float_btn.set_pet_enabled(config.DESKTOP_PET_ENABLED)
+            self._refresh_pet_actions()
+            if not config.DESKTOP_PET_ENABLED:
+                self._result_bubble.hide()
+        if "pet_reduce_motion" in changed:
+            self.float_btn.set_reduce_motion(config.DESKTOP_PET_REDUCE_MOTION)
+        if "pet_size" in changed:
+            self.float_btn.set_pet_size(config.DESKTOP_PET_SIZE)
+        if "base_url" in changed:
+            self._startup_service_check = None
+            self._service_checks.cancel_service()
+            self._service_checks.cancel_model_capability()
+            self._capability_check = None
+            self._model_versions = self._load_cached_model_versions(
+                config.OLLAMA_BASE_URL
+            )
+            self._sync_cached_image_capability()
+            if self._dialog:
+                cached_models = self._load_cached_models(config.OLLAMA_BASE_URL)
+                self._dialog.set_cached_models(cached_models, self._model)
+            self._refresh_model_list()
         if changed:
+            self._update_model_profile_summary()
             logger.info("Settings applied")
 
     def _show_about(self) -> None:
         QMessageBox.about(
             None,
             "关于 AI 桌面助手",
-            "<b>AI 桌面助手</b> v1.0<br><br>"
+            f"<b>AI 桌面助手</b> v{__version__}<br><br>"
             "macOS 常驻 AI 助手<br>"
             "选中文字 → ⌘⌃L → 一键提问<br><br>"
             "基于 Ollama 本地 LLM，数据不上传。",
@@ -408,6 +802,7 @@ class ChatController(QObject):
     def _on_agent_changed(self, agent: Agent) -> None:
         self._active_agent = self._agent_mgr.switch(agent)
         self._tray.set_active_agent(self._active_agent)
+        self._update_model_profile_summary()
         logger.info("Agent switched: %s", self._active_agent.name)
 
     @_safe_slot
@@ -417,81 +812,353 @@ class ChatController(QObject):
         if self._dialog:
             self._dialog.set_active_agent(self._active_agent)
         self._tray.set_active_agent(self._active_agent)
+        self._update_model_profile_summary()
         logger.info("Agent switched via tray: %s", self._active_agent.name)
 
     def _on_model_changed(self, model: str) -> None:
         self._model = model
         save_setting("last_model", model)
+        self._service_checks.cancel_model_capability()
+        self._capability_check = None
+        self._sync_cached_image_capability()
+        if self._service_state == ServiceState.ONLINE:
+            self._refresh_model_capability()
+        self._update_model_profile_summary()
         logger.info("Model switched: %s", model)
 
     @_safe_slot
-    def _refresh_model_list(self) -> None:
-        """从 Ollama 拉取模型列表刷新 dialog combo，失败时回退到 SQLite 缓存。
+    def _refresh_model_list(self) -> int:
+        """Start or join the current address's non-blocking model check."""
+        if self._stopping or self._stopped:
+            return 0
+        base_url = normalize_service_url(config.OLLAMA_BASE_URL)
+        self._service_state = ServiceState.CHECKING
+        self._service_checks.cancel_model_capability()
+        self._capability_check = None
+        self._sync_cached_image_capability()
+        if self._dialog:
+            self._dialog.set_service_status(ServiceState.CHECKING)
+        sequence = self._service_checks.check_service(base_url)
+        self._service_check_sequence = sequence
+        self._service_check_url = base_url
+        return sequence
 
-        缓存 key = 'cached_models'，存放 JSON 编码的模型名列表。
-        """
-        models = list_models()
-        if not models:
-            cached = get_setting("cached_models")
-            if cached:
-                try:
-                    models = json.loads(cached)
-                except (json.JSONDecodeError, TypeError):
-                    models = []
-        if models:
-            if self._model not in models:
-                self._model = models[0]
-                save_setting("last_model", self._model)
-            save_setting("cached_models", json.dumps(models, ensure_ascii=False))
+    @staticmethod
+    def _load_cached_models(base_url: str) -> list[str]:
+        raw = get_setting(model_cache_key(base_url))
+        if not raw:
+            return []
+        try:
+            models = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return []
+        if not isinstance(models, list):
+            return []
+        return list(dict.fromkeys(model for model in models if isinstance(model, str) and model))
+
+    @staticmethod
+    def _load_cached_model_versions(base_url: str) -> dict[str, str]:
+        raw = get_setting(model_versions_cache_key(base_url))
+        if not raw:
+            return {}
+        try:
+            versions = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        if not isinstance(versions, dict):
+            return {}
+        return {
+            model: version
+            for model, version in versions.items()
+            if isinstance(model, str) and isinstance(version, str) and model
+        }
+
+    @staticmethod
+    def _load_cached_image_capability(
+        base_url: str, model: str, version: str,
+    ) -> ImageCapability:
+        raw = get_setting(model_capability_cache_key(base_url, model, version))
+        try:
+            return ImageCapability(raw)
+        except ValueError:
+            return ImageCapability.UNKNOWN
+
+    def _sync_cached_image_capability(self) -> None:
+        version = self._model_versions.get(self._model, "")
+        self._image_capability = self._load_cached_image_capability(
+            config.OLLAMA_BASE_URL,
+            self._model,
+            version,
+        )
+        if self._dialog:
+            self._dialog.set_image_capability(
+                self._image_capability,
+                cached=self._image_capability != ImageCapability.UNKNOWN,
+            )
+
+    def _resolve_model_config(
+        self,
+        action_profile_id: str | None = None,
+        agent: Agent | None = None,
+    ):
+        models = self._load_cached_models(config.OLLAMA_BASE_URL)
+        available_models = (
+            models
+            if models or self._service_state in (ServiceState.ONLINE, ServiceState.EMPTY)
+            else None
+        )
+        return self._profile_mgr.resolve(
+            global_model=self._model,
+            agent_profile_id=(agent or self._active_agent).profile_id,
+            action_profile_id=action_profile_id,
+            available_models=available_models,
+        )
+
+    def _update_model_profile_summary(self) -> None:
+        if not self._dialog:
+            return
+        resolved = self._resolve_model_config()
+        self._dialog.set_model_profile_summary(
+            resolved.profile_name,
+            resolved.summary,
+            resolved.warnings,
+        )
+
+    def _image_capability_for_model(self, model: str) -> ImageCapability:
+        if model == self._model:
+            return self._image_capability
+        return self._load_cached_image_capability(
+            config.OLLAMA_BASE_URL,
+            model,
+            self._model_versions.get(model, ""),
+        )
+
+    def _refresh_model_capability(self) -> int:
+        if self._stopping or self._stopped or not self._model:
+            return 0
+        base_url = normalize_service_url(config.OLLAMA_BASE_URL)
+        version = self._model_versions.get(self._model, "")
+        if self._dialog:
+            self._dialog.set_image_capability(
+                self._image_capability,
+                checking=True,
+            )
+        sequence = self._service_checks.check_model_capability(
+            base_url,
+            self._model,
+            version,
+        )
+        self._capability_check = (sequence, base_url, self._model, version)
+        return sequence
+
+    @_safe_slot
+    def _on_model_capability_checked(self, result: ModelCapabilityResult) -> None:
+        expected = (
+            result.sequence,
+            result.base_url,
+            result.model,
+            result.version,
+        )
+        current = (
+            result.sequence,
+            normalize_service_url(config.OLLAMA_BASE_URL),
+            self._model,
+            self._model_versions.get(self._model, ""),
+        )
+        if self._stopping or self._capability_check != expected or expected != current:
+            return
+        self._capability_check = None
+        self._image_capability = result.capability
+        if not result.error:
+            save_setting(
+                model_capability_cache_key(
+                    result.base_url,
+                    result.model,
+                    result.version,
+                ),
+                result.capability.value,
+            )
+        if self._dialog:
+            self._dialog.set_image_capability(result.capability)
+        if result.error:
+            logger.warning(
+                "Could not determine image capability for %s: %s",
+                result.model,
+                result.error,
+            )
+
+    @_safe_slot
+    def _on_service_checked(self, result: ServiceCheckResult) -> None:
+        current_url = normalize_service_url(config.OLLAMA_BASE_URL)
+        if (self._stopping or result.sequence != self._service_check_sequence
+                or result.base_url != self._service_check_url or result.base_url != current_url):
+            return
+        self._service_state = result.state
+        if self._dialog:
+            self._dialog.set_service_status(result.state)
+        if result.state == ServiceState.ONLINE:
+            models = list(result.models)
+            save_setting(model_cache_key(result.base_url), json.dumps(models, ensure_ascii=False))
+            self._model_versions = dict(result.model_versions)
+            save_setting(
+                model_versions_cache_key(result.base_url),
+                json.dumps(self._model_versions, ensure_ascii=False),
+            )
             if self._dialog:
                 self._dialog.refresh_models(models)
+                selected_model = self._dialog.active_model
+                if selected_model != self._model:
+                    self._model = selected_model
+                    save_setting("last_model", selected_model)
+            elif self._model not in models:
+                self._model = models[0]
+                save_setting("last_model", self._model)
+            self._sync_cached_image_capability()
+            self._refresh_model_capability()
+            self._update_model_profile_summary()
+            logger.info("Ollama connected at %s (%d models)", result.base_url, len(models))
+        elif result.state == ServiceState.EMPTY:
+            self._service_checks.cancel_model_capability()
+            self._capability_check = None
+            self._image_capability = ImageCapability.UNKNOWN
+            if self._dialog:
+                self._dialog.set_image_capability(self._image_capability)
+            logger.warning("Ollama connected at %s but has no models", result.base_url)
+        elif result.state == ServiceState.INVALID:
+            logger.warning("Invalid Ollama response from %s: %s", result.base_url, result.error)
+        else:
+            logger.warning("Cannot connect to Ollama at %s: %s", result.base_url, result.error)
+
+        if self._startup_service_check == (result.sequence, result.base_url):
+            self._startup_service_check = None
+            self._show_startup_service_notice(result)
+
+    def start_background_checks(self) -> None:
+        """Show first-run guidance and schedule startup network checks."""
+        if self._stopping or self._stopped:
+            return
+        if not get_setting("startup_welcome_shown"):
+            self._show_notice(
+                QMessageBox.Information,
+                "欢迎使用 AI 桌面助手",
+                "<b>AI 桌面助手</b><br><br>"
+                "三种打开方式：<br>"
+                "1. 选中文字 → 按 <b>⌘⌃L</b> → 自动填入对话框<br>"
+                "2. 点击屏幕右侧 <b>悬浮按钮</b><br>"
+                "3. 点击菜单栏 <b>图标</b><br><br>"
+                "需要 <b>Ollama</b> 本地模型服务，数据不上传。<br>"
+                "首次使用请确保 Ollama 已启动。",
+            )
+            save_setting("startup_welcome_shown", "1")
+        sequence = self._refresh_model_list()
+        self._startup_service_check = (sequence, self._service_check_url)
+        self._service_checks.check_for_update()
+
+    def _show_startup_service_notice(self, result: ServiceCheckResult) -> None:
+        if result.state == ServiceState.OFFLINE:
+            self._show_notice(
+                QMessageBox.Warning,
+                "Ollama 未运行",
+                "未检测到 Ollama 服务。<br><br>"
+                "请打开终端执行：<br><tt>ollama serve</tt><br><br>"
+                "安装地址：<a href='https://ollama.com'>https://ollama.com</a>",
+            )
+        elif result.state == ServiceState.EMPTY:
+            self._show_notice(
+                QMessageBox.Warning,
+                "无可用模型",
+                "Ollama 已启动，但未安装任何模型。<br><br>"
+                "请打开终端执行：<br><tt>ollama pull qwen3:14b</tt><br><br>"
+                "更多模型：<a href='https://ollama.com/library'>https://ollama.com/library</a>",
+            )
+        elif result.state == ServiceState.INVALID:
+            self._show_notice(
+                QMessageBox.Warning,
+                "Ollama 响应异常",
+                "已连接到服务，但模型列表格式无法识别。请检查服务地址和版本。",
+            )
+
+    def _show_notice(self, icon, title: str, text: str) -> None:
+        """Open a retained, non-modal notice so startup work can continue."""
+        if self._stopping:
+            return
+        parent = self._dialog if self._dialog else None
+        notice = QMessageBox(icon, title, text, QMessageBox.Ok, parent)
+        notice.setAttribute(Qt.WA_DeleteOnClose)
+        self._notices.append(notice)
+
+        def release_notice(*_) -> None:
+            if notice in self._notices:
+                self._notices.remove(notice)
+
+        notice.finished.connect(release_notice)
+        notice.open()
+
+    def _on_update_checked(self, update) -> None:
+        if self._stopping or update is None:
+            return
+        self._tray.showMessage(
+            "AI 桌面助手 — 有更新",
+            f"新版本 {update.version} 可用\n{update.url}",
+            QSystemTrayIcon.Information,
+            5000,
+        )
 
     # ── 新建对话 ───────────────────────────────────────
 
     @_safe_slot
     def _new_conversation(self) -> None:
+        self._stop_worker(show_cancelled=False)
         self._convo_id = 0
         self._messages = []
         if self._dialog:
             self._dialog.clear_messages()
+        self._sync_action_context()
         logger.info("New conversation started (agent=%s)", self._active_agent.name)
+
+    def _sync_action_context(self) -> None:
+        if self._dialog:
+            self._dialog.set_action_context(self._convo_id != 0, self._action_mode)
 
     # ── 工作线程管理 ───────────────────────────────────
 
-    def _stop_worker(self) -> None:
-        """安全停止当前流式 worker：发送中断信号 + 等待退出 + 清理"""
-        if self._worker is None:
+    def _stop_worker(self, *, show_cancelled: bool = True) -> None:
+        """Invalidate callbacks and restore the UI before asynchronous cancellation."""
+        worker = self._worker
+        if worker is None:
             return
-        if not self._worker.isRunning():
-            self._worker = None
-            return
-        w = self._worker
-        w.requestInterruption()
-        if w.wait(5000):
-            self._worker = None
-            return
-        logger.warning("Worker did not stop within 5s, keeping reference for cleanup")
-        try:
-            w.thinking_chunk.disconnect()
-            w.chunk.disconnect()
-            w.done.disconnect()
-        except (TypeError, RuntimeError):
-            pass
         self._worker = None
-        self._stale_workers.append(w)
-        w.finished.connect(lambda w=w: self._prune_worker(w))
+        worker.cancel()
+        self._retire_worker(worker)
+        self.float_btn.set_responding(False)
+        if self._dialog:
+            self._dialog.set_thinking(False)
+            if show_cancelled:
+                self._dialog.finalize_assistant_stream(self._response_text, False, cancelled=True)
 
-    def _prune_worker(self, w: StreamingChatWorker) -> None:
-        """从遗留队列中移除已完成的 worker"""
-        if w in self._stale_workers:
-            self._stale_workers.remove(w)
+    def _on_worker_finished(self) -> None:
+        """Keep the QThread alive until finished, then release it on the UI thread."""
+        worker = self.sender()
+        if worker is self._worker:
+            return  # Result handling will retire it after updating the UI.
+        if worker in self._stale_workers:
+            self._stale_workers.remove(worker)
+        worker.deleteLater()
+        self._finish_stop_if_ready()
+
+    def _retire_worker(self, worker: StreamingChatWorker) -> None:
+        if worker.isFinished():
+            worker.deleteLater()
+        else:
+            self._stale_workers.append(worker)
 
     # ── 对话历史 ───────────────────────────────────────
 
     @_safe_slot
     def _on_history_requested(self) -> None:
-        dialog = HistoryDialog(parent=self._dialog)
+        dialog = HistoryDialog(parent=self._dialog, agents=self._all_agents)
         dialog.conversation_selected.connect(self._on_conversation_selected)
+        dialog.conversation_deleted.connect(self._on_conversation_deleted)
         if self._dialog:
             p = self._dialog.geometry().center()
             dialog.move(p.x() - dialog.width() // 2, p.y() - dialog.height() // 2)
@@ -503,7 +1170,7 @@ class ChatController(QObject):
             if conv is None:
                 return
             # 停止当前 worker
-            self._stop_worker()
+            self._stop_worker(show_cancelled=False)
             # 恢复对话状态
             self._convo_id = conv.id
             self._messages = conv.messages
@@ -514,18 +1181,37 @@ class ChatController(QObject):
                     if self._dialog:
                         self._dialog.set_active_agent(self._active_agent)
                     self._tray.set_active_agent(self._active_agent)
+                    self._update_model_profile_summary()
                     break
             # 渲染消息
             if self._dialog:
                 self._dialog.clear_messages()
                 for m in conv.messages:
                     if m.role == "user":
-                        self._dialog.add_user_message(m.content, images=m.images)
+                        self._dialog.add_user_message(
+                            m.content,
+                            images=m.images,
+                            missing_images=m.missing_images,
+                        )
                     else:
                         self._dialog.add_assistant_message(m.content)
+            self._sync_action_context()
             logger.info("Loaded conversation %d (%d messages)", convo_id, len(conv.messages))
         except Exception:
             logger.exception("Failed to load conversation %d", convo_id)
+
+    def _on_conversation_deleted(self, convo_id: int) -> None:
+        if convo_id != self._convo_id:
+            return
+        self._stop_worker(show_cancelled=False)
+        self._convo_id = 0
+        self._messages = []
+        self._response_text = ""
+        if self._dialog:
+            self._dialog.clear_messages()
+            self._dialog.set_thinking(False)
+        self._sync_action_context()
+        logger.info("Current conversation %d deleted", convo_id)
 
     @_safe_slot
     def _on_export_requested(self) -> None:
@@ -551,11 +1237,22 @@ class ChatController(QObject):
         """打开 Agent 管理对话框"""
         builtin = [
             AgentDef(id=ag.id, name=ag.name, icon=ag.icon,
-                     system_prompt=ag.system_prompt, builtin=True)
+                     system_prompt=ag.system_prompt, builtin=True,
+                     profile_id=ag.profile_id)
             for ag in self._agent_mgr.builtin_agents
         ]
-        editor = AgentEditor(builtin, self._custom_agents, parent=self._dialog)
+        editor = AgentEditor(
+            builtin,
+            self._custom_agents,
+            parent=self._dialog,
+            profiles=self._profile_mgr.profiles,
+            models=self._load_cached_models(config.OLLAMA_BASE_URL),
+            actions=self._action_service.actions,
+        )
         editor.agents_saved.connect(self._on_custom_agents_saved)
+        editor.profiles_saved.connect(self._on_profiles_saved)
+        editor.agent_profile_changed.connect(self._on_agent_profile_changed)
+        editor.actions_saved.connect(self._on_actions_saved)
         if self._dialog:
             p = self._dialog.geometry().center()
             editor.move(p.x() - editor.width() // 2, p.y() - editor.height() // 2)
@@ -572,7 +1269,54 @@ class ChatController(QObject):
             self._dialog.refresh_agents(self._all_agents)
         self._tray.refresh_agents(self._all_agents)
         self._tray.set_active_agent(self._active_agent)
+        self._update_model_profile_summary()
         logger.info("Custom agents saved (%d custom)", len(data))
+
+    @_safe_slot
+    def _on_profiles_saved(self, profiles: list[ModelProfile]) -> None:
+        self._profile_mgr.replace_all(profiles)
+        self._action_service.reload()
+        self._agent_mgr.refresh_profile_assignments()
+        self._all_agents = self._agent_mgr.all_agents
+        self._custom_agents = self._agent_mgr.custom_agents
+        self._active_agent = self._agent_mgr.active_agent
+        if self._dialog:
+            self._dialog.refresh_actions(self._action_service.visible_actions)
+        self._refresh_pet_actions()
+        self._update_model_profile_summary()
+        logger.info("Model profiles saved (%d)", len(profiles))
+
+    @_safe_slot
+    def _on_actions_saved(self, actions: list[Action]) -> None:
+        self._action_service.replace_all(actions)
+        if self._dialog:
+            self._dialog.refresh_actions(self._action_service.visible_actions)
+        self._refresh_pet_actions()
+        logger.info("Quick actions saved (%d)", len(actions))
+
+    def _refresh_pet_actions(self) -> None:
+        actions = (
+            self._action_service.recent_actions()
+            if config.QUICK_ACTIONS_ENABLED and self.float_btn.pet_enabled
+            else []
+        )
+        self.float_btn.set_quick_actions(
+            [(action.id, action.name) for action in actions]
+        )
+
+    @_safe_slot
+    def _on_agent_profile_changed(self, agent_id: str, profile_id: str | None) -> None:
+        self._agent_mgr.assign_profile(agent_id, profile_id)
+        self._all_agents = self._agent_mgr.all_agents
+        self._custom_agents = self._agent_mgr.custom_agents
+        self._active_agent = self._agent_mgr.active_agent
+        if self._dialog:
+            self._dialog.refresh_agents(self._all_agents)
+            self._dialog.set_active_agent(self._active_agent)
+        self._tray.refresh_agents(self._all_agents)
+        self._tray.set_active_agent(self._active_agent)
+        self._update_model_profile_summary()
+        logger.info("Agent %s model profile changed to %s", agent_id, profile_id or "global")
 
     # ── 发送消息 ───────────────────────────────────────
 
@@ -581,27 +1325,137 @@ class ChatController(QObject):
         self._stop_worker()
         logger.info("Streaming interrupted by user")
 
-    def _on_user_message(self, text: str, images: Optional[list] = None) -> None:
-        images = images or []
-        if self._worker and self._worker.isRunning():
+    @_safe_slot
+    def _on_action_requested(
+        self,
+        action_id: str,
+        material: str,
+        mode: str = "new",
+    ) -> None:
+        mode = mode if mode in {"new", "current"} else "new"
+        if mode == "current" and self._convo_id == 0:
+            mode = "new"
+        self._action_mode = mode
+        save_setting("action_conversation_mode", mode)
+        self._sync_action_context()
+        if self._worker is not None:
             if self._dialog:
-                self._dialog.set_input_text(text)
-                self._dialog.attach_image_paths(images)
+                self._dialog.set_input_text(material)
+                self._dialog.show_actions(material, action_id)
                 self._dialog.flash_busy()
             return
+        try:
+            plan = self._action_service.build_request_plan(
+                action_id,
+                material,
+                self._all_agents,
+            )
+        except (LookupError, ValueError) as exc:
+            if self._dialog:
+                self._dialog.set_input_text(material)
+                self._dialog.show_actions(material, action_id)
+            self._show_notice(QMessageBox.Warning, "无法执行快捷动作", html.escape(str(exc)))
+            return
+        if plan.warnings:
+            self._show_notice(
+                QMessageBox.Warning,
+                "快捷动作已回退",
+                "<br>".join(html.escape(warning) for warning in plan.warnings),
+            )
+        self._action_service.record_use(plan.action.id)
+        self._refresh_pet_actions()
+        if mode == "new":
+            self._new_conversation()
+            self._active_agent = self._agent_mgr.switch(plan.agent)
+            if self._dialog:
+                self._dialog.set_active_agent(self._active_agent)
+            self._tray.set_active_agent(self._active_agent)
+            self._update_model_profile_summary()
+        self._on_user_message(
+            plan.material,
+            system_prompt=plan.system_prompt,
+            action_profile_id=plan.action_profile_id,
+            retry_action_id=plan.action.id,
+            retry_action_mode=mode,
+            request_agent=plan.agent,
+        )
 
+    def _on_user_message(
+        self,
+        text: str,
+        images: Optional[list] = None,
+        *,
+        system_prompt: str | None = None,
+        action_profile_id: str | None = None,
+        retry_action_id: str | None = None,
+        retry_action_mode: str = "new",
+        request_agent: Agent | None = None,
+    ) -> None:
+        images = images or []
+        if self._stopping or self._stopped:
+            return
+        if self._worker is not None:
+            if self._dialog:
+                self._dialog.restore_draft(text, images)
+                self._dialog.flash_busy()
+            return
+        self._result_bubble.hide()
+        request_agent = request_agent or self._active_agent
+        resolved = self._resolve_model_config(action_profile_id, request_agent)
+        image_capability = self._image_capability_for_model(resolved.model)
+        if (
+            images
+            and image_capability == ImageCapability.UNSUPPORTED
+            and resolved.model != self._model
+        ):
+            inherited_capability = self._image_capability_for_model(self._model)
+            if inherited_capability != ImageCapability.UNSUPPORTED:
+                warning = (
+                    f"配置模型 {resolved.model} 不支持图片，"
+                    f"本次已继承全局模型 {self._model}。"
+                )
+                resolved = replace(
+                    resolved,
+                    model=self._model,
+                    warnings=resolved.warnings + (warning,),
+                )
+                image_capability = inherited_capability
+        if resolved.warnings:
+            self._show_notice(
+                QMessageBox.Warning,
+                "模型配置已回退",
+                "<br>".join(html.escape(warning) for warning in resolved.warnings),
+            )
+        if images and image_capability == ImageCapability.UNSUPPORTED:
+            if self._dialog:
+                self._dialog.restore_draft(text, images)
+                self._dialog.focus_model_selector()
+            self._show_notice(
+                QMessageBox.Warning,
+                "当前模型不支持图片",
+                f"模型 {html.escape(resolved.model)} 已声明不支持图片输入。"
+                "请选择显示“图片 ✓”的模型后重试。",
+            )
+            return
+        if images and image_capability == ImageCapability.UNKNOWN:
+            if self._dialog and not self._dialog.confirm_unknown_image_capability(
+                resolved.model
+            ):
+                self._dialog.restore_draft(text, images)
+                return
+
+        created_conversation = False
+        user_msg = None
+        worker = None
         try:
             if self._convo_id == 0:
                 conv = create_conversation(self._active_agent.id)
                 self._convo_id = conv.id
+                created_conversation = True
+                self._sync_action_context()
 
             user_msg = save_message(self._convo_id, "user", text, images=images)
             self._messages.append(user_msg)
-
-            if self._dialog:
-                self._dialog.add_user_message(text, images=images)
-                self._dialog.begin_assistant_stream()
-                self._dialog.set_thinking(True)
 
             # 截断过长的历史，只保留最近 N 轮
             recent = list(self._messages)
@@ -609,55 +1463,173 @@ class ChatController(QObject):
             if len(recent) > max_msgs:
                 recent = recent[-max_msgs:]
 
-            self._worker = StreamingChatWorker(recent, self._active_agent.system_prompt, self._model, self)
-            self._worker.thinking_chunk.connect(self._on_thinking_chunk)
-            self._worker.chunk.connect(self._on_stream_chunk)
-            self._worker.done.connect(self._on_stream_done)
-            self._worker.start()
+            self._response_text = ""
+            worker = StreamingChatWorker(
+                recent, system_prompt or request_agent.system_prompt, resolved.model, self,
+                conversation_id=self._convo_id, agent_id=request_agent.id,
+                think=resolved.think, options=resolved.options,
+            )
+            worker.thinking_event.connect(self._on_thinking_event)
+            worker.content_event.connect(self._on_stream_event)
+            worker.done.connect(self._on_stream_done)
+            worker.finished.connect(self._on_worker_finished)
+            if self._dialog:
+                self._dialog.add_user_message(text, images=user_msg.images)
+                self._dialog.begin_assistant_stream()
+                self._dialog.set_thinking(True)
+            self._worker = worker
+            worker.start()
+            if self._dialog:
+                self._dialog.add_input_history(text)
             self.float_btn.set_responding(True)
         except Exception:
             logger.exception("Failed to send message")
+            if self._worker is worker:
+                self._worker = None
+            if worker is not None:
+                if worker.isRunning():
+                    worker.cancel()
+                    self._retire_worker(worker)
+                else:
+                    worker.release_attachments()
+                    worker.deleteLater()
+            if user_msg is not None:
+                try:
+                    delete_message(user_msg.id, preserve_attachments=True)
+                except Exception:
+                    logger.exception("Failed to roll back message %d", user_msg.id)
+                self._messages = [message for message in self._messages if message.id != user_msg.id]
+            if created_conversation:
+                try:
+                    delete_conversation(self._convo_id)
+                except Exception:
+                    logger.exception("Failed to roll back conversation %d", self._convo_id)
+                self._convo_id = 0
+                self._sync_action_context()
             if self._dialog:
-                self._dialog.set_input_text(text)  # restore input so user can retry
-                self._dialog.attach_image_paths(images)
+                self._dialog.set_thinking(False)
+                self._dialog.clear_messages()
+                for message in self._messages:
+                    if message.role == "user":
+                        self._dialog.add_user_message(
+                            message.content,
+                            images=message.images,
+                            missing_images=message.missing_images,
+                        )
+                    else:
+                        self._dialog.add_assistant_message(message.content)
+                self._dialog.restore_draft(text, images)
+                if retry_action_id:
+                    self._action_mode = retry_action_mode
+                    self._sync_action_context()
+                    self._dialog.show_actions(text, retry_action_id)
+            self.float_btn.set_responding(False)
 
     @_safe_slot
-    def _on_thinking_chunk(self, token: str) -> None:
+    def _on_thinking_event(self, event: StreamEvent) -> None:
+        worker = self._worker
+        if worker is None or event.request_id != worker.request.request_id:
+            return
         if self._dialog:
-            self._dialog.append_thinking_chunk(token)
+            self._dialog.append_thinking_chunk(event.text)
 
     @_safe_slot
-    def _on_stream_chunk(self, token: str) -> None:
+    def _on_stream_event(self, event: StreamEvent) -> None:
+        worker = self._worker
+        if worker is None or event.request_id != worker.request.request_id:
+            return
+        self._response_text += event.text
         if self._dialog:
-            self._dialog.append_stream_chunk(token)
+            self._dialog.append_stream_chunk(event.text)
 
     @_safe_slot
-    def _on_stream_done(self, text: str, ok: bool) -> None:
+    def _on_stream_done(self, result: ChatResult) -> None:
+        worker = self._worker
+        if worker is None or result.request_id != worker.request.request_id:
+            return
+        if worker.request.conversation_id != self._convo_id:
+            self._stop_worker()
+            return
+        text, ok = result.text, result.ok
         self.float_btn.set_responding(False)
+        if result.status != ResultStatus.CANCELLED:
+            self.float_btn.show_result(ok)
         if self._dialog:
             self._dialog.set_thinking(False)
 
         if ok and self._convo_id > 0 and text:
             try:
-                assistant_msg = save_message(self._convo_id, "assistant", text)
+                assistant_msg = save_message(worker.request.conversation_id, "assistant", text)
                 self._messages.append(assistant_msg)
             except Exception:
                 logger.exception("Failed to save assistant message")
 
-            # 窗口在后台时发通知
-            if self._dialog and not self._dialog.isActiveWindow():
-                preview = text[:80].replace("\n", " ") + ("…" if len(text) > 80 else "")
-                self._tray.showMessage(
-                    f"{self._active_agent.icon} {self._active_agent.name}",
-                    preview,
-                    QSystemTrayIcon.Information,
-                    3000,
-                )
-
         if self._dialog:
-            self._dialog.finalize_assistant_stream(text, ok)
+            self._dialog.finalize_assistant_stream(
+                text, ok, error=result.error, cancelled=result.status == ResultStatus.CANCELLED,
+            )
+
+        bubble_shown = False
+        if result.status != ResultStatus.CANCELLED:
+            bubble_shown = self._show_result_bubble(result)
+
+        # 完整窗口仍可见或宠物气泡不可用时，沿用系统通知。
+        if (
+            ok
+            and text
+            and self._dialog
+            and not self._dialog.isActiveWindow()
+            and not bubble_shown
+        ):
+            preview = ResultBubble.summarize(text, "回复已完成", limit=80)
+            self._tray.showMessage(
+                f"{self._active_agent.icon} {self._active_agent.name}",
+                preview,
+                QSystemTrayIcon.Information,
+                3000,
+            )
 
         self._worker = None
+        self._retire_worker(worker)
+        self._finish_stop_if_ready()
+
+    def _show_result_bubble(self, result: ChatResult) -> bool:
+        if (
+            (self._dialog is not None and self._dialog.isVisible())
+            or not self.float_btn.isVisible()
+            or not self.float_btn.pet_enabled
+        ):
+            return False
+
+        if result.ok:
+            kind = "success"
+            title = "任务完成"
+            source = result.text
+            fallback = "回复已完成，点击查看完整内容。"
+            timeout_ms = 7000
+        else:
+            needs_action = result.error_code in {
+                ErrorCode.CONNECTION,
+                ErrorCode.HTTP,
+                ErrorCode.SERVER,
+                ErrorCode.TIMEOUT,
+            }
+            kind = "action" if needs_action else "error"
+            title = "需要处理" if needs_action else "生成失败"
+            source = result.error or result.text
+            fallback = "请点击查看详情后重试。"
+            timeout_ms = 9000
+
+        summary = ResultBubble.summarize(source, fallback)
+        self._result_bubble.show_result(
+            kind,
+            title,
+            summary,
+            self.float_btn.frameGeometry(),
+            timeout_ms=timeout_ms,
+        )
+        pin_to_all_spaces(self._result_bubble)
+        return True
 
 
 # ═══════════════════════════════════════════════════════
@@ -697,6 +1669,17 @@ def _open_input_monitoring_prefs() -> None:
 
 
 def main() -> None:
+    if "--version" in sys.argv[1:]:
+        print(__version__)
+        return
+    if "--ocr-runtime" in sys.argv[1:]:
+        from dataclasses import asdict
+
+        from ai_desktop.services.ocr_service import probe_ocr_runtime
+
+        print(json.dumps(asdict(probe_ocr_runtime()), ensure_ascii=False))
+        return
+
     log_util.setup()
 
     # 崩溃处理钩子（必须在任何异常可能发生之前安装）
@@ -717,20 +1700,23 @@ def main() -> None:
     signal.signal(signal.SIGINT, _on_sigint)
 
     controller = ChatController()
+    app.paletteChanged.connect(controller.refresh_theme)
+    controller.exit_ready.connect(app.quit)
 
     def _poll_quit() -> None:
         if _quit_flag:
             poll_timer.stop()
             controller.stop()
-            app.quit()
 
     poll_timer = QTimer()
     poll_timer.timeout.connect(_poll_quit)
     poll_timer.start(200)
 
+    smoke_mode = os.environ.get("AIDE_SMOKE_TEST") == "1"
+
     # 权限检查（辅助功能 + 输入监听）
     # 已授权 → 静默跳过；缺失 → 触发 macOS 系统标准授权弹窗
-    perm = _check_permissions()
+    perm = _check_permissions() if not smoke_mode else PermissionStatus(True, True)
     logger.info("权限状态: AX=%s, InputMonitoring=%s", perm.accessibility, perm.input_monitoring)
     _perm_requested = False
     if not perm.all_granted:
@@ -782,83 +1768,26 @@ def main() -> None:
                 _perm_requested = True
 
     _perm_recheck.timeout.connect(_recheck_permissions)
-    _perm_recheck.start(3000)  # 每 3 秒重检一次
+    if not smoke_mode:
+        _perm_recheck.start(3000)  # 每 3 秒重检一次
 
     controller.start()
 
     # ── 启动检查 ────────────────────────────────────────
 
     def _startup_check() -> None:
-        """启动时检查：首次引导、Ollama 连通性、模型状态"""
+        controller.start_background_checks()
 
-        # 首次运行欢迎
-        if not get_setting("startup_welcome_shown"):
-            QMessageBox.information(
-                None, "欢迎使用 AI 桌面助手",
-                "<b>AI 桌面助手</b><br><br>"
-                "三种打开方式：<br>"
-                "1. 选中文字 → 按 <b>⌘⌃L</b> → 自动填入对话框<br>"
-                "2. 点击屏幕右侧 <b>悬浮按钮</b><br>"
-                "3. 点击菜单栏 <b>图标</b><br><br>"
-                "需要 <b>Ollama</b> 本地模型服务，数据不上传。<br>"
-                "首次使用请确保 Ollama 已启动。",
-            )
-            save_setting("startup_welcome_shown", "1")
-
-        # Ollama 连通性检查
-        ollama_ok = False
-        try:
-            r = requests.get(f"{config.OLLAMA_BASE_URL}/api/tags", timeout=5)
-            if r.status_code == 200:
-                ollama_ok = True
-                logger.info("Ollama 连接正常 (model=%s)", config.OLLAMA_MODEL)
-            else:
-                logger.warning("Ollama 返回 %d", r.status_code)
-        except Exception:
-            logger.warning("无法连接 Ollama (%s)", config.OLLAMA_BASE_URL)
-
-        if not ollama_ok:
-            QMessageBox.warning(
-                None, "Ollama 未运行",
-                "未检测到 Ollama 服务。<br><br>"
-                "请打开终端执行：<br>"
-                "<tt>ollama serve</tt><br><br>"
-                "安装地址：<a href='https://ollama.com'>https://ollama.com</a><br><br>"
-                "启动后可点击右下角状态灯查看连接状态。",
-            )
-        else:
-            # 检查是否有至少一个可用模型
-            try:
-                r = requests.get(f"{config.OLLAMA_BASE_URL}/api/tags", timeout=5)
-                if r.status_code == 200:
-                    installed = {m["name"] for m in r.json().get("models", [])}
-                    if not installed:
-                        QMessageBox.warning(
-                            None, "无可用模型",
-                            "Ollama 已启动，但未安装任何模型。<br><br>"
-                            "请打开终端执行：<br>"
-                            "<tt>ollama pull qwen3:14b</tt><br><br>"
-                            "更多模型：<a href='https://ollama.com/library'>https://ollama.com/library</a>",
-                        )
-            except Exception:
-                pass
-
-        # 版本更新检查（启动后 3s）
-        from ai_desktop.utils.update_checker import check_for_update
-        update = check_for_update()
-        if update is not None:
-            from PyQt5.QtWidgets import QSystemTrayIcon
-
-            tray = QSystemTrayIcon()
-            if tray.supportsMessages():
-                tray.showMessage(
-                    "AI 桌面助手 — 有更新",
-                    f"新版本 {update.version} 可用\n{update.url}",
-                    QSystemTrayIcon.Information,
-                    5000,
-                )
-
-    QTimer.singleShot(1500, _startup_check)
+    startup_timer = QTimer()
+    startup_timer.setSingleShot(True)
+    startup_timer.timeout.connect(_startup_check)
+    if smoke_mode:
+        QTimer.singleShot(1500, controller.stop)
+    else:
+        startup_timer.start(1500)
+    controller.shutdown_started.connect(poll_timer.stop)
+    controller.shutdown_started.connect(_perm_recheck.stop)
+    controller.shutdown_started.connect(startup_timer.stop)
 
     sys.exit(app.exec_())
 

@@ -3,13 +3,12 @@ import base64
 import json
 from unittest.mock import MagicMock, patch
 
-from ai_desktop.llm.chat_client import ChatClient, ChatStream, list_models
-from ai_desktop.utils.storage import Message
+import pytest
+from PyQt5.QtGui import QColor, QImage
 
-# 1x1 透明 PNG
-_PNG_BYTES = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-)
+from ai_desktop.llm.chat_client import ChatClient, list_models
+from ai_desktop.llm.events import ErrorCode, EventKind
+from ai_desktop.utils.storage import Message
 
 
 def _fake_stream_response(lines: list[str]):
@@ -18,6 +17,14 @@ def _fake_stream_response(lines: list[str]):
     resp.status_code = 200
     resp.iter_lines.return_value = lines
     return resp
+
+
+def _stream():
+    return ChatClient("http://localhost", "model", 10).chat_stream([])
+
+
+def _event_pairs(stream):
+    return [(event.kind.value, event.text) for event in stream]
 
 
 class TestChatStream:
@@ -31,9 +38,8 @@ class TestChatStream:
         resp = _fake_stream_response(lines)
 
         with patch("requests.post", return_value=resp):
-            stream = ChatStream("http://localhost", "model", [], 10)
-            results = list(stream)
-            assert results == [("response", "Hello"), ("response", " world")]
+            results = _event_pairs(_stream())
+            assert results == [("content", "Hello"), ("content", " world"), ("complete", "")]
 
     def test_thinking_and_response(self):
         lines = [
@@ -43,35 +49,32 @@ class TestChatStream:
         resp = _fake_stream_response(lines)
 
         with patch("requests.post", return_value=resp):
-            stream = ChatStream("http://localhost", "model", [], 10)
-            results = list(stream)
+            results = _event_pairs(_stream())
             assert ("thinking", "Let me think...") in results
-            assert ("response", "Answer") in results
+            assert ("content", "Answer") in results
+            assert results[-1] == ("complete", "")
 
     def test_http_error(self):
         resp = MagicMock()
         resp.status_code = 500
 
         with patch("requests.post", return_value=resp):
-            stream = ChatStream("http://localhost", "model", [], 10)
-            results = list(stream)
+            results = _event_pairs(_stream())
             assert results == [("error", "HTTP 500")]
 
     def test_connection_error(self):
         import requests as req
         with patch("requests.post", side_effect=req.exceptions.ConnectionError):
-            stream = ChatStream("http://localhost", "model", [], 10)
-            results = list(stream)
+            results = _event_pairs(_stream())
             assert results == [("error", "无法连接到 Ollama")]
 
     def test_timeout(self):
         import requests
         with patch("requests.post", side_effect=requests.exceptions.Timeout):
-            stream = ChatStream("http://localhost", "model", [], 10)
-            results = list(stream)
+            results = _event_pairs(_stream())
             assert results == [("error", "响应超时")]
 
-    def test_invalid_json_skipped(self):
+    def test_invalid_json_is_protocol_error(self):
         lines = [
             "not valid json",
             json.dumps({"message": {"content": "ok"}, "done": True}),
@@ -79,10 +82,11 @@ class TestChatStream:
         resp = _fake_stream_response(lines)
 
         with patch("requests.post", return_value=resp):
-            stream = ChatStream("http://localhost", "model", [], 10)
-            results = list(stream)
+            results = list(_stream())
             assert len(results) == 1
-            assert results[0] == ("response", "ok")
+            assert results[0].kind == EventKind.ERROR
+            assert results[0].error_code == ErrorCode.PROTOCOL
+            resp.close.assert_called_once()
 
     def test_multiline_content(self):
         lines = [
@@ -92,10 +96,87 @@ class TestChatStream:
         resp = _fake_stream_response(lines)
 
         with patch("requests.post", return_value=resp):
-            stream = ChatStream("http://localhost", "model", [], 10)
+            results = _event_pairs(_stream())
+            assert ("content", "line1\n") in results
+            assert ("content", "line2") in results
+
+    @pytest.mark.parametrize("data", [[], None, {"message": None}, {"message": {"content": 7}},
+                                    {"message": {}, "done": "false"}, {"error": []}, {"unexpected": "field"}])
+    def test_malformed_response_is_protocol_error(self, data):
+        resp = _fake_stream_response([json.dumps(data)])
+        with patch("requests.post", return_value=resp):
+            results = list(_stream())
+        assert len(results) == 1
+        assert results[0].error_code == ErrorCode.PROTOCOL
+        resp.close.assert_called_once()
+
+    def test_empty_stream_is_not_success(self):
+        resp = _fake_stream_response(["", ""])
+        with patch("requests.post", return_value=resp):
+            results = list(_stream())
+        assert len(results) == 1
+        assert results[0].error_code == ErrorCode.PROTOCOL
+
+    def test_stream_creation_defers_image_io(self, tmp_path):
+        stream = ChatClient().chat_stream([Message("user", "image", images=[str(tmp_path / "missing.png")])])
+        with patch("requests.post") as post:
             results = list(stream)
-            assert ("response", "line1\n") in results
-            assert ("response", "line2") in results
+        post.assert_not_called()
+        assert len(results) == 1
+        assert results[0].error_code == ErrorCode.IMAGE
+
+    def test_connect_timeout_is_classified_as_timeout(self):
+        import requests
+        with patch("requests.post", side_effect=requests.exceptions.ConnectTimeout):
+            results = list(_stream())
+        assert results[0].error_code == ErrorCode.TIMEOUT
+
+    def test_cleanup_failure_does_not_replace_terminal_event(self):
+        resp = _fake_stream_response([json.dumps({"message": {"content": "ok"}, "done": True})])
+        resp.close.side_effect = OSError("cleanup failed")
+        with patch("requests.post", return_value=resp):
+            results = list(_stream())
+        assert [event.kind for event in results] == [EventKind.CONTENT, EventKind.COMPLETE]
+
+    def test_wrapped_stream_read_timeout_is_not_connection_failure(self):
+        import requests
+        from urllib3.exceptions import ReadTimeoutError
+        resp = _fake_stream_response([])
+        resp.iter_lines.side_effect = requests.exceptions.ConnectionError(
+            ReadTimeoutError(None, "/api/chat", "Read timed out"),
+        )
+        with patch("requests.post", return_value=resp):
+            results = list(_stream())
+        assert len(results) == 1
+        assert results[0].error_code == ErrorCode.TIMEOUT
+        resp.close.assert_called_once()
+
+    def test_unexpected_transport_failure_has_stable_error_code(self):
+        resp = _fake_stream_response([])
+        resp.iter_lines.side_effect = RuntimeError("unexpected failure")
+        with patch("requests.post", return_value=resp):
+            results = list(_stream())
+        assert len(results) == 1
+        assert results[0].error_code == ErrorCode.INTERNAL
+        resp.close.assert_called_once()
+
+
+class TestNonStreamingChat:
+    def test_missing_image_returns_error(self, tmp_path):
+        with patch("requests.post") as post:
+            result = ChatClient().chat([Message("user", "image", images=[str(tmp_path / "missing.png")])])
+        post.assert_not_called()
+        assert not result.ok
+        assert result.error_code == ErrorCode.IMAGE
+
+    def test_server_error_is_not_success(self):
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {"error": "model failed"}
+        with patch("requests.post", return_value=resp):
+            result = ChatClient().chat([Message("user", "hello")])
+        assert not result.ok
+        assert result.error_code == ErrorCode.SERVER
+        resp.close.assert_called_once()
 
 
 class TestListModels:
@@ -130,7 +211,10 @@ class TestBuildOllamaMessages:
 
     def test_message_with_images(self, tmp_path):
         img = tmp_path / "shot.png"
-        img.write_bytes(_PNG_BYTES)
+        image = QImage(2, 2, QImage.Format_ARGB32)
+        image.fill(QColor("red"))
+        assert image.save(str(img), "PNG")
+        image_bytes = img.read_bytes()
 
         client = ChatClient()
         msgs = [Message(role="user", content="这是什么", images=[str(img)])]
@@ -138,7 +222,7 @@ class TestBuildOllamaMessages:
         assert len(built) == 1
         assert built[0]["role"] == "user"
         assert built[0]["content"] == "这是什么"
-        assert built[0]["images"] == [base64.b64encode(_PNG_BYTES).decode("ascii")]
+        assert built[0]["images"] == [base64.b64encode(image_bytes).decode("ascii")]
 
     def test_system_prompt_prepended_and_unchanged(self):
         client = ChatClient()
