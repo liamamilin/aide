@@ -23,10 +23,13 @@ class StreamingChatWorker(QThread):
     _cancel_requested = pyqtSignal()
 
     def __init__(self, messages: list[Message], system_prompt: str, model: str = "", parent: QObject | None = None,
-                 *, conversation_id: int = 0, agent_id: str = ""):
+                 *, conversation_id: int = 0, agent_id: str = "",
+                 think: bool | None = None,
+                 options: dict[str, int | float] | None = None):
         super().__init__(parent)
         self.request = ChatClient(model=model).create_request(
             messages, system_prompt, conversation_id=conversation_id, agent_id=agent_id,
+            think=think, options=options,
         )
         # Unlike QThread interruption, this also remembers cancellation before start().
         self._cancelled = threading.Event()

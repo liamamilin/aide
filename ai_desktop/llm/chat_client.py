@@ -115,8 +115,19 @@ class ChatClient:
         self.timeout = timeout or config.OLLAMA_TIMEOUT
 
     def create_request(self, messages: Iterable[Message], system_prompt: str = "", *,
-                       conversation_id: int = 0, agent_id: str = "") -> RequestContext:
+                       conversation_id: int = 0, agent_id: str = "",
+                       think: bool | None = None,
+                       options: dict[str, int | float] | None = None) -> RequestContext:
         """Snapshot on submission; image I/O stays in the worker."""
+        resolved_options: dict[str, int | float] = {
+            "num_predict": config.OLLAMA_NUM_PREDICT,
+            "num_ctx": config.OLLAMA_NUM_CTX,
+            "temperature": config.OLLAMA_TEMPERATURE,
+            "top_p": config.OLLAMA_TOP_P,
+            "top_k": config.OLLAMA_TOP_K,
+            "repeat_penalty": config.OLLAMA_REPEAT_PENALTY,
+        }
+        resolved_options.update(options or {})
         return RequestContext(
             request_id=uuid.uuid4().hex,
             conversation_id=conversation_id,
@@ -126,16 +137,9 @@ class ChatClient:
             base_url=self.base_url,
             model=self.model,
             timeout=self.timeout,
-            think=config.OLLAMA_THINK,
+            think=config.OLLAMA_THINK if think is None else think,
             keep_alive=config.OLLAMA_KEEP_ALIVE,
-            options=(
-                ("num_predict", config.OLLAMA_NUM_PREDICT),
-                ("num_ctx", config.OLLAMA_NUM_CTX),
-                ("temperature", config.OLLAMA_TEMPERATURE),
-                ("top_p", config.OLLAMA_TOP_P),
-                ("top_k", config.OLLAMA_TOP_K),
-                ("repeat_penalty", config.OLLAMA_REPEAT_PENALTY),
-            ),
+            options=tuple(resolved_options.items()),
             created_at=time.time(),
         )
 

@@ -12,6 +12,7 @@ import os
 import signal
 import sys
 import threading
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
@@ -36,6 +37,7 @@ from ai_desktop.llm.service_checks import (
     normalize_service_url,
 )
 from ai_desktop.llm.streaming_worker import StreamingChatWorker
+from ai_desktop.services.model_profiles import ModelProfile, ModelProfileManager
 from ai_desktop.settings_manager import SettingsManager
 from ai_desktop.ui import styles
 from ai_desktop.ui.agent_editor import AgentDef, AgentEditor
@@ -129,6 +131,7 @@ class ChatController(QObject):
         # 加载持久化配置
         self._settings = SettingsManager()
         self._settings.load()
+        self._profile_mgr = ModelProfileManager()
 
         # 加载 Agent 列表
         self._agent_mgr = AgentManager()
@@ -484,6 +487,7 @@ class ChatController(QObject):
                 self._image_capability,
                 cached=self._image_capability != ImageCapability.UNKNOWN,
             )
+            self._update_model_profile_summary()
             # 灌入输入历史（上下键浏览用）
             self._dialog.set_input_history(list_input_history())
             # 首次打开自动恢复上次对话
@@ -498,6 +502,7 @@ class ChatController(QObject):
                         self._active_agent = self._agent_mgr.switch(prev_agent)
                         self._dialog.set_active_agent(self._active_agent)
                         self._tray.set_active_agent(self._active_agent)
+                        self._update_model_profile_summary()
         # 如果悬浮球被隐藏了，重新显示
         if self.float_btn.isHidden():
             self.float_btn.show()
@@ -600,6 +605,7 @@ class ChatController(QObject):
                 self._dialog.set_cached_models(cached_models, self._model)
             self._refresh_model_list()
         if changed:
+            self._update_model_profile_summary()
             logger.info("Settings applied")
 
     def _show_about(self) -> None:
@@ -618,6 +624,7 @@ class ChatController(QObject):
     def _on_agent_changed(self, agent: Agent) -> None:
         self._active_agent = self._agent_mgr.switch(agent)
         self._tray.set_active_agent(self._active_agent)
+        self._update_model_profile_summary()
         logger.info("Agent switched: %s", self._active_agent.name)
 
     @_safe_slot
@@ -627,6 +634,7 @@ class ChatController(QObject):
         if self._dialog:
             self._dialog.set_active_agent(self._active_agent)
         self._tray.set_active_agent(self._active_agent)
+        self._update_model_profile_summary()
         logger.info("Agent switched via tray: %s", self._active_agent.name)
 
     def _on_model_changed(self, model: str) -> None:
@@ -637,6 +645,7 @@ class ChatController(QObject):
         self._sync_cached_image_capability()
         if self._service_state == ServiceState.ONLINE:
             self._refresh_model_capability()
+        self._update_model_profile_summary()
         logger.info("Model switched: %s", model)
 
     @_safe_slot
@@ -708,6 +717,38 @@ class ChatController(QObject):
                 self._image_capability,
                 cached=self._image_capability != ImageCapability.UNKNOWN,
             )
+
+    def _resolve_model_config(self):
+        models = self._load_cached_models(config.OLLAMA_BASE_URL)
+        available_models = (
+            models
+            if models or self._service_state in (ServiceState.ONLINE, ServiceState.EMPTY)
+            else None
+        )
+        return self._profile_mgr.resolve(
+            global_model=self._model,
+            agent_profile_id=self._active_agent.profile_id,
+            available_models=available_models,
+        )
+
+    def _update_model_profile_summary(self) -> None:
+        if not self._dialog:
+            return
+        resolved = self._resolve_model_config()
+        self._dialog.set_model_profile_summary(
+            resolved.profile_name,
+            resolved.summary,
+            resolved.warnings,
+        )
+
+    def _image_capability_for_model(self, model: str) -> ImageCapability:
+        if model == self._model:
+            return self._image_capability
+        return self._load_cached_image_capability(
+            config.OLLAMA_BASE_URL,
+            model,
+            self._model_versions.get(model, ""),
+        )
 
     def _refresh_model_capability(self) -> int:
         if self._stopping or self._stopped or not self._model:
@@ -791,6 +832,7 @@ class ChatController(QObject):
                 save_setting("last_model", self._model)
             self._sync_cached_image_capability()
             self._refresh_model_capability()
+            self._update_model_profile_summary()
             logger.info("Ollama connected at %s (%d models)", result.base_url, len(models))
         elif result.state == ServiceState.EMPTY:
             self._service_checks.cancel_model_capability()
@@ -951,6 +993,7 @@ class ChatController(QObject):
                     if self._dialog:
                         self._dialog.set_active_agent(self._active_agent)
                     self._tray.set_active_agent(self._active_agent)
+                    self._update_model_profile_summary()
                     break
             # 渲染消息
             if self._dialog:
@@ -1004,11 +1047,20 @@ class ChatController(QObject):
         """打开 Agent 管理对话框"""
         builtin = [
             AgentDef(id=ag.id, name=ag.name, icon=ag.icon,
-                     system_prompt=ag.system_prompt, builtin=True)
+                     system_prompt=ag.system_prompt, builtin=True,
+                     profile_id=ag.profile_id)
             for ag in self._agent_mgr.builtin_agents
         ]
-        editor = AgentEditor(builtin, self._custom_agents, parent=self._dialog)
+        editor = AgentEditor(
+            builtin,
+            self._custom_agents,
+            parent=self._dialog,
+            profiles=self._profile_mgr.profiles,
+            models=self._load_cached_models(config.OLLAMA_BASE_URL),
+        )
         editor.agents_saved.connect(self._on_custom_agents_saved)
+        editor.profiles_saved.connect(self._on_profiles_saved)
+        editor.agent_profile_changed.connect(self._on_agent_profile_changed)
         if self._dialog:
             p = self._dialog.geometry().center()
             editor.move(p.x() - editor.width() // 2, p.y() - editor.height() // 2)
@@ -1025,7 +1077,32 @@ class ChatController(QObject):
             self._dialog.refresh_agents(self._all_agents)
         self._tray.refresh_agents(self._all_agents)
         self._tray.set_active_agent(self._active_agent)
+        self._update_model_profile_summary()
         logger.info("Custom agents saved (%d custom)", len(data))
+
+    @_safe_slot
+    def _on_profiles_saved(self, profiles: list[ModelProfile]) -> None:
+        self._profile_mgr.replace_all(profiles)
+        self._agent_mgr.refresh_profile_assignments()
+        self._all_agents = self._agent_mgr.all_agents
+        self._custom_agents = self._agent_mgr.custom_agents
+        self._active_agent = self._agent_mgr.active_agent
+        self._update_model_profile_summary()
+        logger.info("Model profiles saved (%d)", len(profiles))
+
+    @_safe_slot
+    def _on_agent_profile_changed(self, agent_id: str, profile_id: str | None) -> None:
+        self._agent_mgr.assign_profile(agent_id, profile_id)
+        self._all_agents = self._agent_mgr.all_agents
+        self._custom_agents = self._agent_mgr.custom_agents
+        self._active_agent = self._agent_mgr.active_agent
+        if self._dialog:
+            self._dialog.refresh_agents(self._all_agents)
+            self._dialog.set_active_agent(self._active_agent)
+        self._tray.refresh_agents(self._all_agents)
+        self._tray.set_active_agent(self._active_agent)
+        self._update_model_profile_summary()
+        logger.info("Agent %s model profile changed to %s", agent_id, profile_id or "global")
 
     # ── 发送消息 ───────────────────────────────────────
 
@@ -1043,20 +1120,45 @@ class ChatController(QObject):
                 self._dialog.restore_draft(text, images)
                 self._dialog.flash_busy()
             return
-        if images and self._image_capability == ImageCapability.UNSUPPORTED:
+        resolved = self._resolve_model_config()
+        image_capability = self._image_capability_for_model(resolved.model)
+        if (
+            images
+            and image_capability == ImageCapability.UNSUPPORTED
+            and resolved.model != self._model
+        ):
+            inherited_capability = self._image_capability_for_model(self._model)
+            if inherited_capability != ImageCapability.UNSUPPORTED:
+                warning = (
+                    f"配置模型 {resolved.model} 不支持图片，"
+                    f"本次已继承全局模型 {self._model}。"
+                )
+                resolved = replace(
+                    resolved,
+                    model=self._model,
+                    warnings=resolved.warnings + (warning,),
+                )
+                image_capability = inherited_capability
+        if resolved.warnings:
+            self._show_notice(
+                QMessageBox.Warning,
+                "模型配置已回退",
+                "<br>".join(html.escape(warning) for warning in resolved.warnings),
+            )
+        if images and image_capability == ImageCapability.UNSUPPORTED:
             if self._dialog:
                 self._dialog.restore_draft(text, images)
                 self._dialog.focus_model_selector()
             self._show_notice(
                 QMessageBox.Warning,
                 "当前模型不支持图片",
-                f"模型 {html.escape(self._model)} 已声明不支持图片输入。"
+                f"模型 {html.escape(resolved.model)} 已声明不支持图片输入。"
                 "请选择显示“图片 ✓”的模型后重试。",
             )
             return
-        if images and self._image_capability == ImageCapability.UNKNOWN:
+        if images and image_capability == ImageCapability.UNKNOWN:
             if self._dialog and not self._dialog.confirm_unknown_image_capability(
-                self._model
+                resolved.model
             ):
                 self._dialog.restore_draft(text, images)
                 return
@@ -1081,8 +1183,9 @@ class ChatController(QObject):
 
             self._response_text = ""
             worker = StreamingChatWorker(
-                recent, self._active_agent.system_prompt, self._model, self,
+                recent, self._active_agent.system_prompt, resolved.model, self,
                 conversation_id=self._convo_id, agent_id=self._active_agent.id,
+                think=resolved.think, options=resolved.options,
             )
             worker.thinking_event.connect(self._on_thinking_event)
             worker.content_event.connect(self._on_stream_event)

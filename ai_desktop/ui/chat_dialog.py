@@ -288,6 +288,12 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._model_capability_badge.setToolTip("当前模型的图片输入能力尚未确认")
         tb.addWidget(self._model_capability_badge)
 
+        self._model_profile_badge = QLabel("配置: 全局")
+        self._model_profile_badge.setObjectName("model_profile_badge")
+        self._model_profile_badge.setStyleSheet(styles.LABEL_SECONDARY)
+        self._model_profile_badge.setToolTip("请求将使用全局模型设置")
+        tb.addWidget(self._model_profile_badge)
+
         tb.addStretch()
 
         new_btn = QPushButton("＋ 新对话")
@@ -489,6 +495,15 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._agent_combo.blockSignals(True)
         self._agent_combo.setCurrentIndex(idx)
         self._agent_combo.blockSignals(False)
+
+    def set_model_profile_summary(self, profile_name: str, summary: str,
+                                  warnings: tuple[str, ...] = ()) -> None:
+        """Show the effective request settings before submission."""
+        self._model_profile_badge.setText(f"配置: {profile_name or '全局'}")
+        tooltip = summary
+        if warnings:
+            tooltip += "\n" + "\n".join(f"⚠ {warning}" for warning in warnings)
+        self._model_profile_badge.setToolTip(tooltip)
 
     def refresh_agents(self, agents: list[Agent]) -> None:
         """刷新 Agent 下拉列表（自定义 Agent 变更后调用）"""

@@ -14,7 +14,7 @@ from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class UnsupportedSchemaVersionError(RuntimeError):
@@ -280,7 +280,34 @@ def _migrate_v0_to_v1(db: sqlite3.Connection) -> None:
     _migrate_legacy_attachments(db)
 
 
-_MIGRATIONS = {0: _migrate_v0_to_v1}
+def _migrate_v1_to_v2(db: sqlite3.Connection) -> None:
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS model_profiles (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            model       TEXT NOT NULL DEFAULT '',
+            options     TEXT NOT NULL DEFAULT '{}',
+            updated_at  REAL NOT NULL
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS agent_profile_assignments (
+            agent_id    TEXT PRIMARY KEY,
+            profile_id  TEXT,
+            FOREIGN KEY (profile_id) REFERENCES model_profiles(id) ON DELETE SET NULL
+        )
+        """
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_agent_profile_assignments_profile "
+        "ON agent_profile_assignments(profile_id)"
+    )
+
+
+_MIGRATIONS = {0: _migrate_v0_to_v1, 1: _migrate_v1_to_v2}
 
 
 def init_db() -> None:
@@ -981,6 +1008,67 @@ def get_setting(key: str, default: str = "") -> str:
     db = _conn()
     row = db.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
     return row["value"] if row else default
+
+
+# ── 任务模型配置 ─────────────────────────────────────
+
+
+def list_model_profile_records() -> list[dict]:
+    rows = _conn().execute(
+        "SELECT id, name, model, options, updated_at FROM model_profiles "
+        "ORDER BY name COLLATE NOCASE, id"
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def save_model_profile_record(record: dict) -> None:
+    db = _conn()
+    db.execute(
+        """
+        INSERT INTO model_profiles (id, name, model, options, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            name=excluded.name,
+            model=excluded.model,
+            options=excluded.options,
+            updated_at=excluded.updated_at
+        """,
+        (
+            record["id"],
+            record["name"],
+            record.get("model", ""),
+            record.get("options", "{}"),
+            record["updated_at"],
+        ),
+    )
+    db.commit()
+
+
+def delete_model_profile_record(profile_id: str) -> bool:
+    db = _conn()
+    cursor = db.execute("DELETE FROM model_profiles WHERE id=?", (profile_id,))
+    db.commit()
+    return cursor.rowcount > 0
+
+
+def load_agent_profile_assignments() -> dict[str, str]:
+    rows = _conn().execute(
+        "SELECT agent_id, profile_id FROM agent_profile_assignments WHERE profile_id IS NOT NULL"
+    ).fetchall()
+    return {str(row["agent_id"]): str(row["profile_id"]) for row in rows}
+
+
+def save_agent_profile_assignment(agent_id: str, profile_id: str | None) -> None:
+    db = _conn()
+    if profile_id is None:
+        db.execute("DELETE FROM agent_profile_assignments WHERE agent_id=?", (agent_id,))
+    else:
+        db.execute(
+            "INSERT INTO agent_profile_assignments (agent_id, profile_id) VALUES (?, ?) "
+            "ON CONFLICT(agent_id) DO UPDATE SET profile_id=excluded.profile_id",
+            (agent_id, profile_id),
+        )
+    db.commit()
 
 
 # ── 自定义 Agent ──────────────────────────────────────

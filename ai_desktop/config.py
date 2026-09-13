@@ -47,6 +47,7 @@ class Agent:
     name: str
     icon: str  # emoji
     system_prompt: str
+    profile_id: str | None = None
 
 
 AGENTS: list[Agent] = [

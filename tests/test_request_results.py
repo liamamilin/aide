@@ -11,6 +11,7 @@ import ai_desktop.utils.storage as storage
 from ai_desktop.llm.events import ChatResult, EventKind, ResultStatus, StreamEvent
 from ai_desktop.llm.service_checks import ImageCapability
 from ai_desktop.main import ChatController, StreamingChatWorker
+from ai_desktop.services.model_profiles import ModelProfile
 from ai_desktop.ui.chat_dialog import ChatDialog
 from ai_desktop.utils.storage import get_conversation
 
@@ -47,6 +48,57 @@ def assert_input_ready(controller):
 
 def bubble_text(controller):
     return "\n".join(label.text() for label in controller._dialog._msg_container.findChildren(QLabel))
+
+
+def test_controller_freezes_agent_profile_into_worker_request(controller):
+    profile = controller._profile_mgr.save(
+        ModelProfile("focused", "专注", "profile-model", False, 0.15, 333)
+    )
+    controller._agent_mgr.assign_profile(controller._active_agent.id, profile.id)
+
+    with patch.object(StreamingChatWorker, "start"):
+        controller._on_user_message("profile question")
+
+    worker = controller._worker
+    assert worker.request.model == "profile-model"
+    assert worker.request.think is False
+    assert dict(worker.request.options)["temperature"] == 0.15
+    assert dict(worker.request.options)["num_predict"] == 333
+    controller._worker = None
+    worker.release_attachments()
+    worker.deleteLater()
+
+
+def test_profile_model_without_vision_inherits_global_model_for_image(
+    controller, tmp_path,
+):
+    profile = controller._profile_mgr.save(
+        ModelProfile("text-only", "纯文本", "text-model", False, 0.2, 512)
+    )
+    controller._agent_mgr.assign_profile(controller._active_agent.id, profile.id)
+    image = tmp_path / "request.png"
+    image.write_bytes(b"request image")
+
+    def capability(model):
+        return (
+            ImageCapability.UNSUPPORTED
+            if model == "text-model"
+            else ImageCapability.SUPPORTED
+        )
+
+    with patch.object(controller, "_image_capability_for_model", side_effect=capability):
+        with patch.object(controller, "_show_notice") as notice:
+            with patch.object(StreamingChatWorker, "start"):
+                controller._on_user_message("看图", [str(image)])
+
+    worker = controller._worker
+    assert worker.request.model == controller._model
+    assert worker.request.think is False
+    assert dict(worker.request.options)["temperature"] == 0.2
+    assert "继承全局模型" in notice.call_args.args[2]
+    controller._worker = None
+    worker.release_attachments()
+    worker.deleteLater()
 
 
 def test_normal_reply_with_cannot_prefix_is_saved(qtbot, controller, ollama_server):
