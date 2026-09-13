@@ -24,7 +24,7 @@
 
 ### 方式一：DMG 安装（推荐）
 
-1. 前往 [Releases](https://github.com/liamamilin/aide/releases) 下载最新 `AI桌面助手-v*.dmg`
+1. 前往 [Releases](https://github.com/liamamilin/aide/releases) 下载最新 `AI桌面助手-*.dmg`
 2. 双击 DMG，将 `AI桌面助手` 拖入 Applications
 3. 首次启动需在系统设置 → 隐私与安全性中允许运行
 4. 确保 [Ollama](https://ollama.com) 已安装并运行
@@ -74,6 +74,12 @@ aide
 
 # 全套
 ./scripts/build.sh --test --smoke --dmg
+```
+
+`ai_desktop/version.py` 是 Python 包、运行时、`Info.plist` 与 DMG 文件名的唯一版本来源。本地构建默认使用 ad-hoc 签名；生成开发者签名的分发候选包时，通过 `AIDE_SIGN_IDENTITY` 指定 Developer ID。只读预检不会提交、打标签或推送：
+
+```bash
+python scripts/release_check.py --version 1.4.1 --require-new-tag
 ```
 
 ---
@@ -170,6 +176,7 @@ ai_desktop/
 ├── main.py                     # 入口 + ChatController
 ├── config.py                   # LLM/快捷键/Agent 配置
 ├── __main__.py                 # python -m ai_desktop 支持
+├── version.py                  # 应用唯一版本来源
 ├── settings_manager.py         # 配置持久化加载/应用
 ├── agent_manager.py            # Agent 列表管理/切换/保存
 ├── capture/
@@ -197,64 +204,31 @@ ai_desktop/
 │   ├── logging.py              # 日志配置
 │   ├── storage.py              # SQLite 持久化（对话/消息/设置/Agent/图片路径）
 │   └── permissions.py          # AX + 输入监听权限检测/请求
-└── scripts/
-    └── aide.spec               # PyInstaller 打包配置
+scripts/
+├── aide.spec                   # 本地与 CI 共用的 PyInstaller 定义
+├── build.sh                    # 构建、签名、验证、冒烟、打包
+├── build_dmg.sh                # 生成带版本号的 DMG
+├── release_check.py            # 只读源码/应用包预检
+└── smoke_test.sh               # 隔离启动打包应用
 tests/
-├── conftest.py                 # 共享 fixture（qapp, mocker）
-├── test_smoke.py               # 文本规范化 + Markdown 渲染（5 项）
-├── test_storage.py             # DB CRUD + 图片往返（23 项）
-├── test_chat_client.py         # 流式解析 + 多模态消息构建（12 项）
-├── test_main_entry.py          # python -m 入口测试（1 项）
-├── test_settings_manager.py    # 配置加载/应用/验证（8 项）
-├── test_agent_manager.py       # Agent 初始化/切换/保存（10 项）
-├── test_chat_dialog.py         # 对话窗口信号/状态/图片附件（42 项）
-├── test_settings_dialog.py     # 设置面板验证/信号（6 项）
-├── test_history_dialog.py      # 历史加载/搜索/删除（6 项）
-├── test_agent_editor.py        # Agent 编辑器 CRUD + 新增弹窗（10 项）
-├── test_float_button.py        # 悬浮按钮菜单/信号（8 项）
-├── test_menubar_icon.py        # 菜单栏 Agent 菜单/信号（9 项）
-├── test_images.py              # 图片存储/base64（5 项）
-├── test_screenshot.py          # 截图成功/取消/权限错误（4 项）
-├── test_menu_contrast.py       # 菜单选中项对比度（4 项）
-├── test_theme.py               # 亮/暗色 ColorSet 对比度（8 项）
-├── test_frameless_mixin.py     # 拖拽/无边框（2 项）
-├── test_clipboard_monitor.py   # 剪贴板捕获（2 项）
-├── test_hotkey_listener.py     # 快捷键解析/注册（3 项）
-├── test_nsevent_monitor.py     # NSEvent 后端（7 项）
-├── test_permissions.py         # 权限检测（4 项）
-├── test_update_checker.py      # 更新检查（9 项）
-└── test_crash_handler.py       # 崩溃诊断（2 项）
+├── conftest.py                 # 共享 fixture（qapp、存储、替身）
+├── fake_ollama.py              # 本地 HTTP 测试服务
+└── test_*.py                   # UI、生命周期、传输、数据与发布测试
 ```
 
 ---
 
 ## 测试
 
-项目包含 **190 项自动化测试**，覆盖 UI 信号/状态、数据层、工具函数和入口：
+自动化测试覆盖 UI 状态、请求/会话生命周期、可取消传输、捕获、持久化、主题、入口和发布打包：
 
 ```bash
 # 安装开发依赖
 pip install -r requirements-dev.txt
 
-# 运行全部测试
-pytest tests/ -v    # 190 项测试
-
-# 按类别运行
-pytest tests/test_chat_dialog.py -v        # 对话窗口（42 项）
-pytest tests/test_storage.py -v            # 数据库（23 项）
-pytest tests/test_chat_client.py -v        # LLM 流式解析 + 多模态（12 项）
-pytest tests/test_agent_manager.py -v      # Agent 管理（10 项）
-pytest tests/test_agent_editor.py -v       # Agent 编辑器 + 新增弹窗（10 项）
-pytest tests/test_settings_manager.py -v   # 配置管理（8 项）
-pytest tests/test_settings_dialog.py -v    # 设置面板（6 项）
-pytest tests/test_history_dialog.py -v     # 历史浏览（6 项）
-pytest tests/test_float_button.py -v       # 悬浮按钮（8 项）
-pytest tests/test_menubar_icon.py -v       # 菜单栏图标（9 项）
-pytest tests/test_images.py -v             # 图片存储/base64（5 项）
-pytest tests/test_screenshot.py -v         # 截图成功/取消/权限错误（4 项）
-pytest tests/test_theme.py -v              # 亮/暗色对比度（8 项）
-pytest tests/test_main_entry.py -v         # 入口点（1 项）
-pytest tests/test_smoke.py -v              # 工具函数（5 项）
+# 运行与 CI 相同的检查
+python -m ruff check ai_desktop/ tests/ scripts/release_check.py
+QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q
 ```
 
 测试使用 `pytest-qt` 进行真实的 PyQt5 窗口渲染，外部依赖（Ollama HTTP、剪贴板、macOS ctypes、screencapture）均通过 mock 隔离。

@@ -6,6 +6,7 @@
 """
 import base64
 import logging
+import os
 import shutil
 import sys
 import threading
@@ -21,7 +22,10 @@ _lock = threading.Lock()
 
 
 def _app_support_dir() -> Path:
-    if sys.platform == "darwin":
+    data_override = os.environ.get("AIDE_DATA_DIR")
+    if data_override:
+        base = Path(data_override).expanduser()
+    elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support" / "ai-desktop-assistant"
     else:
         base = Path.home() / ".local" / "share" / "ai-desktop-assistant"

@@ -3,6 +3,7 @@ SQLite 持久化存储：对话记录
 """
 import json
 import logging
+import os
 import shutil
 import sqlite3
 import sys
@@ -17,6 +18,12 @@ logger = logging.getLogger(__name__)
 
 def _resolve_db_path() -> Path:
     """Resolve database path: use Application Support dir, with dev-mode fallback"""
+    data_override = os.environ.get("AIDE_DATA_DIR")
+    if data_override:
+        data_dir = Path(data_override).expanduser()
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir / "chat_history.db"
+
     dev_path = Path(__file__).resolve().parent.parent.parent / "chat_history.db"
 
     # Production: use ~/Library/Application Support/ai-desktop-assistant/

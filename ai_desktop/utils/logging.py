@@ -2,6 +2,7 @@
 日志模块
 """
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -22,8 +23,13 @@ def setup(level: int = logging.INFO) -> None:
 
     # 文件日志（macOS：~/Library/Logs/ai-desktop-assistant/app.log）
     # 在 .app 无窗口模式下 stderr 被吞掉，文件日志是唯一诊断手段
-    if sys.platform == "darwin":
-        log_dir = Path.home() / "Library" / "Logs" / "ai-desktop-assistant"
+    log_override = os.environ.get("AIDE_LOG_DIR")
+    if sys.platform == "darwin" or log_override:
+        log_dir = (
+            Path(log_override).expanduser()
+            if log_override
+            else Path.home() / "Library" / "Logs" / "ai-desktop-assistant"
+        )
         try:
             log_dir.mkdir(parents=True, exist_ok=True)
             fh = logging.FileHandler(str(log_dir / "app.log"), encoding="utf-8")

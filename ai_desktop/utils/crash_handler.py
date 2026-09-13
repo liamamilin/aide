@@ -1,5 +1,6 @@
 import faulthandler
 import logging
+import os
 import sys
 import traceback
 from datetime import datetime
@@ -10,7 +11,12 @@ from ai_desktop.__init__ import __version__
 
 logger = logging.getLogger(__name__)
 
-_CRASH_LOG_DIR = Path.home() / "Library" / "Logs" / "ai-desktop-assistant"
+_CRASH_LOG_DIR = Path(
+    os.environ.get(
+        "AIDE_LOG_DIR",
+        str(Path.home() / "Library" / "Logs" / "ai-desktop-assistant"),
+    )
+).expanduser()
 
 
 def install() -> None:

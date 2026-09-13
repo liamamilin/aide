@@ -1,26 +1,23 @@
-import subprocess
+from pathlib import Path
 
 from setuptools import find_packages, setup
 
 
 def _get_version() -> str:
-    try:
-        return subprocess.check_output(
-            ["git", "describe", "--tags", "--dirty=-dirty"],
-            stderr=subprocess.DEVNULL, timeout=5,
-        ).decode().strip()
-    except Exception:
-        return "1.0.0"
+    namespace: dict[str, str] = {}
+    version_file = Path(__file__).parent / "ai_desktop" / "version.py"
+    exec(version_file.read_text(encoding="utf-8"), namespace)
+    return namespace["__version__"]
 
 
-with open("requirements.txt") as f:
+with open("requirements.txt", encoding="utf-8") as f:
     requirements = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
 setup(
     name="ai-desktop-assistant",
     version=_get_version(),
     description="macOS 桌面 AI 助手 —— 选中文字即问，悬浮窗即答",
-    long_description=open("README.md", encoding="utf-8").read(),
+    long_description=Path("README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
     author="milin",
     python_requires=">=3.10",
@@ -30,7 +27,7 @@ setup(
     install_requires=requirements,
     entry_points={
         "console_scripts": [
-            "aide = ai_desktop.main:main",
+            "aide = ai_desktop.__main__:main",
         ],
     },
     classifiers=[

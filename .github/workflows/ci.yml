@@ -29,7 +29,10 @@ jobs:
           pip install -e .
 
       - name: Lint
-        run: ruff check ai_desktop/ tests/
+        run: ruff check ai_desktop/ tests/ scripts/release_check.py
+
+      - name: Validate source version
+        run: python scripts/release_check.py
 
       - name: Test
         run: QT_QPA_PLATFORM=offscreen pytest tests/ -q

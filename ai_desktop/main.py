@@ -8,6 +8,7 @@ import functools
 import html
 import json
 import logging
+import os
 import signal
 import sys
 import threading
@@ -17,7 +18,7 @@ from typing import Optional
 from PyQt5.QtCore import QObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 
-from ai_desktop import config
+from ai_desktop import __version__, config
 from ai_desktop.agent_manager import AgentManager
 from ai_desktop.capture.clipboard_monitor import SelectionCaptureTask
 from ai_desktop.capture.screenshot import ScreenshotResult, ScreenshotStatus
@@ -40,6 +41,7 @@ from ai_desktop.ui.history_dialog import HistoryDialog
 from ai_desktop.ui.menubar_icon import MenuBarIcon
 from ai_desktop.ui.settings_dialog import SettingsDialog
 from ai_desktop.utils import logging as log_util
+from ai_desktop.utils.permissions import PermissionStatus
 from ai_desktop.utils.storage import (
     Message,
     create_conversation,
@@ -213,14 +215,15 @@ class ChatController(QObject):
         if self._stopping or self._stopped:
             return
         init_db()
-        try:
-            self.hotkey.start()
-        except Exception as e:
-            logger.warning("Failed to start hotkey listener: %s", e)
-        try:
-            self.hotkey_img.start()
-        except Exception as e:
-            logger.warning("Failed to start screenshot hotkey listener: %s", e)
+        if os.environ.get("AIDE_SMOKE_TEST") != "1":
+            try:
+                self.hotkey.start()
+            except Exception as e:
+                logger.warning("Failed to start hotkey listener: %s", e)
+            try:
+                self.hotkey_img.start()
+            except Exception as e:
+                logger.warning("Failed to start screenshot hotkey listener: %s", e)
         self.float_btn.show()
         pin_to_all_spaces(self.float_btn)
         self._tray.show()
@@ -522,7 +525,7 @@ class ChatController(QObject):
         QMessageBox.about(
             None,
             "关于 AI 桌面助手",
-            "<b>AI 桌面助手</b> v1.0<br><br>"
+            f"<b>AI 桌面助手</b> v{__version__}<br><br>"
             "macOS 常驻 AI 助手<br>"
             "选中文字 → ⌘⌃L → 一键提问<br><br>"
             "基于 Ollama 本地 LLM，数据不上传。",
@@ -1003,6 +1006,10 @@ def _open_input_monitoring_prefs() -> None:
 
 
 def main() -> None:
+    if "--version" in sys.argv[1:]:
+        print(__version__)
+        return
+
     log_util.setup()
 
     # 崩溃处理钩子（必须在任何异常可能发生之前安装）
@@ -1035,9 +1042,11 @@ def main() -> None:
     poll_timer.timeout.connect(_poll_quit)
     poll_timer.start(200)
 
+    smoke_mode = os.environ.get("AIDE_SMOKE_TEST") == "1"
+
     # 权限检查（辅助功能 + 输入监听）
     # 已授权 → 静默跳过；缺失 → 触发 macOS 系统标准授权弹窗
-    perm = _check_permissions()
+    perm = _check_permissions() if not smoke_mode else PermissionStatus(True, True)
     logger.info("权限状态: AX=%s, InputMonitoring=%s", perm.accessibility, perm.input_monitoring)
     _perm_requested = False
     if not perm.all_granted:
@@ -1089,7 +1098,8 @@ def main() -> None:
                 _perm_requested = True
 
     _perm_recheck.timeout.connect(_recheck_permissions)
-    _perm_recheck.start(3000)  # 每 3 秒重检一次
+    if not smoke_mode:
+        _perm_recheck.start(3000)  # 每 3 秒重检一次
 
     controller.start()
 
@@ -1101,7 +1111,10 @@ def main() -> None:
     startup_timer = QTimer()
     startup_timer.setSingleShot(True)
     startup_timer.timeout.connect(_startup_check)
-    startup_timer.start(1500)
+    if smoke_mode:
+        QTimer.singleShot(1500, controller.stop)
+    else:
+        startup_timer.start(1500)
     controller.shutdown_started.connect(poll_timer.stop)
     controller.shutdown_started.connect(_perm_recheck.stop)
     controller.shutdown_started.connect(startup_timer.stop)
