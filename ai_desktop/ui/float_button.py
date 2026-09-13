@@ -41,7 +41,7 @@ _PET_FRAME_COUNT = 5
 _COMPACT_SIZE = 44
 _PET_SIZES = {
     "small": QSize(92, 97),
-    "medium": QSize(116, 122),
+    "medium": QSize(104, 110),
     "large": QSize(140, 147),
 }
 _DEFAULT_PET_SIZE = "medium"

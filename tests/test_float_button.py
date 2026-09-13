@@ -214,7 +214,7 @@ class TestFloatButtonState:
 
         button.set_pet_size("unknown")
         assert button.pet_size == "medium"
-        assert (button.width(), button.height()) == (116, 122)
+        assert (button.width(), button.height()) == (104, 110)
 
     def test_reduce_motion_stops_periodic_animation(self, button):
         button.set_responding(True)
