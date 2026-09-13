@@ -78,20 +78,18 @@ class TestChatDialogSignals:
             qtbot.mouseClick(new_btn, Qt.LeftButton)
 
     def test_history_button_emits_signal(self, qtbot, dialog):
-        """Clicking the history button → history_requested signal."""
-        hist_btn = None
-        for child in dialog.findChildren(object):
-            if hasattr(child, 'text') and callable(child.text) and "历史" in child.text():
-                hist_btn = child
-                break
-        assert hist_btn is not None, "Could not find history button"
+        """Choosing history from the compact menu → history_requested signal."""
         with qtbot.waitSignal(dialog.history_requested, timeout=1000):
-            qtbot.mouseClick(hist_btn, Qt.LeftButton)
+            dialog._history_action.trigger()
 
     def test_export_button_emits_signal(self, qtbot, dialog):
-        """Clicking the export button → export_requested signal."""
+        """Choosing export from the compact menu → export_requested signal."""
         with qtbot.waitSignal(dialog.export_requested, timeout=1000):
-            qtbot.mouseClick(dialog._export_btn, Qt.LeftButton)
+            dialog._export_action.trigger()
+
+    def test_manage_agents_menu_emits_signal(self, qtbot, dialog):
+        with qtbot.waitSignal(dialog.manage_agents_requested, timeout=1000):
+            dialog._manage_agents_action.trigger()
 
     def test_stop_button_emits_signal(self, qtbot, dialog):
         """When thinking=True, clicking stop → stop_requested signal."""
@@ -223,21 +221,33 @@ class TestChatDialogState:
         assert dialog._model_capability_badge.toolTip() in dialog._attach_btn.toolTip()
 
     def test_clear_messages(self, qtbot, dialog):
-        """Add messages → clear_messages() → layout only has stretch."""
+        """Add messages → clear_messages() → restore the onboarding state."""
         dialog.add_user_message("Hello")
         dialog.add_assistant_message("Hi there")
         assert dialog._msg_layout.count() > 1  # stretch + 2 bubbles
         dialog.clear_messages()
-        # Only the stretch item should remain
-        assert dialog._msg_layout.count() == 1
+        # Empty-state widget and stretch remain.
+        assert dialog._msg_layout.count() == 2
+        assert not dialog._empty_state.isHidden()
 
     def test_set_active_agent(self, qtbot, dialog):
-        """set_active_agent() → combo updates + title updates."""
+        """set_active_agent() → combo and compact header context update."""
         new_agent = AGENTS[0]  # code_expert
         dialog.set_active_agent(new_agent)
         assert dialog._agent_combo.currentData() == new_agent.id
-        assert dialog._title_name.text() == new_agent.name
-        assert dialog._title_icon.text() == new_agent.icon
+        assert dialog._title_name.text() == "AI 桌面助手"
+        assert dialog._title_agent.text() == f"· {new_agent.name}"
+
+    def test_first_message_hides_empty_state(self, dialog):
+        assert not dialog._empty_state.isHidden()
+        dialog.add_user_message("开始")
+        assert dialog._empty_state.isHidden()
+
+    def test_toolbar_fits_at_minimum_width(self, qtbot, dialog):
+        dialog.resize(dialog.minimumWidth(), dialog.height())
+        qtbot.wait(10)
+        right_edge = dialog._more_btn.mapTo(dialog, dialog._more_btn.rect().bottomRight()).x()
+        assert right_edge <= dialog.width()
 
     def test_refresh_agents(self, qtbot, dialog):
         """refresh_agents() → combo items match new agent list."""
