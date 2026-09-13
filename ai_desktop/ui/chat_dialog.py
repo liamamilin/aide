@@ -3,9 +3,9 @@
 """
 import html
 import logging
+from pathlib import Path
 
-import requests
-from PyQt5.QtCore import QEvent, QPoint, QRectF, Qt, QThread, QTimer, pyqtSignal
+from PyQt5.QtCore import QEvent, QPoint, QRectF, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QKeyEvent, QPainterPath, QPixmap, QRegion, QTextCursor
 from PyQt5.QtWidgets import (
     QApplication,
@@ -25,6 +25,7 @@ from PyQt5.QtWidgets import (
 from ai_desktop import config
 from ai_desktop.capture.text_normalizer import normalize
 from ai_desktop.config import Agent
+from ai_desktop.llm.service_checks import ServiceState
 from ai_desktop.ui import markdown, styles
 from ai_desktop.ui.float_button import pin_to_all_spaces
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
@@ -38,7 +39,7 @@ class _ChatInputEdit(QPlainTextEdit):
 
     def contextMenuEvent(self, event) -> None:
         menu = self.createStandardContextMenu()
-        menu.setStyleSheet(styles.MENU)
+        menu.setStyleSheet(styles.menu_style())
         menu.exec_(event.globalPos())
 
     def insertFromMimeData(self, source) -> None:
@@ -83,7 +84,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
     stop_requested = pyqtSignal()
     agent_changed = pyqtSignal(Agent)
     model_changed = pyqtSignal(str)
-    ollama_online = pyqtSignal()
+    service_check_requested = pyqtSignal()
     closed = pyqtSignal()
 
     def __init__(self, agents: list[Agent], active_agent: Agent,
@@ -107,9 +108,18 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._stream_timer = QTimer(self)
         self._stream_timer.setInterval(50)          # 50ms 刷新一次
         self._stream_timer.timeout.connect(self._flush_stream_buffer)
+        self._scroll_timer = QTimer(self)
+        self._scroll_timer.setSingleShot(True)
+        self._scroll_timer.timeout.connect(self._apply_scroll_to_bottom)
+        self._busy_feedback_timer = QTimer(self)
+        self._busy_feedback_timer.setSingleShot(True)
+        self._busy_feedback_timer.timeout.connect(self._reset_input_placeholder)
+        self._export_feedback_timer = QTimer(self)
+        self._export_feedback_timer.setSingleShot(True)
+        self._export_feedback_timer.timeout.connect(self._reset_export_button)
         self._ollama_timer = QTimer(self)
         self._ollama_timer.setInterval(30000)       # 每 30 秒探活
-        self._ollama_timer.timeout.connect(self._check_ollama_status)
+        self._ollama_timer.timeout.connect(self.service_check_requested.emit)
         # 输入历史浏览状态
         self._input_history: list[str] = []         # 最新在前
         self._hist_index = -1                       # -1 = 未在浏览
@@ -300,7 +310,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         attach_btn.setStyleSheet(styles.ICON_BUTTON)
         attach_btn.setToolTip("添加图片")
         attach_menu = QMenu(attach_btn)
-        attach_menu.setStyleSheet(styles.MENU)
+        attach_menu.setStyleSheet(styles.menu_style())
         a_file = attach_menu.addAction("选择图片文件…")
         a_shot = attach_menu.addAction("截图…")
         a_paste = attach_menu.addAction("粘贴剪贴板图片")
@@ -348,6 +358,34 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._active_model = text
         self.model_changed.emit(text)
 
+    @property
+    def active_model(self) -> str:
+        return self._active_model
+
+    def set_cached_models(self, models: list[str], active_model: str) -> None:
+        """Replace entries for a service address without claiming they are current."""
+        cached = list(dict.fromkeys(models))
+        display = list(cached)
+        if active_model and active_model not in display:
+            display.insert(0, active_model)
+        self._models = cached
+        self._active_model = active_model
+        self._model_combo.blockSignals(True)
+        self._model_combo.clear()
+        if display:
+            self._model_combo.addItems(display)
+            self._model_combo.setCurrentText(active_model or display[0])
+            self._model_combo.setEnabled(True)
+            if cached:
+                self._model_combo.setToolTip("缓存模型；正在验证服务状态")
+            else:
+                self._model_combo.setToolTip("当前模型尚未通过服务验证")
+        else:
+            self._model_combo.addItem("加载中…")
+            self._model_combo.setEnabled(False)
+            self._model_combo.setToolTip("正在加载模型列表")
+        self._model_combo.blockSignals(False)
+
     def refresh_models(self, models: list[str]) -> None:
         """外部传入新模型列表时刷新 combo，尽量保留当前选中。
 
@@ -367,9 +405,16 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if current in self._models:
             self._model_combo.setCurrentText(current)
             changed = False
+            self._model_combo.setToolTip("选择模型")
         else:
             self._model_combo.setCurrentText(self._models[0])
             changed = True
+            if current and current != "加载中…":
+                self._model_combo.setToolTip(
+                    f"模型 {current} 已不可用，已切换到 {self._models[0]}"
+                )
+            else:
+                self._model_combo.setToolTip("选择模型")
         self._active_model = self._model_combo.currentText()
         self._model_combo.blockSignals(False)
         if changed:
@@ -433,27 +478,31 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     def flash_busy(self) -> None:
         self._input.setPlaceholderText("⏳ 等待回复完成...")
-        QTimer.singleShot(
-            1500,
-            lambda: self._input.setPlaceholderText(
-                "输入消息... (Enter 发送, Shift+Enter 换行, ⌘V 粘贴图片)"
-            ),
+        self._busy_feedback_timer.start(1500)
+
+    def _reset_input_placeholder(self) -> None:
+        self._input.setPlaceholderText(
+            "输入消息... (Enter 发送, Shift+Enter 换行, ⌘V 粘贴图片)"
         )
 
     def flash_export_btn(self) -> None:
         self._export_btn.setText("✅ 已复制")
-        QTimer.singleShot(1500, lambda: self._export_btn.setText("📤 导出"))
+        self._export_feedback_timer.start(1500)
+
+    def _reset_export_button(self) -> None:
+        self._export_btn.setText("📤 导出")
 
     def _on_send(self) -> None:
         text = normalize(self._input.toPlainText())
         images = list(self._pending_images)
         if not text and not images:
             return
-        self.message_sent.emit(text, images)
+        # Clear before the synchronous signal. A rejected submission restored
+        # by the controller must remain after this method returns.
         self._input.clear()
-        self.add_input_history(text)
         self._exit_input_browsing()
         self.clear_pending_images()
+        self.message_sent.emit(text, images)
 
     # ── 图片附件 ───────────────────────────────────────
 
@@ -468,6 +517,15 @@ class ChatDialog(FramelessDragMixin, QWidget):
                     self._pending_images.append(stored)
             except Exception:
                 logger.exception("Failed to attach image %s", p)
+        self._refresh_image_preview()
+
+    def restore_draft(self, text: str, image_paths: list[str]) -> None:
+        """Restore paths already stored by this dialog without copying again."""
+        self.set_input_text(text)
+        self._pending_images = [
+            path for path in image_paths
+            if path and image_utils.is_image_file(path) and Path(path).is_file()
+        ]
         self._refresh_image_preview()
 
     def _attach_image_paths(self, paths: list[str]) -> None:
@@ -591,19 +649,32 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if cur_h != new_h:
             self._input.setFixedHeight(new_h)
 
-    def _check_ollama_status(self) -> None:
-        self._ping_worker = _OllamaPingWorker()
-        self._ping_worker.result.connect(self._on_ollama_result)
-        self._ping_worker.start()
+    def take_shutdown_workers(self) -> list:
+        """Stop timers owned by the window during app shutdown."""
+        self._ollama_timer.stop()
+        self._stream_timer.stop()
+        self._scroll_timer.stop()
+        self._busy_feedback_timer.stop()
+        self._export_feedback_timer.stop()
+        return []
 
-    def _on_ollama_result(self, ok: bool) -> None:
-        if ok:
+    def set_service_status(self, state: ServiceState) -> None:
+        """Render service reachability independently from cached model entries."""
+        if state == ServiceState.ONLINE:
             self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_OK)
-            self._ollama_dot.setToolTip("Ollama 已连接")
-            self.ollama_online.emit()
-        else:
+            self._ollama_dot.setToolTip("Ollama 已连接，模型列表已更新")
+        elif state == ServiceState.EMPTY:
+            self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_WARN)
+            self._ollama_dot.setToolTip("Ollama 已连接，但没有可用模型")
+        elif state == ServiceState.INVALID:
+            self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_WARN)
+            self._ollama_dot.setToolTip("Ollama 响应格式错误")
+        elif state == ServiceState.OFFLINE:
             self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_ERR)
-            self._ollama_dot.setToolTip("Ollama 未连接")
+            self._ollama_dot.setToolTip("Ollama 未连接；模型列表可能来自缓存")
+        else:
+            self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS)
+            self._ollama_dot.setToolTip("正在检测 Ollama…")
 
     def add_user_message(self, text: str, images: list[str] | None = None) -> None:
         bubble = self._make_bubble(text, is_user=True, images=images)
@@ -669,12 +740,14 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._stream_bubble.setTextFormat(Qt.PlainText)
         self._scroll_to_bottom()
 
-    def finalize_assistant_stream(self, text: str, ok: bool) -> None:
+    def finalize_assistant_stream(self, text: str, ok: bool, *, error: str = "", cancelled: bool = False) -> None:
         """流式结束，刷新残留并转为 Markdown HTML"""
         self._stream_timer.stop()
         self._flush_stream_buffer()
         if self._stream_bubble is None:
             return
+        # 完成结果是权威正文；错误和取消提示不混入正文或后续推理上下文。
+        self._stream_text = text
         if ok and self._stream_text:
             body, code_map = markdown.to_html(self._stream_text)
             if self._thinking_text.strip():
@@ -698,13 +771,15 @@ class ChatDialog(FramelessDragMixin, QWidget):
             if code_map:
                 self._stream_bubble.code_map = code_map
                 self._stream_bubble.linkActivated.connect(self._on_link_activated)
-        elif not ok and self._stream_text:
-            self._stream_bubble.setText(f"❌ {self._stream_text}")
+        elif not ok:
+            status = "⏹ 已停止生成（未完成）" if cancelled else f"❌ {error or '生成失败，请重试。'}"
+            display = f"{text}\n\n{status}" if text else status
+            self._stream_bubble.setText(display)
             self._stream_bubble.setTextFormat(Qt.PlainText)
 
         # 连接复制按钮
         if self._stream_copy_btn:
-            copy_text = self._stream_text
+            copy_text = self._stream_text or error
             try:
                 self._stream_copy_btn.clicked.disconnect()
             except TypeError:
@@ -751,6 +826,13 @@ class ChatDialog(FramelessDragMixin, QWidget):
             self._input.setFocus()
 
     def clear_messages(self) -> None:
+        self._stream_timer.stop()
+        self._stream_bubble = None
+        self._stream_copy_btn = None
+        self._stream_text = ""
+        self._stream_buffer = ""
+        self._thinking_text = ""
+        self._thinking_buffer = ""
         while self._msg_layout.count() > 1:  # keep the stretch
             item = self._msg_layout.takeAt(0)
             if item.widget():
@@ -1001,9 +1083,12 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._scroll_to_bottom()
 
     def _scroll_to_bottom(self) -> None:
+        # Wait for layout without recursively processing worker/user signals.
+        self._scroll_timer.start(0)
+
+    def _apply_scroll_to_bottom(self) -> None:
         if self._user_scrolled_up:
             return
-        QApplication.processEvents()
         sb = self._scroll.verticalScrollBar()
         if sb:
             sb.setValue(sb.maximum())
@@ -1043,7 +1128,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._user_scrolled_up = False
         self._scroll_to_bottom()
         self._ollama_timer.start()
-        self._check_ollama_status()  # 打开时立即探活
+        self.service_check_requested.emit()  # 打开时立即探活
 
     # ── 事件 ───────────────────────────────────────────
 
@@ -1072,15 +1157,3 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._ollama_timer.stop()
         self.closed.emit()
         super().hideEvent(event)
-
-
-class _OllamaPingWorker(QThread):
-    """后台线程探活 Ollama"""
-    result = pyqtSignal(bool)
-
-    def run(self) -> None:
-        try:
-            r = requests.get(f"{config.OLLAMA_BASE_URL}/api/tags", timeout=1)
-            self.result.emit(r.status_code == 200)
-        except Exception:
-            self.result.emit(False)

@@ -57,3 +57,13 @@ def tmp_db():
 def fresh_db(tmp_db):
     """Alias for tmp_db — provides a fresh DB for each test."""
     return tmp_db
+
+
+@pytest.fixture
+def ollama_server(monkeypatch):
+    from ai_desktop import config
+    from tests.fake_ollama import FakeOllama
+    server = FakeOllama()
+    monkeypatch.setattr(config, "OLLAMA_BASE_URL", server.url)
+    yield server
+    server.close()

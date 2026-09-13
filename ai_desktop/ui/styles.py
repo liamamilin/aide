@@ -4,9 +4,31 @@
 所有样式在首次访问时生成（此时 QApplication 已创建），
 使用 theme.ColorSet 的两套显式颜色，保证亮/暗模式均有足够对比度。
 """
-from ai_desktop.ui.theme import current
+from ai_desktop.ui.theme import ColorSet, current
 
 _generated: dict[str, str] | None = None
+
+
+def _menu_qss(c: ColorSet) -> str:
+    """菜单样式单一源。运行时菜单应走 menu_style() 以跟随系统明暗切换。"""
+    return (
+        f"QMenu {{ background: {c.window}; border: 1px solid {c.border}; "
+        f"border-radius: 6px; padding: 4px 0; color: {c.text}; }}"
+        f"QMenu::item {{ padding: 6px 24px; font-size: 13px; color: {c.text}; }}"
+        f"QMenu::item:selected {{ background: {c.accent}; color: white; border-radius: 4px; }}"
+        f"QMenu::separator {{ height: 1px; background: {c.border}; margin: 4px 10px; }}"
+    )
+
+
+def menu_style() -> str:
+    """按当前系统明暗实时生成的菜单样式（绕过缓存）。"""
+    return _menu_qss(current())
+
+
+def invalidate() -> None:
+    """清空样式缓存（如系统明暗切换时），下次访问按当前主题重新生成。"""
+    global _generated
+    _generated = None
 
 
 def _generate() -> dict[str, str]:
@@ -14,13 +36,7 @@ def _generate() -> dict[str, str]:
     s = {}  # styles dict
 
     # ── 菜单 ──
-    s["MENU"] = (
-        f"QMenu {{ background: {c.window}; border: 1px solid {c.border}; "
-        f"border-radius: 6px; padding: 4px 0; color: {c.text}; }}"
-        f"QMenu::item {{ padding: 6px 24px; font-size: 13px; color: {c.text}; }}"
-        f"QMenu::item:selected {{ background: {c.accent}; color: white; border-radius: 4px; }}"
-        f"QMenu::separator {{ height: 1px; background: {c.border}; margin: 4px 10px; }}"
-    )
+    s["MENU"] = _menu_qss(c)
 
     # ── 主按钮 ──
     s["BUTTON_PRIMARY"] = (
@@ -112,6 +128,7 @@ def _generate() -> dict[str, str]:
     # ── Ollama 状态指示灯 ──
     s["OLLAMA_STATUS"] = f"background: {c.text_secondary}; border-radius: 5px; border: none;"
     s["OLLAMA_STATUS_OK"] = f"background: {c.success}; border-radius: 5px; border: none;"
+    s["OLLAMA_STATUS_WARN"] = "background: #FF9500; border-radius: 5px; border: none;"
     s["OLLAMA_STATUS_ERR"] = f"background: {c.error}; border-radius: 5px; border: none;"
 
     # ── 停止按钮 ──

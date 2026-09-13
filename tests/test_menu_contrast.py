@@ -60,3 +60,42 @@ def test_menu_selected_item_contrast(dark, expected, monkeypatch):
     ratio = contrast_ratio("#ffffff", expected.accent)
     assert ratio >= 3.0, f"{'暗' if dark else '亮'}色模式选中项对比度 {ratio:.2f}:1 低于 3:1"
     assert "color: white" in menu
+
+
+@pytest.mark.parametrize(
+    "dark,expected",
+    [(False, theme.LIGHT), (True, theme.DARK)],
+)
+def test_menu_style_follows_current_theme(dark, expected, monkeypatch):
+    """menu_style() 每次现取主题色（绕过缓存），运行时右键菜单能跟随系统明暗切换。"""
+    monkeypatch.setattr(theme, "is_dark_mode", lambda: dark)
+    menu = styles.menu_style()
+
+    assert expected.text in menu
+    assert expected.window in menu
+
+    # 与缓存版 MENU 同源：清缓存后重新生成的字符串应完全一致
+    styles._generated = None
+    assert menu == styles.MENU
+
+
+def test_menu_style_reacts_to_theme_switch(monkeypatch):
+    """主题切换后无需清缓存，menu_style() 立即返回新模式颜色。"""
+    monkeypatch.setattr(theme, "is_dark_mode", lambda: False)
+    light = styles.menu_style()
+    monkeypatch.setattr(theme, "is_dark_mode", lambda: True)
+    dark = styles.menu_style()
+    assert light != dark
+
+
+def test_invalidate_clears_cache(monkeypatch):
+    """invalidate() 清空缓存后，MENU 按当前主题重新生成。"""
+    monkeypatch.setattr(theme, "is_dark_mode", lambda: True)
+    styles._generated = None
+    dark_menu = styles.MENU
+
+    monkeypatch.setattr(theme, "is_dark_mode", lambda: False)
+    assert styles.MENU is dark_menu  # 缓存仍指向旧串
+    styles.invalidate()
+    assert styles.MENU is not dark_menu
+    assert theme.LIGHT.text in styles.MENU

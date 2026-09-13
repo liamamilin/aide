@@ -6,6 +6,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QTextCursor
 
 from ai_desktop.config import Agent
+from ai_desktop.llm.service_checks import ServiceState
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -220,16 +221,24 @@ class TestChatDialogDataFlow:
             ChatDialog._copy_to_clipboard("test text")
             mock_clipboard.setText.assert_called_once_with("test text")
 
-    def test_ollama_ping_mocked(self, qtbot, dialog):
-        """_OllamaPingWorker should emit result via mocked requests."""
-        from ai_desktop.ui.chat_dialog import _OllamaPingWorker
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        with patch("requests.get", return_value=mock_resp):
-            worker = _OllamaPingWorker()
-            with qtbot.waitSignal(worker.result, timeout=3000) as spy:
-                worker.run()
-            assert spy.args == [True]
+    def test_periodic_service_check_emits_without_worker(self, qtbot, dialog):
+        """The window timer delegates checks without creating a blocking worker."""
+        dialog._ollama_timer.setInterval(1)
+        with qtbot.waitSignal(dialog.service_check_requested, timeout=1000):
+            dialog._ollama_timer.start()
+        dialog.hide()
+        assert not dialog._ollama_timer.isActive()
+
+    @pytest.mark.parametrize("state,tooltip", [
+        (ServiceState.CHECKING, "正在检测"),
+        (ServiceState.ONLINE, "已连接"),
+        (ServiceState.EMPTY, "没有可用模型"),
+        (ServiceState.OFFLINE, "未连接"),
+        (ServiceState.INVALID, "格式错误"),
+    ])
+    def test_service_states_are_distinct(self, dialog, state, tooltip):
+        dialog.set_service_status(state)
+        assert tooltip in dialog._ollama_dot.toolTip()
 
 
 # ── L4: refresh_models Tests ─────────────────────────────

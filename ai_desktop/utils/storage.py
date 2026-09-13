@@ -206,6 +206,20 @@ def delete_conversation(convo_id: int) -> None:
     db.commit()
 
 
+def delete_message(message_id: int) -> None:
+    """Delete one message, used to roll back a submission that could not start."""
+    db = _conn()
+    row = db.execute("SELECT conversation_id FROM messages WHERE id=?", (message_id,)).fetchone()
+    db.execute("DELETE FROM messages WHERE id=?", (message_id,))
+    if row is not None:
+        remaining = db.execute(
+            "SELECT COUNT(*) FROM messages WHERE conversation_id=?", (row["conversation_id"],),
+        ).fetchone()[0]
+        if remaining == 0:
+            db.execute("UPDATE conversations SET title='' WHERE id=?", (row["conversation_id"],))
+    db.commit()
+
+
 def save_message(convo_id: int, role: str, content: str, images: Optional[List[str]] = None) -> Message:
     db = _conn()
     now = time.time()

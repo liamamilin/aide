@@ -1,6 +1,6 @@
 import subprocess
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 
 def _get_version() -> str:

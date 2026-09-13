@@ -28,6 +28,7 @@ from ai_desktop.utils.storage import (
 
 class HistoryDialog(FramelessDragMixin, QDialog):
     conversation_selected = pyqtSignal(int)
+    conversation_deleted = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -37,7 +38,8 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         self._load()
 
     def _setup_window(self):
-        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        # StaysOnTop: 父窗口（对话窗）常驻顶层，不加此标志会被其遮挡
+        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setMinimumSize(380, 300)
         self.resize(400, 420)
         self.setStyleSheet(styles.DIALOG_BASE)
@@ -207,6 +209,7 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         if reply != QMessageBox.Yes:
             return
         delete_conversation(convo_id)
+        self.conversation_deleted.emit(convo_id)
         self._refresh()
 
     # ── 拖拽 / Esc ──（由 FramelessDragMixin 处理）──

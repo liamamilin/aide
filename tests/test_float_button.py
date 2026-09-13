@@ -27,7 +27,7 @@ def _get_context_menu(button):
     """
     from ai_desktop.ui import styles
     menu = QMenu(button)
-    menu.setStyleSheet(styles.MENU)
+    menu.setStyleSheet(styles.menu_style())
     auto_hide_action = menu.addAction("自动收起对话框")
     auto_hide_action.setCheckable(True)
     auto_hide_action.setChecked(button._auto_hide)

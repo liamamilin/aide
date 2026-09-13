@@ -2,6 +2,7 @@
 from unittest.mock import patch
 
 import pytest
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QMessageBox
 
 import ai_desktop.utils.storage as storage
@@ -57,6 +58,10 @@ class TestHistoryDialogState:
         # After reload, should have items again
         assert dialog._list_layout.count() > 1
 
+    def test_window_is_stays_on_top(self, qtbot, dialog):
+        """历史窗口需置顶，否则会被常驻顶层（WindowStaysOnTopHint）的对话窗完全遮挡。"""
+        assert bool(dialog.windowFlags() & Qt.WindowStaysOnTopHint)
+
 
 # ── L1: Signal Tests ───────────────────────────────────
 
@@ -85,7 +90,9 @@ class TestHistoryDialogDataFlow:
 
         # Mock confirmation dialog to return Yes
         with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
-            dialog._on_delete(conv.id)
+            with qtbot.waitSignal(dialog.conversation_deleted, timeout=1000) as deleted:
+                dialog._on_delete(conv.id)
 
         # Verify the conversation was deleted from DB
         assert storage.get_conversation(conv.id) is None
+        assert deleted.args == [conv.id]
