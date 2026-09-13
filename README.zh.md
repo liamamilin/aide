@@ -102,6 +102,7 @@ python scripts/release_check.py --version 1.5.0 --require-new-tag
 ### Agent
 - **5 个内置 Agent**：代码专家 💻 / 翻译 🌐 / 通用助手 🤖 / 摘要 📄 / 润色 ✍️
 - **自定义 Agent** — 新增/编辑/删除，自定义 emoji 图标和 prompt
+- **任务模型配置** — 为每个 Agent 绑定可复用的模型、思考模式、温度和输出上限；每一项都可继承全局设置
 - **菜单栏快速切换** — 菜单栏图标右键菜单直接切换 Agent
 
 ### 历史

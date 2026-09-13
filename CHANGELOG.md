@@ -4,6 +4,16 @@ This project follows source-controlled release versions. A version listed as
 "Candidate" has been built for verification but has not been published as a
 GitHub Release.
 
+## Unreleased — M3 development
+
+- Added reusable task model profiles for model, thinking mode, temperature, and
+  output limit, with per-field inheritance and Agent assignment.
+- Added deterministic request-option resolution and immutable submission
+  snapshots, including visible fallback warnings for missing models or deleted
+  profiles.
+- Added profile management and effective-configuration summaries to the Agent
+  and chat interfaces.
+
 ## 1.5.0 — Candidate
 
 - Added managed attachment validation, reference tracking, inference copies, and
