@@ -26,9 +26,13 @@ from ai_desktop.config import Agent
 from ai_desktop.llm.events import ChatResult, ResultStatus, StreamEvent
 from ai_desktop.llm.service_checks import (
     AsyncServiceChecks,
+    ImageCapability,
+    ModelCapabilityResult,
     ServiceCheckResult,
     ServiceState,
     model_cache_key,
+    model_capability_cache_key,
+    model_versions_cache_key,
     normalize_service_url,
 )
 from ai_desktop.llm.streaming_worker import StreamingChatWorker
@@ -183,9 +187,22 @@ class ChatController(QObject):
         self._stopped = False
         self._service_checks = AsyncServiceChecks(self)
         self._service_checks.service_checked.connect(self._on_service_checked)
+        self._service_checks.model_capability_checked.connect(
+            self._on_model_capability_checked
+        )
         self._service_checks.update_checked.connect(self._on_update_checked)
         self._service_check_sequence = 0
         self._service_check_url = normalize_service_url(config.OLLAMA_BASE_URL)
+        self._service_state = ServiceState.CHECKING
+        self._model_versions = self._load_cached_model_versions(
+            config.OLLAMA_BASE_URL
+        )
+        self._image_capability = self._load_cached_image_capability(
+            config.OLLAMA_BASE_URL,
+            self._model,
+            self._model_versions.get(self._model, ""),
+        )
+        self._capability_check: tuple[int, str, str, str] | None = None
         self._startup_service_check: tuple[int, str] | None = None
         self._notices: list[QMessageBox] = []
 
@@ -445,6 +462,10 @@ class ChatController(QObject):
             self._dialog.model_changed.connect(self._on_model_changed)
             self._dialog.service_check_requested.connect(self._refresh_model_list)
             self._dialog.set_cached_models(cached_models, self._model)
+            self._dialog.set_image_capability(
+                self._image_capability,
+                cached=self._image_capability != ImageCapability.UNKNOWN,
+            )
             # 灌入输入历史（上下键浏览用）
             self._dialog.set_input_history(list_input_history())
             # 首次打开自动恢复上次对话
@@ -514,6 +535,12 @@ class ChatController(QObject):
         if "base_url" in changed:
             self._startup_service_check = None
             self._service_checks.cancel_service()
+            self._service_checks.cancel_model_capability()
+            self._capability_check = None
+            self._model_versions = self._load_cached_model_versions(
+                config.OLLAMA_BASE_URL
+            )
+            self._sync_cached_image_capability()
             if self._dialog:
                 cached_models = self._load_cached_models(config.OLLAMA_BASE_URL)
                 self._dialog.set_cached_models(cached_models, self._model)
@@ -551,6 +578,11 @@ class ChatController(QObject):
     def _on_model_changed(self, model: str) -> None:
         self._model = model
         save_setting("last_model", model)
+        self._service_checks.cancel_model_capability()
+        self._capability_check = None
+        self._sync_cached_image_capability()
+        if self._service_state == ServiceState.ONLINE:
+            self._refresh_model_capability()
         logger.info("Model switched: %s", model)
 
     @_safe_slot
@@ -559,6 +591,10 @@ class ChatController(QObject):
         if self._stopping or self._stopped:
             return 0
         base_url = normalize_service_url(config.OLLAMA_BASE_URL)
+        self._service_state = ServiceState.CHECKING
+        self._service_checks.cancel_model_capability()
+        self._capability_check = None
+        self._sync_cached_image_capability()
         if self._dialog:
             self._dialog.set_service_status(ServiceState.CHECKING)
         sequence = self._service_checks.check_service(base_url)
@@ -579,17 +615,117 @@ class ChatController(QObject):
             return []
         return list(dict.fromkeys(model for model in models if isinstance(model, str) and model))
 
+    @staticmethod
+    def _load_cached_model_versions(base_url: str) -> dict[str, str]:
+        raw = get_setting(model_versions_cache_key(base_url))
+        if not raw:
+            return {}
+        try:
+            versions = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        if not isinstance(versions, dict):
+            return {}
+        return {
+            model: version
+            for model, version in versions.items()
+            if isinstance(model, str) and isinstance(version, str) and model
+        }
+
+    @staticmethod
+    def _load_cached_image_capability(
+        base_url: str, model: str, version: str,
+    ) -> ImageCapability:
+        raw = get_setting(model_capability_cache_key(base_url, model, version))
+        try:
+            return ImageCapability(raw)
+        except ValueError:
+            return ImageCapability.UNKNOWN
+
+    def _sync_cached_image_capability(self) -> None:
+        version = self._model_versions.get(self._model, "")
+        self._image_capability = self._load_cached_image_capability(
+            config.OLLAMA_BASE_URL,
+            self._model,
+            version,
+        )
+        if self._dialog:
+            self._dialog.set_image_capability(
+                self._image_capability,
+                cached=self._image_capability != ImageCapability.UNKNOWN,
+            )
+
+    def _refresh_model_capability(self) -> int:
+        if self._stopping or self._stopped or not self._model:
+            return 0
+        base_url = normalize_service_url(config.OLLAMA_BASE_URL)
+        version = self._model_versions.get(self._model, "")
+        if self._dialog:
+            self._dialog.set_image_capability(
+                self._image_capability,
+                checking=True,
+            )
+        sequence = self._service_checks.check_model_capability(
+            base_url,
+            self._model,
+            version,
+        )
+        self._capability_check = (sequence, base_url, self._model, version)
+        return sequence
+
+    @_safe_slot
+    def _on_model_capability_checked(self, result: ModelCapabilityResult) -> None:
+        expected = (
+            result.sequence,
+            result.base_url,
+            result.model,
+            result.version,
+        )
+        current = (
+            result.sequence,
+            normalize_service_url(config.OLLAMA_BASE_URL),
+            self._model,
+            self._model_versions.get(self._model, ""),
+        )
+        if self._stopping or self._capability_check != expected or expected != current:
+            return
+        self._capability_check = None
+        self._image_capability = result.capability
+        if not result.error:
+            save_setting(
+                model_capability_cache_key(
+                    result.base_url,
+                    result.model,
+                    result.version,
+                ),
+                result.capability.value,
+            )
+        if self._dialog:
+            self._dialog.set_image_capability(result.capability)
+        if result.error:
+            logger.warning(
+                "Could not determine image capability for %s: %s",
+                result.model,
+                result.error,
+            )
+
     @_safe_slot
     def _on_service_checked(self, result: ServiceCheckResult) -> None:
         current_url = normalize_service_url(config.OLLAMA_BASE_URL)
         if (self._stopping or result.sequence != self._service_check_sequence
                 or result.base_url != self._service_check_url or result.base_url != current_url):
             return
+        self._service_state = result.state
         if self._dialog:
             self._dialog.set_service_status(result.state)
         if result.state == ServiceState.ONLINE:
             models = list(result.models)
             save_setting(model_cache_key(result.base_url), json.dumps(models, ensure_ascii=False))
+            self._model_versions = dict(result.model_versions)
+            save_setting(
+                model_versions_cache_key(result.base_url),
+                json.dumps(self._model_versions, ensure_ascii=False),
+            )
             if self._dialog:
                 self._dialog.refresh_models(models)
                 selected_model = self._dialog.active_model
@@ -599,8 +735,15 @@ class ChatController(QObject):
             elif self._model not in models:
                 self._model = models[0]
                 save_setting("last_model", self._model)
+            self._sync_cached_image_capability()
+            self._refresh_model_capability()
             logger.info("Ollama connected at %s (%d models)", result.base_url, len(models))
         elif result.state == ServiceState.EMPTY:
+            self._service_checks.cancel_model_capability()
+            self._capability_check = None
+            self._image_capability = ImageCapability.UNKNOWN
+            if self._dialog:
+                self._dialog.set_image_capability(self._image_capability)
             logger.warning("Ollama connected at %s but has no models", result.base_url)
         elif result.state == ServiceState.INVALID:
             logger.warning("Invalid Ollama response from %s: %s", result.base_url, result.error)
@@ -846,6 +989,23 @@ class ChatController(QObject):
                 self._dialog.restore_draft(text, images)
                 self._dialog.flash_busy()
             return
+        if images and self._image_capability == ImageCapability.UNSUPPORTED:
+            if self._dialog:
+                self._dialog.restore_draft(text, images)
+                self._dialog.focus_model_selector()
+            self._show_notice(
+                QMessageBox.Warning,
+                "当前模型不支持图片",
+                f"模型 {html.escape(self._model)} 已声明不支持图片输入。"
+                "请选择显示“图片 ✓”的模型后重试。",
+            )
+            return
+        if images and self._image_capability == ImageCapability.UNKNOWN:
+            if self._dialog and not self._dialog.confirm_unknown_image_capability(
+                self._model
+            ):
+                self._dialog.restore_draft(text, images)
+                return
 
         created_conversation = False
         user_msg = None

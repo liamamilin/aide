@@ -25,12 +25,29 @@ class ServiceState(str, Enum):
     INVALID = "invalid"
 
 
+class ImageCapability(str, Enum):
+    SUPPORTED = "supported"
+    UNSUPPORTED = "unsupported"
+    UNKNOWN = "unknown"
+
+
 @dataclass(frozen=True)
 class ServiceCheckResult:
     sequence: int
     base_url: str
     state: ServiceState
     models: tuple[str, ...] = ()
+    model_versions: tuple[tuple[str, str], ...] = ()
+    error: str = ""
+
+
+@dataclass(frozen=True)
+class ModelCapabilityResult:
+    sequence: int
+    base_url: str
+    model: str
+    version: str
+    capability: ImageCapability
     error: str = ""
 
 
@@ -43,15 +60,29 @@ def model_cache_key(base_url: str) -> str:
     return f"cached_models:{normalize_service_url(base_url)}"
 
 
+def model_versions_cache_key(base_url: str) -> str:
+    return f"cached_model_versions:{normalize_service_url(base_url)}"
+
+
+def model_capability_cache_key(base_url: str, model: str, version: str) -> str:
+    identity = json.dumps(
+        [normalize_service_url(base_url), model, version],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return f"cached_image_capability:{identity}"
+
+
 class AsyncServiceChecks(QObject):
     """Run short JSON checks without blocking the GUI event loop.
 
-    There is at most one Ollama request and one update request in flight. A
-    repeated Ollama check for the same address reuses its sequence; a different
-    address aborts the previous reply before starting the replacement.
+    There is at most one model-list request, one capability request, and one
+    update request in flight. Repeated checks for the same identity are reused;
+    a changed address or model aborts the stale request first.
     """
 
     service_checked = pyqtSignal(object)
+    model_capability_checked = pyqtSignal(object)
     update_checked = pyqtSignal(object)
 
     def __init__(self, parent: QObject | None = None, *, service_timeout_ms: int = 5000,
@@ -61,7 +92,9 @@ class AsyncServiceChecks(QObject):
         self._service_timeout_ms = service_timeout_ms
         self._update_timeout_ms = update_timeout_ms
         self._service_sequence = 0
+        self._capability_sequence = 0
         self._service_active: dict | None = None
+        self._capability_active: dict | None = None
         self._update_active: dict | None = None
 
     @property
@@ -147,6 +180,7 @@ class AsyncServiceChecks(QObject):
                 raise TypeError("models must be a list")
             raw_models = data["models"]
             names = []
+            versions = []
             for item in raw_models:
                 if not isinstance(item, dict) or not isinstance(item.get("name"), str):
                     raise TypeError("model entry has no name")
@@ -155,17 +189,149 @@ class AsyncServiceChecks(QObject):
                     raise TypeError("model name is empty")
                 if name not in names:
                     names.append(name)
+                    digest = item.get("digest", "")
+                    versions.append((name, digest.strip() if isinstance(digest, str) else ""))
         except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as exc:
             return ServiceCheckResult(
                 sequence, base_url, ServiceState.INVALID, error=str(exc),
             )
         state = ServiceState.ONLINE if names else ServiceState.EMPTY
-        return ServiceCheckResult(sequence, base_url, state, tuple(names))
+        return ServiceCheckResult(
+            sequence,
+            base_url,
+            state,
+            tuple(names),
+            tuple(versions),
+        )
 
     def _release_service(self, active: dict, *, abort: bool = False) -> None:
         if self._service_active is not active:
             return
         self._service_active = None
+        active["timer"].stop()
+        active["timer"].deleteLater()
+        reply = active["reply"]
+        if abort and reply.isRunning():
+            reply.abort()
+        reply.deleteLater()
+
+    def check_model_capability(
+        self, base_url: str, model: str, version: str = "",
+    ) -> int:
+        """Read one model's declared image capability through /api/show."""
+        base_url = normalize_service_url(base_url)
+        identity = (base_url, model, version)
+        active = self._capability_active
+        if active is not None and active["identity"] == identity:
+            return active["sequence"]
+
+        self.cancel_model_capability()
+        self._capability_sequence += 1
+        sequence = self._capability_sequence
+        request = QNetworkRequest(QUrl(f"{base_url}/api/show"))
+        request.setRawHeader(b"Accept", b"application/json")
+        request.setRawHeader(b"Content-Type", b"application/json")
+        request.setAttribute(
+            QNetworkRequest.RedirectPolicyAttribute,
+            QNetworkRequest.ManualRedirectPolicy,
+        )
+        body = json.dumps({"model": model}, ensure_ascii=False).encode("utf-8")
+        reply = self._manager.post(request, body)
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        active = {
+            "sequence": sequence,
+            "base_url": base_url,
+            "model": model,
+            "version": version,
+            "identity": identity,
+            "reply": reply,
+            "timer": timer,
+        }
+        self._capability_active = active
+        reply.finished.connect(lambda active=active: self._finish_model_capability(active))
+        timer.timeout.connect(lambda active=active: self._timeout_model_capability(active))
+        timer.start(max(1, self._service_timeout_ms))
+        return sequence
+
+    def cancel_model_capability(self) -> None:
+        active = self._capability_active
+        if active is not None:
+            self._release_model_capability(active, abort=True)
+
+    def _timeout_model_capability(self, active: dict) -> None:
+        if self._capability_active is not active:
+            return
+        result = self._model_capability_result(
+            active,
+            ImageCapability.UNKNOWN,
+            "能力检查超时",
+        )
+        self._release_model_capability(active, abort=True)
+        self.model_capability_checked.emit(result)
+
+    def _finish_model_capability(self, active: dict) -> None:
+        if self._capability_active is not active:
+            return
+        reply = active["reply"]
+        status = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)
+        if reply.error() != QNetworkReply.NoError or status != 200:
+            detail = f"HTTP {status}" if status is not None else reply.errorString()
+            result = self._model_capability_result(
+                active,
+                ImageCapability.UNKNOWN,
+                detail,
+            )
+        else:
+            capability, error = self._parse_model_capability(bytes(reply.readAll()))
+            result = self._model_capability_result(active, capability, error)
+        self._release_model_capability(active)
+        self.model_capability_checked.emit(result)
+
+    @staticmethod
+    def _parse_model_capability(body: bytes) -> tuple[ImageCapability, str]:
+        try:
+            data = json.loads(body.decode("utf-8"))
+            if not isinstance(data, dict):
+                raise TypeError("model details must be an object")
+            capabilities = data.get("capabilities")
+            if capabilities is None:
+                return ImageCapability.UNKNOWN, "服务未返回 capabilities"
+            if not isinstance(capabilities, list) or not all(
+                isinstance(item, str) for item in capabilities
+            ):
+                raise TypeError("capabilities must be a string list")
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError) as exc:
+            return ImageCapability.UNKNOWN, str(exc)
+        normalized = {item.strip().lower() for item in capabilities}
+        capability = (
+            ImageCapability.SUPPORTED
+            if "vision" in normalized
+            else ImageCapability.UNSUPPORTED
+        )
+        return capability, ""
+
+    @staticmethod
+    def _model_capability_result(
+        active: dict,
+        capability: ImageCapability,
+        error: str = "",
+    ) -> ModelCapabilityResult:
+        return ModelCapabilityResult(
+            active["sequence"],
+            active["base_url"],
+            active["model"],
+            active["version"],
+            capability,
+            error,
+        )
+
+    def _release_model_capability(
+        self, active: dict, *, abort: bool = False,
+    ) -> None:
+        if self._capability_active is not active:
+            return
+        self._capability_active = None
         active["timer"].stop()
         active["timer"].deleteLater()
         reply = active["reply"]
@@ -238,4 +404,5 @@ class AsyncServiceChecks(QObject):
 
     def cancel_all(self) -> None:
         self.cancel_service()
+        self.cancel_model_capability()
         self.cancel_update()

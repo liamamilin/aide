@@ -26,7 +26,7 @@ from PyQt5.QtWidgets import (
 from ai_desktop import config
 from ai_desktop.capture.text_normalizer import normalize
 from ai_desktop.config import Agent
-from ai_desktop.llm.service_checks import ServiceState
+from ai_desktop.llm.service_checks import ImageCapability, ServiceState
 from ai_desktop.ui import markdown, styles, theme
 from ai_desktop.ui.float_button import pin_to_all_spaces
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
@@ -98,6 +98,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._auto_hide = auto_hide
         self._models = list(models) if models else []
         self._active_model = active_model
+        self._image_capability = ImageCapability.UNKNOWN
         self._user_scrolled_up: bool = False
         self._pending_images: list[str] = []     # 发送前暂存的图片（应用数据目录路径）
         self._stream_bubble: QLabel | None = None
@@ -232,6 +233,11 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._model_combo.currentTextChanged.connect(self._on_model_combo)
         tb.addWidget(self._model_combo)
 
+        self._model_capability_badge = QLabel("图片 ?")
+        self._model_capability_badge.setObjectName("model_capability_badge")
+        self._model_capability_badge.setToolTip("当前模型的图片输入能力尚未确认")
+        tb.addWidget(self._model_capability_badge)
+
         tb.addStretch()
 
         new_btn = QPushButton("＋ 新对话")
@@ -313,6 +319,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         attach_btn.setFixedSize(28, 36)
         attach_btn.setStyleSheet(styles.ICON_BUTTON)
         attach_btn.setToolTip("添加图片")
+        self._attach_btn = attach_btn
         attach_menu = QMenu(attach_btn)
         attach_menu.setStyleSheet(styles.menu_style())
         a_file = attach_menu.addAction("选择图片文件…")
@@ -741,6 +748,46 @@ class ChatDialog(FramelessDragMixin, QWidget):
         else:
             self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS)
             self._ollama_dot.setToolTip("正在检测 Ollama…")
+
+    def set_image_capability(
+        self,
+        capability: ImageCapability,
+        *,
+        checking: bool = False,
+        cached: bool = False,
+    ) -> None:
+        """Show the selected model's declared image-input capability."""
+        self._image_capability = capability
+        if checking:
+            text = "图片 …"
+            detail = "正在检查当前模型的图片输入能力"
+        elif capability == ImageCapability.SUPPORTED:
+            text = "图片 ✓"
+            detail = "当前模型已声明支持图片输入"
+        elif capability == ImageCapability.UNSUPPORTED:
+            text = "图片 ×"
+            detail = "当前模型已声明不支持图片输入"
+        else:
+            text = "图片 ?"
+            detail = "当前模型的图片输入能力尚未确认"
+        if cached and not checking:
+            detail += "（缓存结果）"
+        self._model_capability_badge.setText(text)
+        self._model_capability_badge.setToolTip(detail)
+        self._attach_btn.setToolTip(f"添加图片\n{detail}")
+
+    def confirm_unknown_image_capability(self, model: str) -> bool:
+        reply = QMessageBox.question(
+            self,
+            "图片能力尚未确认",
+            f"尚未确认模型 {model} 是否支持图片输入。\n仍要尝试发送吗？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        return reply == QMessageBox.Yes
+
+    def focus_model_selector(self) -> None:
+        self._model_combo.setFocus()
 
     def add_user_message(
         self,

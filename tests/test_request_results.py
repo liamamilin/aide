@@ -4,10 +4,12 @@ import time
 from unittest.mock import MagicMock, patch
 
 import pytest
+from PyQt5.QtGui import QColor, QImage
 from PyQt5.QtWidgets import QLabel
 
 import ai_desktop.utils.storage as storage
 from ai_desktop.llm.events import ChatResult, EventKind, ResultStatus, StreamEvent
+from ai_desktop.llm.service_checks import ImageCapability
 from ai_desktop.main import ChatController, StreamingChatWorker
 from ai_desktop.ui.chat_dialog import ChatDialog
 from ai_desktop.utils.storage import get_conversation
@@ -19,6 +21,8 @@ def controller(qtbot, tmp_db):
         with patch.object(ChatController, "_create_hotkey_backend", return_value=MagicMock()):
             ctl = ChatController()
         ctl._dialog = ChatDialog(ctl._all_agents, ctl._active_agent, [ctl._model], ctl._model)
+        ctl._image_capability = ImageCapability.SUPPORTED
+        ctl._dialog.set_image_capability(ImageCapability.SUPPORTED)
         ctl._dialog.message_sent.connect(ctl._on_user_message)
         qtbot.addWidget(ctl._dialog)
         yield ctl
@@ -76,6 +80,59 @@ def test_missing_image_unblocks_input_without_http(qtbot, controller, ollama_ser
     assert [m.role for m in get_conversation(controller._convo_id).messages] == ["user"]
     assert "图片读取失败" in bubble_text(controller)
     assert_input_ready(controller)
+
+
+def test_unsupported_model_blocks_image_and_restores_draft(controller, tmp_path):
+    image = tmp_path / "draft.png"
+    image.write_bytes(b"draft")
+    controller._image_capability = ImageCapability.UNSUPPORTED
+    controller._dialog._pending_images = []
+    with patch.object(controller, "_show_notice") as notice:
+        controller._on_user_message("看图", [str(image)])
+    assert controller._convo_id == 0
+    assert controller._dialog._input.toPlainText() == "看图"
+    assert controller._dialog.get_pending_images() == [str(image)]
+    notice.assert_called_once()
+
+
+def test_unknown_model_respects_declined_attempt(controller, tmp_path):
+    image = tmp_path / "draft.png"
+    image.write_bytes(b"draft")
+    controller._image_capability = ImageCapability.UNKNOWN
+    with patch.object(
+        controller._dialog,
+        "confirm_unknown_image_capability",
+        return_value=False,
+    ) as confirm:
+        controller._on_user_message("看图", [str(image)])
+    confirm.assert_called_once_with(controller._model)
+    assert controller._convo_id == 0
+    assert controller._dialog.get_pending_images() == [str(image)]
+
+
+def test_unknown_model_can_send_after_explicit_attempt(
+    qtbot, controller, ollama_server, tmp_path,
+):
+    image_path = tmp_path / "valid.png"
+    image = QImage(2, 2, QImage.Format_ARGB32)
+    image.fill(QColor("red"))
+    assert image.save(str(image_path), "PNG")
+    controller._image_capability = ImageCapability.UNKNOWN
+    with patch.object(
+        controller._dialog,
+        "confirm_unknown_image_capability",
+        return_value=True,
+    ) as confirm:
+        scenario = send_and_wait(
+            qtbot,
+            controller,
+            ollama_server,
+            [{"message": {"content": "看到了"}, "done": True}],
+            images=[str(image_path)],
+        )
+    confirm.assert_called_once_with(controller._model)
+    assert scenario.received.is_set()
+    assert ollama_server.requests[0]["payload"]["messages"][-1]["images"]
 
 
 @pytest.mark.parametrize("before_headers,partial", [(True, ""), (False, ""), (False, "半个回答")])

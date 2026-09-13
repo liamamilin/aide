@@ -9,9 +9,13 @@ from PyQt5.QtCore import QPoint, QTimer
 from ai_desktop import config
 from ai_desktop.llm.service_checks import (
     AsyncServiceChecks,
+    ImageCapability,
+    ModelCapabilityResult,
     ServiceCheckResult,
     ServiceState,
     model_cache_key,
+    model_capability_cache_key,
+    model_versions_cache_key,
 )
 from ai_desktop.main import ChatController
 from ai_desktop.ui.chat_dialog import ChatDialog
@@ -62,6 +66,57 @@ def test_malformed_json_is_invalid(qtbot, ollama_server, checker):
     with qtbot.waitSignal(checker.service_checked, timeout=1000) as signal:
         checker.check_service(ollama_server.url)
     assert signal.args[0].state == ServiceState.INVALID
+
+
+def test_service_result_carries_model_digest(qtbot, ollama_server, checker):
+    ollama_server.enqueue(chunks=json_body({
+        "models": [{"name": "vision-model", "digest": "sha256:abc"}],
+    }))
+    with qtbot.waitSignal(checker.service_checked, timeout=1000) as signal:
+        checker.check_service(ollama_server.url)
+    assert signal.args[0].model_versions == (("vision-model", "sha256:abc"),)
+
+
+@pytest.mark.parametrize(("body", "capability", "error"), [
+    ({"capabilities": ["completion", "vision"]}, ImageCapability.SUPPORTED, False),
+    ({"capabilities": ["completion"]}, ImageCapability.UNSUPPORTED, False),
+    ({"details": {}}, ImageCapability.UNKNOWN, True),
+    ({"capabilities": "vision"}, ImageCapability.UNKNOWN, True),
+])
+def test_model_image_capability_states(
+    qtbot, ollama_server, checker, body, capability, error,
+):
+    ollama_server.enqueue(chunks=json_body(body))
+    with qtbot.waitSignal(checker.model_capability_checked, timeout=1000) as signal:
+        checker.check_model_capability(
+            ollama_server.url,
+            "vision-model",
+            "sha256:abc",
+        )
+    result = signal.args[0]
+    assert result.capability == capability
+    assert bool(result.error) is error
+    assert ollama_server.requests == [{
+        "path": "/api/show",
+        "payload": {"model": "vision-model"},
+    }]
+
+
+def test_switching_model_cancels_stale_capability_check(
+    qtbot, ollama_server, checker,
+):
+    stale = ollama_server.enqueue(before_headers=True)
+    checker.check_model_capability(ollama_server.url, "old", "one")
+    qtbot.waitUntil(stale.received.is_set)
+    ollama_server.enqueue(chunks=json_body({"capabilities": ["vision"]}))
+    delivered = []
+    checker.model_capability_checked.connect(delivered.append)
+    checker.check_model_capability(ollama_server.url, "new", "two")
+    qtbot.waitUntil(lambda: bool(delivered), timeout=1000)
+    qtbot.waitUntil(stale.disconnected.is_set, timeout=1000)
+    assert [(item.model, item.capability) for item in delivered] == [
+        ("new", ImageCapability.SUPPORTED),
+    ]
 
 
 def test_service_timeout_has_one_offline_result(qtbot, ollama_server):
@@ -162,6 +217,44 @@ def test_cache_is_scoped_by_normalized_service_address(controller):
     save_setting(model_cache_key("http://service-b:11434"), '["model-b"]')
     assert controller._load_cached_models("http://service-a:11434") == ["model-a"]
     assert controller._load_cached_models("http://service-b:11434/") == ["model-b"]
+
+
+def test_capability_cache_is_scoped_by_model_digest(controller):
+    base_url = "http://service-a:11434"
+    save_setting(
+        model_versions_cache_key(base_url),
+        json.dumps({"model": "digest-new"}),
+    )
+    save_setting(
+        model_capability_cache_key(base_url, "model", "digest-old"),
+        ImageCapability.SUPPORTED.value,
+    )
+    assert controller._load_cached_model_versions(base_url) == {"model": "digest-new"}
+    assert controller._load_cached_image_capability(
+        base_url, "model", "digest-new"
+    ) == ImageCapability.UNKNOWN
+
+
+def test_capability_result_updates_cache_and_badge(controller, monkeypatch):
+    base_url = "http://online.test:11434"
+    monkeypatch.setattr(config, "OLLAMA_BASE_URL", base_url)
+    controller._model = "vision-model"
+    controller._model_versions = {"vision-model": "digest"}
+    controller._capability_check = (3, base_url, "vision-model", "digest")
+    controller._on_model_capability_checked(
+        ModelCapabilityResult(
+            3,
+            base_url,
+            "vision-model",
+            "digest",
+            ImageCapability.SUPPORTED,
+        )
+    )
+    assert controller._image_capability == ImageCapability.SUPPORTED
+    assert controller._dialog._model_capability_badge.text() == "图片 ✓"
+    assert get_setting(
+        model_capability_cache_key(base_url, "vision-model", "digest")
+    ) == ImageCapability.SUPPORTED.value
 
 
 def test_open_window_shows_address_cache_without_waiting_for_network(

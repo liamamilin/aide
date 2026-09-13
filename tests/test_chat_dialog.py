@@ -6,7 +6,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QTextCursor
 
 from ai_desktop.config import Agent
-from ai_desktop.llm.service_checks import ServiceState
+from ai_desktop.llm.service_checks import ImageCapability, ServiceState
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -173,6 +173,16 @@ class TestChatDialogState:
         dialog.set_thinking(False)
         assert dialog._send_btn.text() == "发送"
         assert dialog._input.isEnabled()
+
+    @pytest.mark.parametrize(("capability", "label"), [
+        (ImageCapability.SUPPORTED, "图片 ✓"),
+        (ImageCapability.UNSUPPORTED, "图片 ×"),
+        (ImageCapability.UNKNOWN, "图片 ?"),
+    ])
+    def test_image_capability_badge(self, dialog, capability, label):
+        dialog.set_image_capability(capability)
+        assert dialog._model_capability_badge.text() == label
+        assert dialog._model_capability_badge.toolTip() in dialog._attach_btn.toolTip()
 
     def test_clear_messages(self, qtbot, dialog):
         """Add messages → clear_messages() → layout only has stretch."""
