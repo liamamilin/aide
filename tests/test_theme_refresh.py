@@ -182,3 +182,27 @@ def test_auto_hide_keeps_owned_child_flow_visible(dialog, monkeypatch):
     dialog._apply_auto_hide()
     assert not dialog.isVisible()
     unrelated.deleteLater()
+
+
+def test_native_file_picker_suspends_auto_hide_and_restores_dialog(
+    dialog, monkeypatch,
+):
+    dialog.set_auto_hide(True)
+    monkeypatch.setattr(dialog, "isActiveWindow", lambda: False)
+
+    def fake_picker(*_args, **_kwargs):
+        assert dialog._auto_hide_suspended
+        dialog._apply_auto_hide()
+        assert dialog.isVisible()
+        dialog.hide()
+        return [], ""
+
+    monkeypatch.setattr(
+        "ai_desktop.ui.chat_dialog.QFileDialog.getOpenFileNames",
+        fake_picker,
+    )
+
+    dialog._pick_image_files()
+
+    assert dialog.isVisible()
+    assert not dialog._auto_hide_suspended

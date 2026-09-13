@@ -114,6 +114,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._agents = agents
         self._active_agent = active_agent
         self._auto_hide = auto_hide
+        self._auto_hide_suspended = False
         self._models = list(models) if models else []
         self._actions = list(actions or [])
         self._actions_enabled = actions_enabled
@@ -728,10 +729,24 @@ class ChatDialog(FramelessDragMixin, QWidget):
         QMessageBox.warning(self, "无法添加图片", "\n".join(unique))
 
     def _pick_image_files(self) -> None:
-        files, _ = QFileDialog.getOpenFileNames(
-            self, "选择图片", "",
-            "图片 (*.png *.jpg *.jpeg *.gif *.webp *.bmp *.tiff *.heic);;所有文件 (*)",
-        )
+        was_visible = self.isVisible()
+        self._auto_hide_suspended = True
+        self._auto_hide_timer.stop()
+        try:
+            files, _ = QFileDialog.getOpenFileNames(
+                self, "选择图片", "",
+                "图片 (*.png *.jpg *.jpeg *.gif *.webp *.bmp *.tiff *.heic);;所有文件 (*)",
+            )
+        finally:
+            # macOS uses a native panel that Qt does not always report as an
+            # owned active window. Keep auto-hide from dismissing the chat
+            # while that panel is open, then return focus to the draft.
+            self._auto_hide_timer.stop()
+            if was_visible:
+                self.show()
+                self.activateWindow()
+                self.raise_()
+            self._auto_hide_suspended = False
         if files:
             self.attach_image_paths(files)
 
@@ -1542,6 +1557,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
     def _apply_auto_hide(self) -> None:
         if (
             self._auto_hide
+            and not self._auto_hide_suspended
             and self.isVisible()
             and not self.isActiveWindow()
             and not self._has_active_owned_window()
@@ -1550,7 +1566,11 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.ActivationChange:
-            if self.isActiveWindow() or not self._auto_hide:
+            if (
+                self._auto_hide_suspended
+                or self.isActiveWindow()
+                or not self._auto_hide
+            ):
                 self._auto_hide_timer.stop()
             else:
                 # Active window ownership is only reliable after Qt completes
