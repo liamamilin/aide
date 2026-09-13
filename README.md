@@ -95,6 +95,7 @@ python scripts/release_check.py --version 1.5.0 --require-new-tag
 - **Thinking process** — LLM reasoning shown live, collapsed into `💭 Thinking` when complete
 - **Markdown rendering** — code blocks, lists, bold, headings; headings use the accent blue
 - **Multi-turn conversation** — follow-ups and corrections, persisted in SQLite
+- **Safe selection capture** — preserves enumerable text, rich-text, and image clipboard formats, and never overwrites a newer user copy
 - **Image understanding (multimodal)** — validated managed attachments, missing-file recovery, and visible model capability checks for paste, drag-and-drop, 📎 attach, or `⌘⌃S` region screenshot
 - **Interrupt ⏹** — stop streaming generation at any time
 - **Edit ✏️** — hover a user message for the edit button; click to refill the input and resend

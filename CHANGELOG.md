@@ -13,6 +13,8 @@ GitHub Release.
   profiles.
 - Added profile management and effective-configuration summaries to the Agent
   and chat interfaces.
+- Preserved all enumerable macOS clipboard formats during selection capture and
+  skipped restoration when the user copies newer content.
 
 ## 1.5.0 — Candidate
 
