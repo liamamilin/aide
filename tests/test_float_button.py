@@ -269,22 +269,20 @@ class TestFloatButtonState:
         button.set_reduce_motion(True)
         assert button._motion_for_state("working") == (0.0, 0.0, 0.0, 1.0)
 
-    def test_idle_cycle_has_five_distinct_clips(self, button):
-        phases = (3, 27, 43, 60, 78)
+    def test_idle_sprite_cycle_stays_subtle(self, button):
+        phases = (3, 24, 49, 54, 78)
         motions = []
         for phase in phases:
             button._animation_phase = phase
             motions.append(button._motion_for_state("idle"))
 
-        assert len(set(motions)) == len(phases)
-        assert motions[1][2] != 0  # 左右观察
-        assert motions[2][3] > 1  # 舒展
-        assert motions[3][1] > motions[0][1]  # 轻点头
-        assert motions[4][0] != 0  # 整理羽毛
+        assert all(abs(motion[2]) == 0 for motion in motions)
+        assert all(abs(motion[1]) <= 0.35 for motion in motions)
+        assert all(motion[3] <= 1.001 for motion in motions)
 
     def test_hover_cycle_has_five_friendly_clips(self, button):
         button._hovered = True
-        phases = (4, 14, 24, 34, 44)
+        phases = (2, 6, 10, 14, 18)
         motions = []
         for phase in phases:
             button._hover_phase = phase
@@ -293,9 +291,9 @@ class TestFloatButtonState:
         assert len(set(motions)) == len(phases)
         assert motions[0][1] < 0  # 致意
         assert motions[1][2] != 0  # 专注侧倾
-        assert motions[2][3] > 1  # 开心跳跃
+        assert motions[2][1] < 0  # 开心回应
         assert motions[3][0] != 0  # 轻挥翅膀
-        assert motions[4][1] < 0  # 回望
+        assert motions[4] == (0.0, 0.0, 0.0, 1.0)  # 回到稳定姿态
 
         button.set_reduce_motion(True)
         assert button._hover_motion() == (0.0, 0.0, 0.0, 1.0)
@@ -315,13 +313,22 @@ class TestFloatButtonState:
         hover_sizes = {(frame.width(), frame.height()) for frame in button._pet_hover_frames}
         assert len(idle_sizes) == 1
         assert len(hover_sizes) == 1
+        assert all(frame.toImage().pixelColor(0, 0).alpha() == 0 for frame in button._pet_idle_frames)
+        assert all(frame.toImage().pixelColor(0, 0).alpha() == 0 for frame in button._pet_hover_frames)
         assert button._pet_for_state("working") == button._pet_content
 
-        button._animation_phase = 45
+        button._animation_phase = 27
         assert button._pet_for_state("idle") == button._pet_idle_frames[2]
         button._hovered = True
-        button._hover_phase = 31
+        button._hover_phase = 13
         assert button._pet_for_state("idle") == button._pet_hover_frames[3]
+
+    def test_hover_animation_finishes_and_holds_last_frame(self, button):
+        button._hovered = True
+        button._hover_phase = 99
+        button._advance_animation()
+        assert button._hover_phase == 20
+        assert button._pet_for_state("idle") == button._pet_hover_frames[4]
 
     def test_new_semantic_state_restarts_animation(self, button):
         button._animation_phase = 7

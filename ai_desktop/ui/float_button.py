@@ -438,6 +438,12 @@ class FloatButton(QPushButton):
         if state == "error":
             shake = (0.0, -2.2, 2.2, -1.5, 1.5, -0.7, 0.7, 0.0)
             return (shake[min(self._animation_phase, len(shake) - 1)], 0.0, 0.0, 1.0)
+        if self._pet_idle_frames:
+            # The generated frames carry the visible expression changes. Keep
+            # the body motion almost still so frame changes do not look like a
+            # cutout jumping between poses.
+            return (0.0, wave * 0.35, 0.0, 1.0 + abs(wave) * 0.001)
+
         idle_phase = self._animation_phase % 96
         # Five low-key idle clips.  The longer breathing intervals leave ample
         # quiet time between the little observations and grooming gestures.
@@ -465,16 +471,39 @@ class FloatButton(QPushButton):
         """Select a generated frame while keeping the original asset as fallback."""
         if state == "idle":
             if self._hovered and self._pet_hover_frames:
-                return self._pet_hover_frames[min(self._hover_phase // 10, _PET_FRAME_COUNT - 1)]
+                return self._pet_hover_frames[min(self._hover_phase // 4, _PET_FRAME_COUNT - 1)]
             if self._pet_idle_frames:
-                return self._pet_idle_frames[min(self._animation_phase // 20, _PET_FRAME_COUNT - 1)]
+                phase = self._animation_phase % 96
+                frame_index = 0
+                if 24 <= phase < 26:
+                    frame_index = 1  # blink
+                elif 26 <= phase < 28:
+                    frame_index = 2  # open eyes after blink
+                elif 48 <= phase < 53:
+                    frame_index = 3  # brief glance
+                elif 53 <= phase < 55:
+                    frame_index = 4  # return from glance
+                return self._pet_idle_frames[frame_index]
         return self._pet_content
 
     def _hover_motion(self) -> tuple[float, float, float, float]:
         """Return one of five friendly hover clips for the idle pet."""
         if self._reduce_motion or not self._hovered:
             return (0.0, 0.0, 0.0, 1.0)
-        phase = self._hover_phase % 50
+        phase = min(self._hover_phase, 20)
+        if self._pet_hover_frames:
+            if phase < 4:
+                greeting = math.sin(phase * math.pi / 3)
+                return (0.0, -greeting * 0.7, -greeting * 0.35, 1.0 + greeting * 0.008)
+            if phase < 8:
+                focus = math.sin((phase - 4) * math.pi / 3)
+                return (0.0, -focus * 0.45, focus * 0.65, 1.0)
+            if phase < 12:
+                return (0.0, -0.35, 0.0, 1.004)
+            if phase < 16:
+                wave = math.sin((phase - 12) * math.pi / 3)
+                return (wave * 0.25, 0.0, -wave * 0.45, 1.0)
+            return (0.0, 0.0, 0.0, 1.0)
         if phase < 10:  # 抬头致意
             greeting = math.sin(phase * math.pi / 9)
             return (0.0, -greeting * 2.8, -greeting * 1.2, 1.0 + greeting * 0.028)
@@ -493,9 +522,9 @@ class FloatButton(QPushButton):
 
     def _draw_hover_halo(self, painter: QPainter, state: str, scale: float) -> None:
         """Draw a quiet hover halo without changing task states."""
-        if state != "idle" or not self._hovered or self._reduce_motion:
+        if state != "idle" or not self._hovered or self._reduce_motion or self._pet_hover_frames:
             return
-        phase = self._hover_phase % 50
+        phase = min(self._hover_phase, 20)
         if not 10 <= phase < 30:
             return
         pulse = (math.sin((phase - 10) * math.pi / 10) + 1.0) / 2.0
@@ -557,7 +586,7 @@ class FloatButton(QPushButton):
         # room for five relaxed idle clips before the sequence repeats.
         self._animation_phase = (self._animation_phase + 1) % 96
         if self._hovered and self._effective_state() == "idle":
-            self._hover_phase = (self._hover_phase + 1) % 50
+            self._hover_phase = min(self._hover_phase + 1, 20)
         if not self._pet_enabled:
             if self._responding:
                 self.setWindowOpacity(
