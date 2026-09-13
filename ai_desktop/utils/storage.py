@@ -14,7 +14,7 @@ from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class UnsupportedSchemaVersionError(RuntimeError):
@@ -307,7 +307,31 @@ def _migrate_v1_to_v2(db: sqlite3.Connection) -> None:
     )
 
 
-_MIGRATIONS = {0: _migrate_v0_to_v1, 1: _migrate_v1_to_v2}
+def _migrate_v2_to_v3(db: sqlite3.Connection) -> None:
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS actions (
+            id              TEXT PRIMARY KEY,
+            name            TEXT NOT NULL,
+            agent_id        TEXT NOT NULL,
+            profile_id      TEXT,
+            input_types     TEXT NOT NULL DEFAULT '["text"]',
+            instruction     TEXT NOT NULL,
+            pinned_order    INTEGER,
+            enabled         INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+            updated_at      REAL NOT NULL,
+            FOREIGN KEY (profile_id) REFERENCES model_profiles(id) ON DELETE SET NULL,
+            CHECK(pinned_order IS NULL OR pinned_order BETWEEN 0 AND 3)
+        )
+        """
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_actions_pinned "
+        "ON actions(enabled, pinned_order, id)"
+    )
+
+
+_MIGRATIONS = {0: _migrate_v0_to_v1, 1: _migrate_v1_to_v2, 2: _migrate_v2_to_v3}
 
 
 def init_db() -> None:
@@ -1069,6 +1093,57 @@ def save_agent_profile_assignment(agent_id: str, profile_id: str | None) -> None
             (agent_id, profile_id),
         )
     db.commit()
+
+
+# ── 快捷动作 ─────────────────────────────────────────
+
+
+def list_action_records() -> list[dict]:
+    rows = _conn().execute(
+        "SELECT id, name, agent_id, profile_id, input_types, instruction, "
+        "pinned_order, enabled, updated_at FROM actions ORDER BY id"
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def save_action_record(record: dict) -> None:
+    db = _conn()
+    db.execute(
+        """
+        INSERT INTO actions (
+            id, name, agent_id, profile_id, input_types, instruction,
+            pinned_order, enabled, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            name=excluded.name,
+            agent_id=excluded.agent_id,
+            profile_id=excluded.profile_id,
+            input_types=excluded.input_types,
+            instruction=excluded.instruction,
+            pinned_order=excluded.pinned_order,
+            enabled=excluded.enabled,
+            updated_at=excluded.updated_at
+        """,
+        (
+            record["id"],
+            record["name"],
+            record["agent_id"],
+            record.get("profile_id"),
+            record["input_types"],
+            record["instruction"],
+            record.get("pinned_order"),
+            int(bool(record.get("enabled", True))),
+            record["updated_at"],
+        ),
+    )
+    db.commit()
+
+
+def delete_action_record(action_id: str) -> bool:
+    db = _conn()
+    cursor = db.execute("DELETE FROM actions WHERE id=?", (action_id,))
+    db.commit()
+    return cursor.rowcount > 0
 
 
 # ── 自定义 Agent ──────────────────────────────────────

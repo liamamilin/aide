@@ -199,7 +199,7 @@ def test_schema_one_upgrades_to_model_profiles_with_backup(tmp_path, monkeypatch
 
     storage.init_db()
     current = storage._conn()
-    assert storage._schema_version(current) == storage.SCHEMA_VERSION == 2
+    assert storage._schema_version(current) == storage.SCHEMA_VERSION == 3
     tables = {
         row[0]
         for row in current.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -209,4 +209,36 @@ def test_schema_one_upgrades_to_model_profiles_with_backup(tmp_path, monkeypatch
     backup = sqlite3.connect(next((tmp_path / "backups").glob("*.sqlite3")))
     assert backup.execute("PRAGMA user_version").fetchone()[0] == 1
     assert backup.execute("SELECT value FROM settings WHERE key='keep'").fetchone()[0] == "value"
+    backup.close()
+
+
+def test_schema_two_upgrades_to_actions_with_backup(tmp_path, monkeypatch):
+    path = tmp_path / "chat_history.db"
+    db = sqlite3.connect(path)
+    db.row_factory = sqlite3.Row
+    storage._migrate_v0_to_v1(db)
+    storage._migrate_v1_to_v2(db)
+    db.execute("INSERT INTO settings VALUES ('keep-action', 'value')")
+    db.execute("PRAGMA user_version=2")
+    db.commit()
+    db.close()
+    _use_database(monkeypatch, path)
+
+    storage.init_db()
+    current = storage._conn()
+    assert storage._schema_version(current) == storage.SCHEMA_VERSION == 3
+    columns = {
+        row[1]
+        for row in current.execute("PRAGMA table_info(actions)").fetchall()
+    }
+    assert {
+        "id", "name", "agent_id", "profile_id", "input_types",
+        "instruction", "pinned_order", "enabled", "updated_at",
+    } <= columns
+    assert storage.get_setting("keep-action") == "value"
+    backup = sqlite3.connect(next((tmp_path / "backups").glob("*.sqlite3")))
+    assert backup.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert backup.execute(
+        "SELECT value FROM settings WHERE key='keep-action'"
+    ).fetchone()[0] == "value"
     backup.close()

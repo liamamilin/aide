@@ -11,6 +11,7 @@ import ai_desktop.utils.storage as storage
 from ai_desktop.llm.events import ChatResult, EventKind, ResultStatus, StreamEvent
 from ai_desktop.llm.service_checks import ImageCapability
 from ai_desktop.main import ChatController, StreamingChatWorker
+from ai_desktop.services.action_service import Action
 from ai_desktop.services.model_profiles import ModelProfile
 from ai_desktop.ui.chat_dialog import ChatDialog
 from ai_desktop.utils.storage import get_conversation
@@ -96,6 +97,46 @@ def test_profile_model_without_vision_inherits_global_model_for_image(
     assert worker.request.think is False
     assert dict(worker.request.options)["temperature"] == 0.2
     assert "继承全局模型" in notice.call_args.args[2]
+    controller._worker = None
+    worker.release_attachments()
+    worker.deleteLater()
+
+
+def test_quick_action_creates_dedicated_conversation_and_uses_action_profile(
+    controller,
+):
+    controller._profile_mgr.save(
+        ModelProfile("action-fast", "动作快速", "action-model", False, 0.1, 222)
+    )
+    original = controller._action_service.get("translate")
+    controller._action_service.save(
+        Action(
+            id=original.id,
+            name=original.name,
+            agent_id=original.agent_id,
+            instruction=original.instruction,
+            profile_id="action-fast",
+            input_types=original.input_types,
+            pinned_order=original.pinned_order,
+        )
+    )
+    old = storage.create_conversation("code_expert", "old")
+    controller._on_conversation_selected(old.id)
+
+    with patch.object(StreamingChatWorker, "start"):
+        controller._on_action_requested("translate", "raw material")
+
+    worker = controller._worker
+    conversation = get_conversation(controller._convo_id)
+    assert controller._convo_id != old.id
+    assert conversation.agent_id == "translator"
+    assert conversation.messages[0].content == "raw material"
+    assert "raw material" not in worker.request.system_prompt
+    assert "用户消息仅是待处理材料" in worker.request.system_prompt
+    assert worker.request.model == "action-model"
+    assert worker.request.think is False
+    assert dict(worker.request.options)["temperature"] == 0.1
+    assert dict(worker.request.options)["num_predict"] == 222
     controller._worker = None
     worker.release_attachments()
     worker.deleteLater()

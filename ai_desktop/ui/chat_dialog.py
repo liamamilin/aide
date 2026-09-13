@@ -27,7 +27,9 @@ from ai_desktop import config
 from ai_desktop.capture.text_normalizer import normalize
 from ai_desktop.config import Agent
 from ai_desktop.llm.service_checks import ImageCapability, ServiceState
+from ai_desktop.services.action_service import Action
 from ai_desktop.ui import markdown, styles, theme
+from ai_desktop.ui.action_panel import ActionPanel
 from ai_desktop.ui.float_button import pin_to_all_spaces
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 from ai_desktop.utils import images as image_utils
@@ -93,18 +95,21 @@ class ChatDialog(FramelessDragMixin, QWidget):
     agent_changed = pyqtSignal(Agent)
     model_changed = pyqtSignal(str)
     service_check_requested = pyqtSignal()
+    action_requested = pyqtSignal(str, str)
     closed = pyqtSignal()
     geometry_changed = pyqtSignal()
 
     def __init__(self, agents: list[Agent], active_agent: Agent,
                  models: list[str] | None = None, active_model: str = "",
-                 auto_hide: bool = False, parent=None):
+                 auto_hide: bool = False, parent=None,
+                 actions: list[Action] | None = None):
         super().__init__(parent)
         self._setup_drag(40)
         self._agents = agents
         self._active_agent = active_agent
         self._auto_hide = auto_hide
         self._models = list(models) if models else []
+        self._actions = list(actions or [])
         self._active_model = active_model
         self._image_capability = ImageCapability.UNKNOWN
         self._placement_initialized = False
@@ -341,6 +346,11 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._scroll.verticalScrollBar().valueChanged.connect(self._on_scroll_changed)
         root.addWidget(scroll, stretch=1)
 
+        self._action_panel = ActionPanel(self._actions, self)
+        self._action_panel.action_selected.connect(self._on_action_selected)
+        self._action_panel.cancelled.connect(self._focus_free_input)
+        root.addWidget(self._action_panel)
+
         # ── 图片预览行（发送前暂存已附图片）──
         self._image_preview = QWidget()
         self._image_preview.setStyleSheet("background: transparent;")
@@ -369,6 +379,14 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._input.textChanged.connect(self._on_input_text_changed)
         self._input._on_image_attach = self._attach_pixmap
         self._input._on_image_paths = self._attach_image_paths
+
+        action_btn = QPushButton("⚡")
+        action_btn.setFixedSize(28, 36)
+        action_btn.setStyleSheet(styles.ICON_BUTTON)
+        action_btn.setToolTip("显示快捷动作")
+        action_btn.clicked.connect(lambda: self.show_actions())
+        self._action_btn = action_btn
+        il.addWidget(action_btn)
 
         # 图片附件按钮（📎 菜单：选择文件 / 截图 / 粘贴剪贴板图片）
         attach_btn = QPushButton("📎")
@@ -540,6 +558,27 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._input.setFocus()
         self._input.selectAll()
 
+    def show_actions(self, material: str | None = None,
+                     selected_id: str | None = None) -> None:
+        if material is not None:
+            self.set_input_text(material)
+        self._action_panel.show_for_material(
+            self._input.toPlainText(),
+            selected_id,
+        )
+
+    def refresh_actions(self, actions: list[Action]) -> None:
+        self._actions = list(actions)
+        self._action_panel.refresh_actions(self._actions)
+
+    def _on_action_selected(self, action_id: str, material: str) -> None:
+        self._input.clear()
+        self._exit_input_browsing()
+        self.action_requested.emit(action_id, material)
+
+    def _focus_free_input(self) -> None:
+        self._input.setFocus(Qt.ShortcutFocusReason)
+
     def set_input_history(self, entries: list[str]) -> None:
         """灌入历史输入（最新在前），供上下键浏览。"""
         self._input_history = []
@@ -587,6 +626,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         images = list(self._pending_images)
         if not text and not images:
             return
+        self._action_panel.hide()
         # Clear before the synchronous signal. A rejected submission restored
         # by the controller must remain after this method returns.
         self._input.clear()

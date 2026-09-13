@@ -37,6 +37,7 @@ from ai_desktop.llm.service_checks import (
     normalize_service_url,
 )
 from ai_desktop.llm.streaming_worker import StreamingChatWorker
+from ai_desktop.services.action_service import ActionService
 from ai_desktop.services.model_profiles import ModelProfile, ModelProfileManager
 from ai_desktop.settings_manager import SettingsManager
 from ai_desktop.ui import styles
@@ -132,6 +133,7 @@ class ChatController(QObject):
         self._settings = SettingsManager()
         self._settings.load()
         self._profile_mgr = ModelProfileManager()
+        self._action_service = ActionService()
 
         # 加载 Agent 列表
         self._agent_mgr = AgentManager()
@@ -449,6 +451,7 @@ class ChatController(QObject):
             self._dialog.activateWindow()
             self._dialog.raise_()
             self._dialog.set_input_text(text)
+            self._dialog.show_actions(text)
         elif not text:
             logger.info("No text captured — dialog shown without paste")
         self._finish_stop_if_ready()
@@ -468,8 +471,14 @@ class ChatController(QObject):
             return
         if self._dialog is None:
             cached_models = self._load_cached_models(config.OLLAMA_BASE_URL)
-            self._dialog = ChatDialog(self._all_agents, self._active_agent, cached_models, self._model,
-                                     auto_hide=self._auto_hide)
+            self._dialog = ChatDialog(
+                self._all_agents,
+                self._active_agent,
+                cached_models,
+                self._model,
+                auto_hide=self._auto_hide,
+                actions=self._action_service.visible_actions,
+            )
             self._dialog.restore_geometry(self._chat_geometry)
             self._dialog.geometry_changed.connect(self._schedule_window_state_save)
             self._dialog.message_sent.connect(self._on_user_message)
@@ -482,6 +491,7 @@ class ChatController(QObject):
             self._dialog.agent_changed.connect(self._on_agent_changed)
             self._dialog.model_changed.connect(self._on_model_changed)
             self._dialog.service_check_requested.connect(self._refresh_model_list)
+            self._dialog.action_requested.connect(self._on_action_requested)
             self._dialog.set_cached_models(cached_models, self._model)
             self._dialog.set_image_capability(
                 self._image_capability,
@@ -718,7 +728,7 @@ class ChatController(QObject):
                 cached=self._image_capability != ImageCapability.UNKNOWN,
             )
 
-    def _resolve_model_config(self):
+    def _resolve_model_config(self, action_profile_id: str | None = None):
         models = self._load_cached_models(config.OLLAMA_BASE_URL)
         available_models = (
             models
@@ -728,6 +738,7 @@ class ChatController(QObject):
         return self._profile_mgr.resolve(
             global_model=self._model,
             agent_profile_id=self._active_agent.profile_id,
+            action_profile_id=action_profile_id,
             available_models=available_models,
         )
 
@@ -1111,7 +1122,54 @@ class ChatController(QObject):
         self._stop_worker()
         logger.info("Streaming interrupted by user")
 
-    def _on_user_message(self, text: str, images: Optional[list] = None) -> None:
+    @_safe_slot
+    def _on_action_requested(self, action_id: str, material: str) -> None:
+        if self._worker is not None:
+            if self._dialog:
+                self._dialog.set_input_text(material)
+                self._dialog.show_actions(material, action_id)
+                self._dialog.flash_busy()
+            return
+        try:
+            plan = self._action_service.build_request_plan(
+                action_id,
+                material,
+                self._all_agents,
+            )
+        except (LookupError, ValueError) as exc:
+            if self._dialog:
+                self._dialog.set_input_text(material)
+                self._dialog.show_actions(material, action_id)
+            self._show_notice(QMessageBox.Warning, "无法执行快捷动作", html.escape(str(exc)))
+            return
+        if plan.warnings:
+            self._show_notice(
+                QMessageBox.Warning,
+                "快捷动作已回退",
+                "<br>".join(html.escape(warning) for warning in plan.warnings),
+            )
+        self._new_conversation()
+        self._active_agent = self._agent_mgr.switch(plan.agent)
+        if self._dialog:
+            self._dialog.set_active_agent(self._active_agent)
+        self._tray.set_active_agent(self._active_agent)
+        self._update_model_profile_summary()
+        self._on_user_message(
+            plan.material,
+            system_prompt=plan.system_prompt,
+            action_profile_id=plan.action_profile_id,
+            retry_action_id=plan.action.id,
+        )
+
+    def _on_user_message(
+        self,
+        text: str,
+        images: Optional[list] = None,
+        *,
+        system_prompt: str | None = None,
+        action_profile_id: str | None = None,
+        retry_action_id: str | None = None,
+    ) -> None:
         images = images or []
         if self._stopping or self._stopped:
             return
@@ -1120,7 +1178,7 @@ class ChatController(QObject):
                 self._dialog.restore_draft(text, images)
                 self._dialog.flash_busy()
             return
-        resolved = self._resolve_model_config()
+        resolved = self._resolve_model_config(action_profile_id)
         image_capability = self._image_capability_for_model(resolved.model)
         if (
             images
@@ -1183,7 +1241,7 @@ class ChatController(QObject):
 
             self._response_text = ""
             worker = StreamingChatWorker(
-                recent, self._active_agent.system_prompt, resolved.model, self,
+                recent, system_prompt or self._active_agent.system_prompt, resolved.model, self,
                 conversation_id=self._convo_id, agent_id=self._active_agent.id,
                 think=resolved.think, options=resolved.options,
             )
@@ -1236,6 +1294,8 @@ class ChatController(QObject):
                     else:
                         self._dialog.add_assistant_message(message.content)
                 self._dialog.restore_draft(text, images)
+                if retry_action_id:
+                    self._dialog.show_actions(text, retry_action_id)
             self.float_btn.set_responding(False)
 
     @_safe_slot
