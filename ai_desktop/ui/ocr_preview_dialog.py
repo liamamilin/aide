@@ -19,7 +19,7 @@ from ai_desktop.ui import styles
 
 
 class OCRPreviewDialog(QDialog):
-    text_accepted = pyqtSignal(str)
+    text_accepted = pyqtSignal(str, str, bool)
     cancel_requested = pyqtSignal()
 
     def __init__(self, parent=None) -> None:
@@ -56,10 +56,20 @@ class OCRPreviewDialog(QDialog):
         self._copy_button.setStyleSheet(styles.SECONDARY_BUTTON)
         self._copy_button.clicked.connect(self._copy_text)
         buttons.addWidget(self._copy_button)
-        self._use_button = QPushButton("插入输入框")
-        self._use_button.setStyleSheet(styles.BUTTON_PRIMARY)
-        self._use_button.clicked.connect(self._accept_text)
-        buttons.addWidget(self._use_button)
+        self._text_only_button = QPushButton("仅用文字")
+        self._text_only_button.setToolTip("插入文字，并从当前草稿移除这张原图")
+        self._text_only_button.setStyleSheet(styles.BUTTON_PRIMARY)
+        self._text_only_button.clicked.connect(
+            lambda: self._accept_text(keep_image=False)
+        )
+        buttons.addWidget(self._text_only_button)
+        self._keep_image_button = QPushButton("文字 + 原图")
+        self._keep_image_button.setToolTip("插入文字，同时保留这张图片附件")
+        self._keep_image_button.setStyleSheet(styles.SECONDARY_BUTTON)
+        self._keep_image_button.clicked.connect(
+            lambda: self._accept_text(keep_image=True)
+        )
+        buttons.addWidget(self._keep_image_button)
         close_button = QPushButton("关闭")
         close_button.setStyleSheet(styles.SECONDARY_BUTTON)
         close_button.clicked.connect(self.close)
@@ -100,7 +110,8 @@ class OCRPreviewDialog(QDialog):
         language_text = ", ".join(languages) if languages else "自动"
         status = (
             f"已提取 {block_count} 个文本块 · {elapsed_ms:.1f} ms · "
-            f"语言 {language_text}"
+            f"语言 {language_text}\n"
+            "请选择仅使用修订文字，或同时保留原图附件。"
         )
         if low_confidence:
             status += "\n部分内容置信度较低，请对照原图检查。"
@@ -128,7 +139,8 @@ class OCRPreviewDialog(QDialog):
 
     def _set_actions_enabled(self, enabled: bool) -> None:
         self._copy_button.setEnabled(enabled)
-        self._use_button.setEnabled(enabled)
+        self._text_only_button.setEnabled(enabled)
+        self._keep_image_button.setEnabled(enabled)
 
     def _copy_text(self) -> None:
         text = self._editor.toPlainText()
@@ -137,11 +149,11 @@ class OCRPreviewDialog(QDialog):
         QApplication.clipboard().setText(text)
         self._status.setText("已复制当前修订文字。")
 
-    def _accept_text(self) -> None:
+    def _accept_text(self, *, keep_image: bool) -> None:
         text = self._editor.toPlainText()
         if not text.strip():
             return
-        self.text_accepted.emit(text)
+        self.text_accepted.emit(text, self._image_path, keep_image)
         self.close()
 
     def closeEvent(self, event) -> None:

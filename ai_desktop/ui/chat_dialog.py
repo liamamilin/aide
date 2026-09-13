@@ -853,7 +853,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
     def _ensure_ocr_preview(self) -> OCRPreviewDialog:
         if self._ocr_preview_dialog is None:
             preview = OCRPreviewDialog(self)
-            preview.text_accepted.connect(self._insert_ocr_text)
+            preview.text_accepted.connect(self._use_ocr_text)
             preview.cancel_requested.connect(self.ocr_cancel_requested.emit)
             self._ocr_preview_dialog = preview
         return self._ocr_preview_dialog
@@ -865,6 +865,26 @@ class ChatDialog(FramelessDragMixin, QWidget):
         cursor.insertText(text)
         self._input.setTextCursor(cursor)
         self._input.setFocus()
+
+    def _use_ocr_text(
+        self,
+        text: str,
+        image_path: str,
+        keep_image: bool,
+    ) -> None:
+        self._insert_ocr_text(text)
+        if keep_image or image_path not in self._pending_images:
+            return
+        self._pending_images.remove(image_path)
+        try:
+            image_utils.discard_staged_image(image_path)
+        except Exception:
+            logger.warning(
+                "Failed to discard OCR source image %s",
+                image_path,
+                exc_info=True,
+            )
+        self._refresh_image_preview()
 
     def _remove_pending_image(self, idx: int) -> None:
         if 0 <= idx < len(self._pending_images):

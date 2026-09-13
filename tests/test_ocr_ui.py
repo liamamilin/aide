@@ -68,7 +68,7 @@ def _result(path, status, *, task_id="task-id", confidence=1.0, error=""):
     )
 
 
-def test_preview_supports_edit_copy_and_insert(qtbot):
+def test_preview_supports_edit_copy_and_text_only_choice(qtbot):
     preview = OCRPreviewDialog()
     qtbot.addWidget(preview)
     preview.begin("/managed/screenshot.png")
@@ -95,8 +95,24 @@ def test_preview_supports_edit_copy_and_insert(qtbot):
     clipboard.setText.assert_called_once_with("corrected text")
 
     with qtbot.waitSignal(preview.text_accepted, timeout=1000) as signal:
-        qtbot.mouseClick(preview._use_button, Qt.LeftButton)
-    assert signal.args == ["corrected text"]
+        qtbot.mouseClick(preview._text_only_button, Qt.LeftButton)
+    assert signal.args == ["corrected text", "/managed/screenshot.png", False]
+
+
+def test_preview_can_keep_original_image(qtbot):
+    preview = OCRPreviewDialog()
+    qtbot.addWidget(preview)
+    preview.begin("/managed/image.png")
+    preview.show_result(
+        "recognized",
+        block_count=1,
+        elapsed_ms=10.0,
+        languages=("en-US",),
+        low_confidence=False,
+    )
+    with qtbot.waitSignal(preview.text_accepted, timeout=1000) as signal:
+        qtbot.mouseClick(preview._keep_image_button, Qt.LeftButton)
+    assert signal.args == ["recognized", "/managed/image.png", True]
 
 
 @pytest.mark.parametrize(("method", "needle"), [
@@ -110,7 +126,8 @@ def test_preview_distinguishes_empty_and_error(qtbot, method, needle):
     method(preview)
     assert needle in preview._status.text()
     assert not preview._copy_button.isEnabled()
-    assert not preview._use_button.isEnabled()
+    assert not preview._text_only_button.isEnabled()
+    assert not preview._keep_image_button.isEnabled()
 
 
 def test_closing_loading_preview_requests_cancel(qtbot):
@@ -143,6 +160,36 @@ def test_accepted_ocr_text_is_inserted_at_cursor(chat_dialog):
     chat_dialog._input.setTextCursor(cursor)
     chat_dialog._insert_ocr_text("recognized")
     assert chat_dialog._input.toPlainText() == "question\nrecognized"
+
+
+def test_text_only_choice_uses_existing_text_request_pipeline(qtbot, chat_dialog):
+    path = "/managed/image.png"
+    chat_dialog._pending_images = [path]
+    with patch(
+        "ai_desktop.ui.chat_dialog.image_utils.discard_staged_image"
+    ) as discard:
+        chat_dialog._use_ocr_text("recognized", path, False)
+    assert chat_dialog._input.toPlainText() == "recognized"
+    assert chat_dialog.get_pending_images() == []
+    discard.assert_called_once_with(path)
+    with qtbot.waitSignal(chat_dialog.message_sent, timeout=1000) as signal:
+        chat_dialog._on_send()
+    assert signal.args == ["recognized", []]
+
+
+def test_text_plus_image_choice_uses_existing_attachment_pipeline(qtbot, chat_dialog):
+    path = "/managed/image.png"
+    chat_dialog._pending_images = [path]
+    with patch(
+        "ai_desktop.ui.chat_dialog.image_utils.discard_staged_image"
+    ) as discard:
+        chat_dialog._use_ocr_text("recognized", path, True)
+    assert chat_dialog._input.toPlainText() == "recognized"
+    assert chat_dialog.get_pending_images() == [path]
+    discard.assert_not_called()
+    with qtbot.waitSignal(chat_dialog.message_sent, timeout=1000) as signal:
+        chat_dialog._on_send()
+    assert signal.args == ["recognized", [path]]
 
 
 def test_controller_starts_ocr_only_for_pending_image(controller):
