@@ -173,7 +173,11 @@ class ChatController(QObject):
         self._screen_recovery_timer.timeout.connect(self._ensure_windows_visible)
 
         # 悬浮按钮
-        self.float_btn = FloatButton(pet_enabled=config.DESKTOP_PET_ENABLED)
+        self.float_btn = FloatButton(
+            pet_enabled=config.DESKTOP_PET_ENABLED,
+            reduce_motion=config.DESKTOP_PET_REDUCE_MOTION,
+            pet_size=config.DESKTOP_PET_SIZE,
+        )
         self._result_bubble = ResultBubble()
         self.float_btn.restore_placement(get_setting("float_button_placement"))
         self.float_btn.clicked.connect(self._toggle_dialog)
@@ -671,6 +675,8 @@ class ChatController(QObject):
             "hotkey": config.HOTKEY,
             "quick_actions": config.QUICK_ACTIONS_ENABLED,
             "desktop_pet": config.DESKTOP_PET_ENABLED,
+            "pet_reduce_motion": config.DESKTOP_PET_REDUCE_MOTION,
+            "pet_size": config.DESKTOP_PET_SIZE,
         }
         dlg = SettingsDialog(current, parent=self._dialog)
         dlg.settings_applied.connect(self._on_settings_applied)
@@ -695,6 +701,10 @@ class ChatController(QObject):
             self._refresh_pet_actions()
             if not config.DESKTOP_PET_ENABLED:
                 self._result_bubble.hide()
+        if "pet_reduce_motion" in changed:
+            self.float_btn.set_reduce_motion(config.DESKTOP_PET_REDUCE_MOTION)
+        if "pet_size" in changed:
+            self.float_btn.set_pet_size(config.DESKTOP_PET_SIZE)
         if "base_url" in changed:
             self._startup_service_check = None
             self._service_checks.cancel_service()

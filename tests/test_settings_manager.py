@@ -23,6 +23,8 @@ _ORIG_DEFAULTS = {
     "HOTKEY": config.HOTKEY,
     "QUICK_ACTIONS_ENABLED": config.QUICK_ACTIONS_ENABLED,
     "DESKTOP_PET_ENABLED": config.DESKTOP_PET_ENABLED,
+    "DESKTOP_PET_REDUCE_MOTION": config.DESKTOP_PET_REDUCE_MOTION,
+    "DESKTOP_PET_SIZE": config.DESKTOP_PET_SIZE,
 }
 
 
@@ -65,20 +67,27 @@ class TestSettingsManagerLoad:
         storage.save_setting("ollama_timeout", "60")
         storage.save_setting("quick_actions_enabled", "false")
         storage.save_setting("desktop_pet_enabled", "false")
+        storage.save_setting("desktop_pet_reduce_motion", "true")
+        storage.save_setting("desktop_pet_size", "large")
         mgr = SettingsManager()
         mgr.load()
         assert config.OLLAMA_BASE_URL == "http://custom:1234"
         assert config.OLLAMA_TIMEOUT == 60
         assert config.QUICK_ACTIONS_ENABLED is False
         assert config.DESKTOP_PET_ENABLED is False
+        assert config.DESKTOP_PET_REDUCE_MOTION is True
+        assert config.DESKTOP_PET_SIZE == "large"
 
     def test_load_skips_invalid_values(self):
         _reset_config()
         storage.save_setting("ollama_timeout", "not_a_number")
+        storage.save_setting("desktop_pet_size", "giant")
+        config.DESKTOP_PET_SIZE = "medium"
         mgr = SettingsManager()
         mgr.load()
         # Should keep default (120), not crash
         assert config.OLLAMA_TIMEOUT == 120
+        assert config.DESKTOP_PET_SIZE == "medium"
 
     def test_load_skips_empty_values(self):
         _reset_config()
@@ -149,6 +158,20 @@ class TestSettingsManagerApply:
         assert "desktop_pet" in changed
         assert config.DESKTOP_PET_ENABLED is False
         assert storage.get_setting("desktop_pet_enabled") == "False"
+
+    def test_apply_persists_pet_motion_and_size(self):
+        _reset_config()
+        mgr = SettingsManager()
+        changed = mgr.apply({"pet_reduce_motion": True, "pet_size": "large"})
+        assert {"pet_reduce_motion", "pet_size"}.issubset(changed)
+        assert config.DESKTOP_PET_REDUCE_MOTION is True
+        assert config.DESKTOP_PET_SIZE == "large"
+        assert storage.get_setting("desktop_pet_reduce_motion") == "True"
+        assert storage.get_setting("desktop_pet_size") == "large"
+
+        changed = mgr.apply({"pet_size": "giant"})
+        assert "pet_size" not in changed
+        assert config.DESKTOP_PET_SIZE == "large"
 
     def test_apply_rejects_invalid_hotkey(self):
         _reset_config()

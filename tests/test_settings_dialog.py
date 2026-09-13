@@ -29,6 +29,8 @@ def dialog(qtbot):
         "hotkey": "<cmd>+<ctrl>+l",
         "quick_actions": True,
         "desktop_pet": True,
+        "pet_reduce_motion": False,
+        "pet_size": "medium",
     }
     d = SettingsDialog(current=current)
     qtbot.addWidget(d)
@@ -60,6 +62,8 @@ class TestSettingsDialogSignals:
         assert "hotkey" in data
         assert data["quick_actions"] is True
         assert data["desktop_pet"] is True
+        assert data["pet_reduce_motion"] is False
+        assert data["pet_size"] == "medium"
 
     def test_cancel_does_not_emit(self, qtbot, dialog):
         """Clicking cancel → settings_applied signal is NOT emitted."""
@@ -113,6 +117,18 @@ class TestSettingsDialogValidation:
         # num_ctx: 256 - 999999
         ctx_spin = dialog._widgets["num_ctx"]
         assert ctx_spin.minimum() == 256
+
+    def test_pet_size_choices_use_stable_values(self, qtbot, dialog):
+        size = dialog._widgets["pet_size"]
+        assert [size.itemData(index) for index in range(size.count())] == [
+            "small", "medium", "large",
+        ]
+        size.setCurrentIndex(size.findData("large"))
+        dialog._widgets["pet_reduce_motion"].setChecked(True)
+        with qtbot.waitSignal(dialog.settings_applied, timeout=1000) as spy:
+            dialog._on_save()
+        assert spy.args[0]["pet_size"] == "large"
+        assert spy.args[0]["pet_reduce_motion"] is True
 
     def test_empty_url_uses_default(self, qtbot, dialog):
         """Empty URL field should use default (not reject)."""

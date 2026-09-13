@@ -24,6 +24,8 @@ HOTKEY: str = "<cmd>+<ctrl>+l"          # 读取选中文字 → 提问
 SCREENSHOT_HOTKEY: str = "<cmd>+<ctrl>+s"  # 截图并发送到对话
 QUICK_ACTIONS_ENABLED: bool = True       # 选区捕获后显示快捷动作
 DESKTOP_PET_ENABLED: bool = True         # 使用有状态的桌面宠物悬浮入口
+DESKTOP_PET_REDUCE_MOTION: bool = False  # 停止宠物周期动画，保留必要状态
+DESKTOP_PET_SIZE: str = "medium"         # 宠物尺寸：small / medium / large
 
 # ── 文本处理 ─────────────────────────────────────────
 

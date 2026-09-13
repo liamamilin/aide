@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PyQt5.QtCore import QPoint, QRect, QSize
 
+from ai_desktop import config
 from ai_desktop.config import Agent
 from ai_desktop.main import ChatController
 from ai_desktop.ui.chat_dialog import ChatDialog
@@ -118,3 +119,28 @@ def test_controller_restores_and_debounces_window_state(qtbot, tmp_db, monkeypat
         controller.stop()
         assert controller._stopped
         tray.hide.assert_called()
+
+
+def test_controller_applies_pet_motion_and_size_preferences(qtbot, tmp_db, monkeypatch):
+    monkeypatch.setattr(config, "DESKTOP_PET_ENABLED", True)
+    monkeypatch.setattr(config, "DESKTOP_PET_REDUCE_MOTION", False)
+    monkeypatch.setattr(config, "DESKTOP_PET_SIZE", "medium")
+    monkeypatch.setattr(ChatController, "_create_hotkey_backend", lambda _self: MagicMock())
+    with patch("ai_desktop.main.FloatButton") as float_class, \
+            patch("ai_desktop.main.MenuBarIcon"):
+        controller = ChatController()
+        button = float_class.return_value
+        float_class.assert_called_once_with(
+            pet_enabled=True,
+            reduce_motion=False,
+            pet_size="medium",
+        )
+
+        controller._on_settings_applied({
+            "pet_reduce_motion": True,
+            "pet_size": "large",
+        })
+        button.set_reduce_motion.assert_called_once_with(True)
+        button.set_pet_size.assert_called_once_with("large")
+        controller.stop()
+        assert controller._stopped

@@ -189,6 +189,46 @@ class TestFloatButtonState:
         button.set_pet_enabled(True)
         assert button._pet_enabled
 
+    def test_pet_size_options_apply_and_invalid_value_falls_back(self, button):
+        button.set_pet_size("small")
+        assert button.pet_size == "small"
+        assert (button.width(), button.height()) == (92, 97)
+
+        button.set_pet_size("large")
+        assert button.pet_size == "large"
+        assert (button.width(), button.height()) == (140, 147)
+
+        button.set_pet_size("unknown")
+        assert button.pet_size == "medium"
+        assert (button.width(), button.height()) == (116, 122)
+
+    def test_reduce_motion_stops_periodic_animation(self, button):
+        button.set_responding(True)
+        assert button._animation_timer.isActive()
+        button.set_reduce_motion(True)
+        assert button.reduce_motion
+        assert not button._animation_timer.isActive()
+        assert button._animation_phase == 0
+        button._advance_animation()
+        assert button._animation_phase == 0
+
+        button.set_reduce_motion(False)
+        assert button._animation_timer.isActive()
+        button.set_responding(False)
+
+    def test_hidden_pet_stops_timers_and_show_restores_tracking(self, button):
+        button._animation_timer.start()
+        button._track_timer.start()
+        button._result_timer.start(500)
+        button.hide()
+        assert not button._animation_timer.isActive()
+        assert not button._track_timer.isActive()
+        assert not button._result_timer.isActive()
+
+        button.show()
+        assert button._animation_timer.isActive()
+        assert button._track_timer.isActive()
+
     def test_working_state_has_priority_over_capture_state(self, button):
         button.set_listening(True)
         assert button._effective_state() == "listening"

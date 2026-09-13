@@ -36,7 +36,12 @@ _ICON_PATH = next(
 _PET_PATH = resource_path("ai_desktop", "桌面宠物.png")
 
 _COMPACT_SIZE = 44
-_PET_SIZE = QSize(116, 122)
+_PET_SIZES = {
+    "small": QSize(92, 97),
+    "medium": QSize(116, 122),
+    "large": QSize(140, 147),
+}
+_DEFAULT_PET_SIZE = "medium"
 
 
 def _make_circular_icon(path: str, size: int) -> QIcon:
@@ -103,12 +108,21 @@ class FloatButton(QPushButton):
     quick_action_requested = pyqtSignal(str)
     placement_changed = pyqtSignal()
 
-    def __init__(self, parent=None, *, pet_enabled: bool = True):
+    def __init__(
+        self,
+        parent=None,
+        *,
+        pet_enabled: bool = True,
+        reduce_motion: bool = False,
+        pet_size: str = _DEFAULT_PET_SIZE,
+    ):
         super().__init__(parent)
         self._drag_pos: QPoint | None = None
         self._auto_hide = False
         self._is_dragging: bool = False
         self._pet_enabled = bool(pet_enabled and os.path.exists(_PET_PATH))
+        self._reduce_motion = bool(reduce_motion)
+        self._pet_size = self._normalize_pet_size(pet_size)
         self._listening = False
         self._responding: bool = False
         self._result_state: str | None = None
@@ -151,15 +165,19 @@ class FloatButton(QPushButton):
         margin = max(8, int(min(bounds.width(), bounds.height()) * 0.035))
         return source.copy(bounds.adjusted(-margin, -margin, margin, margin).intersected(source.rect()))
 
+    @staticmethod
+    def _normalize_pet_size(value: str) -> str:
+        value = str(value).strip().lower()
+        return value if value in _PET_SIZES else _DEFAULT_PET_SIZE
+
     def _apply_mode(self) -> None:
         if self._pet_enabled and not self._pet_content.isNull():
-            self.setFixedSize(_PET_SIZE)
+            self.setFixedSize(_PET_SIZES[self._pet_size])
             self.setIcon(QIcon())
             self.setText("")
             self.setStyleSheet("QPushButton { background: transparent; border: none; }")
             self.setToolTip(self._state_tooltip())
-            if self.isVisible():
-                self._animation_timer.start()
+            self._sync_animation_timer()
             self.update()
             return
 
@@ -184,8 +202,18 @@ class FloatButton(QPushButton):
             )
             self.setText("AI")
         self.setToolTip("AI 桌面助手")
-        if self._responding and self.isVisible():
+        self._sync_animation_timer()
+
+    def _sync_animation_timer(self) -> None:
+        should_animate = bool(
+            self.isVisible()
+            and not self._reduce_motion
+            and (self._pet_enabled or self._responding)
+        )
+        if should_animate:
             self._animation_timer.start()
+        else:
+            self._animation_timer.stop()
 
     def set_pet_enabled(self, enabled: bool) -> None:
         enabled = bool(enabled and not self._pet_content.isNull())
@@ -200,6 +228,34 @@ class FloatButton(QPushButton):
     @property
     def pet_enabled(self) -> bool:
         return self._pet_enabled
+
+    @property
+    def reduce_motion(self) -> bool:
+        return self._reduce_motion
+
+    def set_reduce_motion(self, enabled: bool) -> None:
+        self._reduce_motion = bool(enabled)
+        if self._reduce_motion:
+            self._animation_phase = 0
+            self.setWindowOpacity(1.0)
+        self._sync_animation_timer()
+        self.update()
+
+    @property
+    def pet_size(self) -> str:
+        return self._pet_size
+
+    def set_pet_size(self, size: str) -> None:
+        size = self._normalize_pet_size(size)
+        if size == self._pet_size:
+            return
+        anchor = self.geometry().bottomRight()
+        self._pet_size = size
+        if self._pet_enabled:
+            self.setFixedSize(_PET_SIZES[size])
+            self.move(anchor.x() - self.width() + 1, anchor.y() - self.height() + 1)
+            self.ensure_visible()
+        self.update()
 
     def set_quick_actions(self, actions: list[tuple[str, str]]) -> None:
         """Set up to three recent text actions shown in the pet context menu."""
@@ -223,64 +279,100 @@ class FloatButton(QPushButton):
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
 
-        bob = round(math.sin(self._animation_phase * math.pi / 6) * 1.5)
-        extra = 2 if self._hovered else 0
-        target = self.rect().adjusted(4 - extra, 5 + bob - extra, -4 + extra, -7 + extra)
+        scale = min(self.width() / 116, self.height() / 122)
+        def px(value: float) -> int:
+            return max(1, round(value * scale))
+
+        bob = 0 if self._reduce_motion else round(
+            math.sin(self._animation_phase * math.pi / 6) * 1.5 * scale
+        )
+        extra = px(2) if self._hovered else 0
+        target = self.rect().adjusted(
+            px(4) - extra,
+            px(5) + bob - extra,
+            -px(4) + extra,
+            -px(7) + extra,
+        )
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor(14, 24, 55, 38))
-        painter.drawEllipse(24, self.height() - 10, self.width() - 48, 6)
+        painter.drawEllipse(
+            px(24), self.height() - px(10), self.width() - px(48), px(6)
+        )
         painter.drawPixmap(target, self._pet_content)
 
         state = self._effective_state()
         if state != "idle":
-            bubble_width = 38 if state == "working" else 30
-            bubble = QRectF(self.width() - bubble_width - 3, 3, bubble_width, 24)
-            painter.setPen(QPen(QColor(92, 207, 255, 210), 1.5))
+            bubble_width = px(38 if state == "working" else 30)
+            bubble = QRectF(
+                self.width() - bubble_width - px(3),
+                px(3),
+                bubble_width,
+                px(24),
+            )
+            painter.setPen(QPen(QColor(92, 207, 255, 210), 1.5 * scale))
             painter.setBrush(QColor(255, 255, 255, 235))
-            painter.drawRoundedRect(bubble, 12, 12)
+            painter.drawRoundedRect(bubble, px(12), px(12))
             if state == "listening":
-                painter.setPen(QPen(QColor(20, 142, 235, 230), 2.2))
+                painter.setPen(QPen(QColor(20, 142, 235, 230), 2.2 * scale))
                 center_x = bubble.center().x()
                 painter.drawLine(
-                    round(center_x), round(bubble.top() + 6),
-                    round(center_x), round(bubble.bottom() - 7),
+                    round(center_x), round(bubble.top() + px(6)),
+                    round(center_x), round(bubble.bottom() - px(7)),
                 )
                 painter.drawLine(
-                    round(center_x), round(bubble.bottom() - 7),
-                    round(center_x - 4), round(bubble.bottom() - 11),
+                    round(center_x), round(bubble.bottom() - px(7)),
+                    round(center_x - px(4)), round(bubble.bottom() - px(11)),
                 )
                 painter.drawLine(
-                    round(center_x), round(bubble.bottom() - 7),
-                    round(center_x + 4), round(bubble.bottom() - 11),
+                    round(center_x), round(bubble.bottom() - px(7)),
+                    round(center_x + px(4)), round(bubble.bottom() - px(11)),
                 )
             elif state == "working":
-                active_dot = (self._animation_phase // 2) % 3
+                active_dot = (
+                    None if self._reduce_motion else (self._animation_phase // 2) % 3
+                )
                 for index in range(3):
-                    alpha = 235 if index == active_dot else 90
+                    alpha = 190 if active_dot is None else (235 if index == active_dot else 90)
                     painter.setBrush(QColor(20, 142, 235, alpha))
-                    x = bubble.left() + bubble.width() / 2 + (index - 1) * 7
-                    painter.drawEllipse(QRectF(x - 2, bubble.center().y() - 2, 4, 4))
+                    x = bubble.left() + bubble.width() / 2 + (index - 1) * px(7)
+                    radius = px(2)
+                    painter.drawEllipse(
+                        QRectF(
+                            x - radius,
+                            bubble.center().y() - radius,
+                            radius * 2,
+                            radius * 2,
+                        )
+                    )
             elif state == "success":
-                painter.setPen(QPen(QColor(27, 166, 93, 235), 2.3))
+                painter.setPen(QPen(QColor(27, 166, 93, 235), 2.3 * scale))
                 center = bubble.center()
                 painter.drawLine(
-                    round(center.x() - 5), round(center.y()),
-                    round(center.x() - 1), round(center.y() + 4),
+                    round(center.x() - px(5)), round(center.y()),
+                    round(center.x() - px(1)), round(center.y() + px(4)),
                 )
                 painter.drawLine(
-                    round(center.x() - 1), round(center.y() + 4),
-                    round(center.x() + 6), round(center.y() - 5),
+                    round(center.x() - px(1)), round(center.y() + px(4)),
+                    round(center.x() + px(6)), round(center.y() - px(5)),
                 )
             else:
-                painter.setPen(QPen(QColor(218, 75, 87, 235), 2.3))
+                painter.setPen(QPen(QColor(218, 75, 87, 235), 2.3 * scale))
                 center = bubble.center()
                 painter.drawLine(
-                    round(center.x()), round(center.y() - 6),
-                    round(center.x()), round(center.y() + 2),
+                    round(center.x()), round(center.y() - px(6)),
+                    round(center.x()), round(center.y() + px(2)),
                 )
                 painter.setBrush(QColor(218, 75, 87, 235))
                 painter.setPen(Qt.NoPen)
-                painter.drawEllipse(QRectF(center.x() - 1.5, center.y() + 5, 3, 3))
+                radius = 1.5 * scale
+                painter.drawEllipse(
+                    QRectF(
+                        center.x() - radius,
+                        center.y() + px(5),
+                        radius * 2,
+                        radius * 2,
+                    )
+                )
         painter.end()
 
     def _effective_state(self) -> str:
@@ -302,6 +394,9 @@ class FloatButton(QPushButton):
         }[self._effective_state()]
 
     def _advance_animation(self) -> None:
+        if self._reduce_motion:
+            self._animation_timer.stop()
+            return
         self._animation_phase = (self._animation_phase + 1) % 12
         if not self._pet_enabled:
             if self._responding:
@@ -320,13 +415,16 @@ class FloatButton(QPushButton):
         super().leaveEvent(event)
 
     def showEvent(self, event) -> None:
-        if self._pet_enabled or self._responding:
-            self._animation_timer.start()
+        self._sync_animation_timer()
+        if hasattr(self, "_track_timer"):
+            self._track_timer.start()
         super().showEvent(event)
 
     def hideEvent(self, event) -> None:
         self._animation_timer.stop()
         self._result_timer.stop()
+        if hasattr(self, "_track_timer"):
+            self._track_timer.stop()
         self._result_state = None
         super().hideEvent(event)
 
@@ -338,10 +436,7 @@ class FloatButton(QPushButton):
         if responding:
             self._result_timer.stop()
             self._result_state = None
-            if self.isVisible():
-                self._animation_timer.start()
-        elif not self._pet_enabled:
-            self._animation_timer.stop()
+        self._sync_animation_timer()
         self.setWindowOpacity(1.0)
         self.setToolTip(self._state_tooltip())
         self.update()
@@ -349,7 +444,10 @@ class FloatButton(QPushButton):
     def show_result(self, succeeded: bool) -> None:
         """短暂显示本次请求结果，然后恢复空闲状态。"""
         self._result_state = "success" if succeeded else "error"
-        self._result_timer.start(1600)
+        if self.isVisible():
+            self._result_timer.start(1600)
+        else:
+            self._result_state = None
         self.setToolTip(self._state_tooltip())
         self.update()
 
@@ -371,7 +469,8 @@ class FloatButton(QPushButton):
         self._track_timer = QTimer(self)
         self._track_timer.setInterval(500)
         self._track_timer.timeout.connect(self._follow_cursor_screen)
-        self._track_timer.start()
+        if self.isVisible():
+            self._track_timer.start()
 
     def _follow_cursor_screen(self) -> None:
         """如果鼠标所在的屏幕与按钮不同，移动按钮到鼠标所在屏幕"""
