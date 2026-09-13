@@ -5,12 +5,19 @@ import ctypes
 import ctypes.util
 import os
 
-from PyQt5.QtCore import QPoint, QRectF, Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import QPoint, QRectF, QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QCursor, QIcon, QPainter, QPainterPath, QPixmap
 from PyQt5.QtWidgets import QApplication, QMenu, QPushButton
 
 from ai_desktop.ui import styles
 from ai_desktop.utils.paths import resource_path
+from ai_desktop.utils.window_state import (
+    ScreenArea,
+    WindowState,
+    fit_window_state,
+    parse_window_state,
+    serialize_window_state,
+)
 
 _ICON_PATH = next(
     (resource_path("ai_desktop", f) for f in ("图标.icns", "图标.png")
@@ -78,6 +85,7 @@ class FloatButton(QPushButton):
     about_requested = pyqtSignal()
     settings_requested = pyqtSignal()
     auto_hide_toggled = pyqtSignal(bool)
+    placement_changed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -164,6 +172,47 @@ class FloatButton(QPushButton):
             x = geo.right() - self.width() - 20
             y = geo.center().y() - self.height() // 2
             self.move(x, y)
+
+    @staticmethod
+    def _screen_areas() -> list[ScreenArea]:
+        return [ScreenArea(screen.name(), screen.availableGeometry()) for screen in QApplication.screens()]
+
+    def ensure_visible(self) -> None:
+        state = WindowState(self.x(), self.y(), screen=self._screen_name())
+        fitted = fit_window_state(
+            state,
+            self._screen_areas(),
+            fallback_size=self.size(),
+            minimum_size=QSize(_SIZE, _SIZE),
+        )
+        if fitted is not None:
+            self.move(fitted[0].topLeft())
+
+    def restore_placement(self, raw: str) -> bool:
+        state = parse_window_state(raw, include_size=False)
+        if state is None:
+            return False
+        fitted = fit_window_state(
+            state,
+            self._screen_areas(),
+            fallback_size=self.size(),
+            minimum_size=QSize(_SIZE, _SIZE),
+        )
+        if fitted is None:
+            return False
+        self.move(fitted[0].topLeft())
+        return True
+
+    def _screen_name(self) -> str:
+        screen = QApplication.screenAt(self.geometry().center()) or QApplication.primaryScreen()
+        return screen.name() if screen is not None else ""
+
+    def placement_state(self) -> str:
+        return serialize_window_state(self.geometry(), self._screen_name(), include_size=False)
+
+    def moveEvent(self, event) -> None:
+        super().moveEvent(event)
+        self.placement_changed.emit()
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:

@@ -149,16 +149,29 @@ class ChatController(QObject):
         self._stale_workers: list[StreamingChatWorker] = []
         self._response_text = ""
         self._dialog: Optional[ChatDialog] = None
+        self._chat_geometry = get_setting("chat_window_geometry")
+
+        self._window_state_timer = QTimer(self)
+        self._window_state_timer.setSingleShot(True)
+        self._window_state_timer.setInterval(500)
+        self._window_state_timer.timeout.connect(self._save_window_state)
+        self._screen_recovery_timer = QTimer(self)
+        self._screen_recovery_timer.setSingleShot(True)
+        self._screen_recovery_timer.setInterval(100)
+        self._screen_recovery_timer.timeout.connect(self._ensure_windows_visible)
 
         # 悬浮按钮
         self.float_btn = FloatButton()
+        self.float_btn.restore_placement(get_setting("float_button_placement"))
         self.float_btn.clicked.connect(self._toggle_dialog)
         self.float_btn.exit_requested.connect(self._on_exit)
         self.float_btn.hide_requested.connect(self.float_btn.hide)
         self.float_btn.about_requested.connect(self._show_about)
         self.float_btn.settings_requested.connect(self._on_settings_requested)
         self.float_btn.auto_hide_toggled.connect(self._on_auto_hide_toggled)
+        self.float_btn.placement_changed.connect(self._schedule_window_state_save)
         self.float_btn.set_auto_hide_state(self._auto_hide)
+        self._connect_screen_signals()
 
         # 菜单栏图标
         self._tray = MenuBarIcon(self._all_agents, self._active_agent)
@@ -255,6 +268,9 @@ class ChatController(QObject):
             return
         self._stopping = True
         self.shutdown_started.emit()
+        self._window_state_timer.stop()
+        self._screen_recovery_timer.stop()
+        self._save_window_state()
         self._tray.hide()
         self.hotkey.stop()
         self.hotkey_img.stop()
@@ -451,6 +467,8 @@ class ChatController(QObject):
             cached_models = self._load_cached_models(config.OLLAMA_BASE_URL)
             self._dialog = ChatDialog(self._all_agents, self._active_agent, cached_models, self._model,
                                      auto_hide=self._auto_hide)
+            self._dialog.restore_geometry(self._chat_geometry)
+            self._dialog.geometry_changed.connect(self._schedule_window_state_save)
             self._dialog.message_sent.connect(self._on_user_message)
             self._dialog.screenshot_requested.connect(self._on_screenshot_hotkey)
             self._dialog.new_convo_requested.connect(self._new_conversation)
@@ -487,6 +505,42 @@ class ChatController(QObject):
         self._dialog.show_near(
             self.float_btn.mapToGlobal(self.float_btn.rect().topLeft())
         )
+
+    def _schedule_window_state_save(self) -> None:
+        if not self._stopping and not self._stopped:
+            self._window_state_timer.start()
+
+    def _connect_screen_signals(self) -> None:
+        app = QApplication.instance()
+        if app is None:
+            return
+        app.screenAdded.connect(self._on_screen_added)
+        app.screenRemoved.connect(self._schedule_screen_recovery)
+        for screen in app.screens():
+            screen.availableGeometryChanged.connect(self._schedule_screen_recovery)
+
+    def _on_screen_added(self, screen) -> None:
+        screen.availableGeometryChanged.connect(self._schedule_screen_recovery)
+        self._schedule_screen_recovery()
+
+    def _schedule_screen_recovery(self, *_) -> None:
+        if not self._stopping and not self._stopped:
+            self._screen_recovery_timer.start()
+
+    def _ensure_windows_visible(self) -> None:
+        self.float_btn.ensure_visible()
+        if self._dialog is not None and self._dialog.isVisible():
+            self._dialog.ensure_visible()
+
+    def _save_window_state(self) -> None:
+        float_state = self.float_btn.placement_state()
+        if isinstance(float_state, str):
+            save_setting("float_button_placement", float_state)
+        if self._dialog is not None:
+            chat_state = self._dialog.geometry_state()
+            if isinstance(chat_state, str):
+                self._chat_geometry = chat_state
+                save_setting("chat_window_geometry", chat_state)
 
     @_safe_slot
     def _on_auto_hide_toggled(self, checked: bool) -> None:

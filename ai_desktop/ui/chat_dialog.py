@@ -5,7 +5,7 @@ import html
 import logging
 from pathlib import Path
 
-from PyQt5.QtCore import QEvent, QPoint, QRectF, Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import QEvent, QPoint, QRectF, QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QKeyEvent, QPainterPath, QPixmap, QRegion, QTextCursor
 from PyQt5.QtWidgets import (
     QApplication,
@@ -31,6 +31,13 @@ from ai_desktop.ui import markdown, styles, theme
 from ai_desktop.ui.float_button import pin_to_all_spaces
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 from ai_desktop.utils import images as image_utils
+from ai_desktop.utils.window_state import (
+    ScreenArea,
+    WindowState,
+    fit_window_state,
+    parse_window_state,
+    serialize_window_state,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +94,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
     model_changed = pyqtSignal(str)
     service_check_requested = pyqtSignal()
     closed = pyqtSignal()
+    geometry_changed = pyqtSignal()
 
     def __init__(self, agents: list[Agent], active_agent: Agent,
                  models: list[str] | None = None, active_model: str = "",
@@ -99,6 +107,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._models = list(models) if models else []
         self._active_model = active_model
         self._image_capability = ImageCapability.UNKNOWN
+        self._placement_initialized = False
         self._user_scrolled_up: bool = False
         self._pending_images: list[str] = []     # 发送前暂存的图片（应用数据目录路径）
         self._stream_bubble: QLabel | None = None
@@ -160,6 +169,47 @@ class ChatDialog(FramelessDragMixin, QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._apply_rounded_mask()
+        self.geometry_changed.emit()
+
+    def moveEvent(self, event) -> None:
+        super().moveEvent(event)
+        self.geometry_changed.emit()
+
+    @staticmethod
+    def _screen_areas() -> list[ScreenArea]:
+        return [ScreenArea(screen.name(), screen.availableGeometry()) for screen in QApplication.screens()]
+
+    def _screen_name(self) -> str:
+        screen = QApplication.screenAt(self.geometry().center()) or QApplication.primaryScreen()
+        return screen.name() if screen is not None else ""
+
+    def geometry_state(self) -> str:
+        return serialize_window_state(self.geometry(), self._screen_name(), include_size=True)
+
+    def _apply_fitted_state(self, state: WindowState) -> bool:
+        fitted = fit_window_state(
+            state,
+            self._screen_areas(),
+            fallback_size=self.size(),
+            minimum_size=QSize(400, 460),
+        )
+        if fitted is None:
+            return False
+        rect, screen = fitted
+        self.setMinimumSize(min(400, screen.geometry.width()), min(460, screen.geometry.height()))
+        self.setGeometry(rect)
+        self._placement_initialized = True
+        return True
+
+    def restore_geometry(self, raw: str) -> bool:
+        state = parse_window_state(raw, include_size=True)
+        return state is not None and self._apply_fitted_state(state)
+
+    def ensure_visible(self) -> None:
+        state = WindowState(
+            self.x(), self.y(), self.width(), self.height(), self._screen_name()
+        )
+        self._apply_fitted_state(state)
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -1261,21 +1311,26 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     def show_near(self, anchor: QPoint) -> None:
         """在悬浮按钮左侧弹出"""
-        if not self.isVisible():
+        if not self._placement_initialized:
             w, h = self._default_size()
-            self.resize(w, h)
-        x = anchor.x() - self.width() - 12
-        y = anchor.y() - self.height() // 2
-        screen = QApplication.primaryScreen()
-        if screen:
-            geo = screen.availableGeometry()
-            if x < geo.left():
-                x = anchor.x() + 60
-            if y < geo.top():
-                y = geo.top() + 8
-            if y + self.height() > geo.bottom():
-                y = geo.bottom() - self.height() - 8
-        self.move(x, y)
+            x = anchor.x() - w - 12
+            y = anchor.y() - h // 2
+            screen = QApplication.screenAt(anchor) or QApplication.primaryScreen()
+            if screen:
+                geo = screen.availableGeometry()
+                if x < geo.left():
+                    x = anchor.x() + 60
+                if y < geo.top():
+                    y = geo.top() + 8
+                if y + h > geo.y() + geo.height():
+                    y = geo.y() + geo.height() - h - 8
+                self._apply_fitted_state(WindowState(x, y, w, h, screen.name()))
+            else:
+                self.resize(w, h)
+                self.move(x, y)
+                self._placement_initialized = True
+        else:
+            self.ensure_visible()
         self.show()
         pin_to_all_spaces(self)
         self.activateWindow()
