@@ -28,6 +28,7 @@ def dialog(qtbot):
         "max_rounds": 10,
         "hotkey": "<cmd>+<ctrl>+l",
         "quick_actions": True,
+        "desktop_pet": True,
     }
     d = SettingsDialog(current=current)
     qtbot.addWidget(d)
@@ -58,6 +59,7 @@ class TestSettingsDialogSignals:
         assert "timeout" in data
         assert "hotkey" in data
         assert data["quick_actions"] is True
+        assert data["desktop_pet"] is True
 
     def test_cancel_does_not_emit(self, qtbot, dialog):
         """Clicking cancel → settings_applied signal is NOT emitted."""

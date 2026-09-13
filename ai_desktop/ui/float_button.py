@@ -1,12 +1,20 @@
-"""
-屏幕悬浮按钮 —— 可拖拽，始终置顶，圆形图标，跟随屏幕切换，跨 Spaces
-"""
+"""桌面宠物入口：可拖拽、跨 Spaces，并显示捕获与生成状态。"""
 import ctypes
 import ctypes.util
+import math
 import os
 
 from PyQt5.QtCore import QPoint, QRectF, QSize, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QCursor, QIcon, QPainter, QPainterPath, QPixmap
+from PyQt5.QtGui import (
+    QColor,
+    QCursor,
+    QIcon,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+    QRegion,
+)
 from PyQt5.QtWidgets import QApplication, QMenu, QPushButton
 
 from ai_desktop.ui import styles
@@ -24,8 +32,10 @@ _ICON_PATH = next(
      if os.path.exists(resource_path("ai_desktop", f))),
     resource_path("ai_desktop", "图标.png"),
 )
+_PET_PATH = resource_path("ai_desktop", "桌面宠物.png")
 
-_SIZE = 44
+_COMPACT_SIZE = 44
+_PET_SIZE = QSize(116, 122)
 
 
 def _make_circular_icon(path: str, size: int) -> QIcon:
@@ -85,61 +95,245 @@ class FloatButton(QPushButton):
     about_requested = pyqtSignal()
     settings_requested = pyqtSignal()
     auto_hide_toggled = pyqtSignal(bool)
+    pet_mode_toggled = pyqtSignal(bool)
     placement_changed = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, pet_enabled: bool = True):
         super().__init__(parent)
         self._drag_pos: QPoint | None = None
         self._auto_hide = False
         self._is_dragging: bool = False
+        self._pet_enabled = bool(pet_enabled and os.path.exists(_PET_PATH))
+        self._listening = False
         self._responding: bool = False
-        self._pulse_on: bool = False
+        self._result_state: str | None = None
+        self._hovered = False
+        self._animation_phase = 0
+        self._pet_source = QPixmap(_PET_PATH) if os.path.exists(_PET_PATH) else QPixmap()
+        self._pet_content = self._cropped_pet(self._pet_source)
+        self._animation_timer = QTimer(self)
+        self._animation_timer.setInterval(180)
+        self._animation_timer.timeout.connect(self._advance_animation)
+        self._result_timer = QTimer(self)
+        self._result_timer.setSingleShot(True)
+        self._result_timer.timeout.connect(self._clear_result_state)
         self._init_ui()
         self._position_initial()
         self._start_screen_tracking()
 
     def _init_ui(self) -> None:
-        self.setFixedSize(_SIZE, _SIZE)
         self.setWindowFlags(
             Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setCursor(Qt.PointingHandCursor)
+        self.setAccessibleName("AI 桌面宠物")
+        self._apply_mode()
+
+    @staticmethod
+    def _cropped_pet(source: QPixmap) -> QPixmap:
+        if source.isNull():
+            return source
+        bounds = QRegion(source.mask()).boundingRect()
+        if bounds.isNull():
+            return source
+        margin = max(8, int(min(bounds.width(), bounds.height()) * 0.035))
+        return source.copy(bounds.adjusted(-margin, -margin, margin, margin).intersected(source.rect()))
+
+    def _apply_mode(self) -> None:
+        if self._pet_enabled and not self._pet_content.isNull():
+            self.setFixedSize(_PET_SIZE)
+            self.setIcon(QIcon())
+            self.setText("")
+            self.setStyleSheet("QPushButton { background: transparent; border: none; }")
+            self.setToolTip(self._state_tooltip())
+            if self.isVisible():
+                self._animation_timer.start()
+            self.update()
+            return
+
+        self._pet_enabled = False
+        self._animation_timer.stop()
+        self.setFixedSize(_COMPACT_SIZE, _COMPACT_SIZE)
 
         if os.path.exists(_ICON_PATH):
-            icon = _make_circular_icon(_ICON_PATH, _SIZE)
+            icon = _make_circular_icon(_ICON_PATH, _COMPACT_SIZE)
             self.setIcon(icon)
             self.setIconSize(self.size())
             self.setStyleSheet(
-                f"QPushButton {{ background: transparent; border: none; border-radius: {_SIZE // 2}px; }}"
-                f"QPushButton:hover {{ background: rgba(255, 255, 255, 0.15); border-radius: {_SIZE // 2}px; }}"
+                "QPushButton { background: transparent; border: none; "
+                f"border-radius: {_COMPACT_SIZE // 2}px; }}"
+                "QPushButton:hover { background: rgba(255, 255, 255, 0.15); "
+                f"border-radius: {_COMPACT_SIZE // 2}px; }}"
             )
         else:
             self.setStyleSheet(
-                f"QPushButton {{ background: rgba(0,122,255,0.85); border-radius: {_SIZE // 2}px; }}"
+                "QPushButton { background: rgba(0,122,255,0.85); "
+                f"border-radius: {_COMPACT_SIZE // 2}px; }}"
             )
             self.setText("AI")
+        self.setToolTip("AI 桌面助手")
+        if self._responding and self.isVisible():
+            self._animation_timer.start()
+
+    def set_pet_enabled(self, enabled: bool) -> None:
+        enabled = bool(enabled and not self._pet_content.isNull())
+        if enabled == self._pet_enabled:
+            return
+        anchor = self.geometry().bottomRight()
+        self._pet_enabled = enabled
+        self._apply_mode()
+        self.move(anchor.x() - self.width() + 1, anchor.y() - self.height() + 1)
+        self.ensure_visible()
+
+    def paintEvent(self, event) -> None:
+        if not self._pet_enabled or self._pet_content.isNull():
+            super().paintEvent(event)
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+
+        bob = round(math.sin(self._animation_phase * math.pi / 6) * 1.5)
+        extra = 2 if self._hovered else 0
+        target = self.rect().adjusted(4 - extra, 5 + bob - extra, -4 + extra, -7 + extra)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(14, 24, 55, 38))
+        painter.drawEllipse(24, self.height() - 10, self.width() - 48, 6)
+        painter.drawPixmap(target, self._pet_content)
+
+        state = self._effective_state()
+        if state != "idle":
+            bubble_width = 38 if state == "working" else 30
+            bubble = QRectF(self.width() - bubble_width - 3, 3, bubble_width, 24)
+            painter.setPen(QPen(QColor(92, 207, 255, 210), 1.5))
+            painter.setBrush(QColor(255, 255, 255, 235))
+            painter.drawRoundedRect(bubble, 12, 12)
+            if state == "listening":
+                painter.setPen(QPen(QColor(20, 142, 235, 230), 2.2))
+                center_x = bubble.center().x()
+                painter.drawLine(
+                    round(center_x), round(bubble.top() + 6),
+                    round(center_x), round(bubble.bottom() - 7),
+                )
+                painter.drawLine(
+                    round(center_x), round(bubble.bottom() - 7),
+                    round(center_x - 4), round(bubble.bottom() - 11),
+                )
+                painter.drawLine(
+                    round(center_x), round(bubble.bottom() - 7),
+                    round(center_x + 4), round(bubble.bottom() - 11),
+                )
+            elif state == "working":
+                active_dot = (self._animation_phase // 2) % 3
+                for index in range(3):
+                    alpha = 235 if index == active_dot else 90
+                    painter.setBrush(QColor(20, 142, 235, alpha))
+                    x = bubble.left() + bubble.width() / 2 + (index - 1) * 7
+                    painter.drawEllipse(QRectF(x - 2, bubble.center().y() - 2, 4, 4))
+            elif state == "success":
+                painter.setPen(QPen(QColor(27, 166, 93, 235), 2.3))
+                center = bubble.center()
+                painter.drawLine(
+                    round(center.x() - 5), round(center.y()),
+                    round(center.x() - 1), round(center.y() + 4),
+                )
+                painter.drawLine(
+                    round(center.x() - 1), round(center.y() + 4),
+                    round(center.x() + 6), round(center.y() - 5),
+                )
+            else:
+                painter.setPen(QPen(QColor(218, 75, 87, 235), 2.3))
+                center = bubble.center()
+                painter.drawLine(
+                    round(center.x()), round(center.y() - 6),
+                    round(center.x()), round(center.y() + 2),
+                )
+                painter.setBrush(QColor(218, 75, 87, 235))
+                painter.setPen(Qt.NoPen)
+                painter.drawEllipse(QRectF(center.x() - 1.5, center.y() + 5, 3, 3))
+        painter.end()
+
+    def _effective_state(self) -> str:
+        if self._responding:
+            return "working"
+        if self._listening:
+            return "listening"
+        if self._result_state:
+            return self._result_state
+        return "idle"
+
+    def _state_tooltip(self) -> str:
+        return {
+            "idle": "AI 桌面宠物 · 点击对话，拖动放置",
+            "listening": "正在读取选中内容…",
+            "working": "AI 正在回复…",
+            "success": "回复已完成",
+            "error": "这次没有完成，可点击查看",
+        }[self._effective_state()]
+
+    def _advance_animation(self) -> None:
+        self._animation_phase = (self._animation_phase + 1) % 12
+        if not self._pet_enabled:
+            if self._responding:
+                self.setWindowOpacity(0.55 if self._animation_phase < 6 else 1.0)
+            return
+        self.update()
+
+    def enterEvent(self, event) -> None:
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._hovered = False
+        self.update()
+        super().leaveEvent(event)
+
+    def showEvent(self, event) -> None:
+        if self._pet_enabled or self._responding:
+            self._animation_timer.start()
+        super().showEvent(event)
+
+    def hideEvent(self, event) -> None:
+        self._animation_timer.stop()
+        self._result_timer.stop()
+        self._result_state = None
+        super().hideEvent(event)
 
     # ── 响应状态脉冲 ───────────────────────────────────
 
     def set_responding(self, responding: bool) -> None:
-        """设置 AI 响应状态：true 时启动脉冲动画，false 时停止"""
+        """设置 AI 生成状态。"""
         self._responding = responding
         if responding:
-            if not hasattr(self, "_pulse_timer"):
-                self._pulse_timer = QTimer(self)
-                self._pulse_timer.setInterval(600)
-                self._pulse_timer.timeout.connect(self._toggle_pulse)
-            self._pulse_timer.start()
-        else:
-            if hasattr(self, "_pulse_timer"):
-                self._pulse_timer.stop()
-            self._pulse_on = False
-            self.setWindowOpacity(1.0)
+            self._result_timer.stop()
+            self._result_state = None
+            if self.isVisible():
+                self._animation_timer.start()
+        elif not self._pet_enabled:
+            self._animation_timer.stop()
+        self.setWindowOpacity(1.0)
+        self.setToolTip(self._state_tooltip())
+        self.update()
 
-    def _toggle_pulse(self) -> None:
-        self._pulse_on = not self._pulse_on
-        self.setWindowOpacity(0.5 if self._pulse_on else 1.0)
+    def show_result(self, succeeded: bool) -> None:
+        """短暂显示本次请求结果，然后恢复空闲状态。"""
+        self._result_state = "success" if succeeded else "error"
+        self._result_timer.start(1600)
+        self.setToolTip(self._state_tooltip())
+        self.update()
+
+    def _clear_result_state(self) -> None:
+        self._result_state = None
+        self.setToolTip(self._state_tooltip())
+        self.update()
+
+    def set_listening(self, listening: bool) -> None:
+        """设置选区或截图捕获状态；生成状态始终优先。"""
+        self._listening = listening
+        self.setToolTip(self._state_tooltip())
+        self.update()
 
     # ── 屏幕跟随 ───────────────────────────────────────
 
@@ -183,7 +377,7 @@ class FloatButton(QPushButton):
             state,
             self._screen_areas(),
             fallback_size=self.size(),
-            minimum_size=QSize(_SIZE, _SIZE),
+            minimum_size=self.size(),
         )
         if fitted is not None:
             self.move(fitted[0].topLeft())
@@ -196,7 +390,7 @@ class FloatButton(QPushButton):
             state,
             self._screen_areas(),
             fallback_size=self.size(),
-            minimum_size=QSize(_SIZE, _SIZE),
+            minimum_size=self.size(),
         )
         if fitted is None:
             return False
@@ -237,22 +431,29 @@ class FloatButton(QPushButton):
         super().mouseReleaseEvent(event)
 
     def contextMenuEvent(self, event) -> None:
+        self._create_context_menu().exec_(event.globalPos())
+
+    def _create_context_menu(self) -> QMenu:
         menu = QMenu(self)
         menu.setStyleSheet(styles.menu_style())
         auto_hide_action = menu.addAction("自动收起对话框")
         auto_hide_action.setCheckable(True)
         auto_hide_action.setChecked(self._auto_hide)
         auto_hide_action.toggled.connect(self.auto_hide_toggled.emit)
+        pet_action = menu.addAction("桌面宠物形态")
+        pet_action.setCheckable(True)
+        pet_action.setChecked(self._pet_enabled)
+        pet_action.toggled.connect(self.pet_mode_toggled.emit)
         menu.addSeparator()
         settings_action = menu.addAction("设置…")
         settings_action.triggered.connect(self.settings_requested.emit)
-        hide_action = menu.addAction("隐藏悬浮球")
+        hide_action = menu.addAction("隐藏桌面宠物" if self._pet_enabled else "隐藏悬浮球")
         hide_action.triggered.connect(self.hide_requested.emit)
         about_action = menu.addAction("关于 AI 桌面助手")
         about_action.triggered.connect(self.about_requested.emit)
         exit_action = menu.addAction("退出")
         exit_action.triggered.connect(self.exit_requested.emit)
-        menu.exec_(event.globalPos())
+        return menu
 
     def set_auto_hide_state(self, enabled: bool) -> None:
         self._auto_hide = enabled

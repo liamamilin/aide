@@ -172,7 +172,7 @@ class ChatController(QObject):
         self._screen_recovery_timer.timeout.connect(self._ensure_windows_visible)
 
         # 悬浮按钮
-        self.float_btn = FloatButton()
+        self.float_btn = FloatButton(pet_enabled=config.DESKTOP_PET_ENABLED)
         self.float_btn.restore_placement(get_setting("float_button_placement"))
         self.float_btn.clicked.connect(self._toggle_dialog)
         self.float_btn.exit_requested.connect(self._on_exit)
@@ -180,6 +180,7 @@ class ChatController(QObject):
         self.float_btn.about_requested.connect(self._show_about)
         self.float_btn.settings_requested.connect(self._on_settings_requested)
         self.float_btn.auto_hide_toggled.connect(self._on_auto_hide_toggled)
+        self.float_btn.pet_mode_toggled.connect(self._on_pet_mode_toggled)
         self.float_btn.placement_changed.connect(self._schedule_window_state_save)
         self.float_btn.set_auto_hide_state(self._auto_hide)
         self._connect_screen_signals()
@@ -350,6 +351,7 @@ class ChatController(QObject):
             return
         if self._screenshot_worker is not None:
             return
+        self.float_btn.set_listening(True)
         self._screenshot_worker = ScreenshotWorker(self)
         self._screenshot_worker.completed.connect(self._on_screenshot_result)
         self._screenshot_worker.finished.connect(self._on_screenshot_finished)
@@ -409,6 +411,7 @@ class ChatController(QObject):
         worker = self.sender()
         if worker is self._screenshot_worker:
             self._screenshot_worker = None
+        self.float_btn.set_listening(False)
         worker.deleteLater()
         self._finish_stop_if_ready()
 
@@ -434,6 +437,7 @@ class ChatController(QObject):
             return
         if self._selection_capture is not None:
             return
+        self.float_btn.set_listening(True)
         task = SelectionCaptureTask(self)
         self._selection_capture = task
         task.completed.connect(lambda text, task=task: self._on_selection_captured(task, text))
@@ -445,6 +449,7 @@ class ChatController(QObject):
             task.deleteLater()
             return
         self._selection_capture = None
+        self.float_btn.set_listening(False)
         task.deleteLater()
         if self._stopping or self._stopped:
             self._finish_stop_if_ready()
@@ -574,6 +579,13 @@ class ChatController(QObject):
             self._dialog.set_auto_hide(checked)
         logger.info("Auto-hide %s", "enabled" if checked else "disabled")
 
+    @_safe_slot
+    def _on_pet_mode_toggled(self, checked: bool) -> None:
+        config.DESKTOP_PET_ENABLED = checked
+        save_setting("desktop_pet_enabled", "true" if checked else "false")
+        self.float_btn.set_pet_enabled(checked)
+        logger.info("Desktop pet mode %s", "enabled" if checked else "disabled")
+
     # ── 退出 / 关于 ───────────────────────────────────
 
     def _on_exit(self) -> None:
@@ -595,6 +607,7 @@ class ChatController(QObject):
             "max_rounds": config.OLLAMA_MAX_ROUNDS,
             "hotkey": config.HOTKEY,
             "quick_actions": config.QUICK_ACTIONS_ENABLED,
+            "desktop_pet": config.DESKTOP_PET_ENABLED,
         }
         dlg = SettingsDialog(current, parent=self._dialog)
         dlg.settings_applied.connect(self._on_settings_applied)
@@ -612,6 +625,8 @@ class ChatController(QObject):
                 logger.warning("Failed to change hotkey: %s", e)
         if "quick_actions" in changed and self._dialog:
             self._dialog.set_actions_enabled(config.QUICK_ACTIONS_ENABLED)
+        if "desktop_pet" in changed:
+            self.float_btn.set_pet_enabled(config.DESKTOP_PET_ENABLED)
         if "base_url" in changed:
             self._startup_service_check = None
             self._service_checks.cancel_service()
@@ -1380,6 +1395,8 @@ class ChatController(QObject):
             return
         text, ok = result.text, result.ok
         self.float_btn.set_responding(False)
+        if result.status != ResultStatus.CANCELLED:
+            self.float_btn.show_result(ok)
         if self._dialog:
             self._dialog.set_thinking(False)
 

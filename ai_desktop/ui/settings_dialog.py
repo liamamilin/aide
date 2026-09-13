@@ -29,6 +29,7 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         ("base_url",    "Ollama 服务地址",   str,   ""),
         ("think",       "模型思考推理",      bool,  True),
         ("quick_actions", "选中文字后显示快捷动作", bool, True),
+        ("desktop_pet", "使用桌面宠物悬浮入口", bool, True),
         ("timeout",     "超时 (秒)",         int,   10),
         ("num_ctx",     "上下文窗口",        int,   2048),
         ("num_predict", "最大输出 token",    int,   256),

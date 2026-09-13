@@ -2,7 +2,6 @@
 from unittest.mock import patch
 
 import pytest
-from PyQt5.QtWidgets import QMenu
 
 
 @pytest.fixture()
@@ -16,6 +15,7 @@ def button(qtbot):
         # Stop the screen tracking timer to avoid side effects
         if hasattr(btn, '_track_timer'):
             btn._track_timer.stop()
+        btn._animation_timer.stop()
         return btn
 
 
@@ -25,23 +25,7 @@ def _get_context_menu(button):
     This mirrors the FloatButton.contextMenuEvent logic to create a QMenu
     with all the same actions and signal connections, so we can test them.
     """
-    from ai_desktop.ui import styles
-    menu = QMenu(button)
-    menu.setStyleSheet(styles.menu_style())
-    auto_hide_action = menu.addAction("自动收起对话框")
-    auto_hide_action.setCheckable(True)
-    auto_hide_action.setChecked(button._auto_hide)
-    auto_hide_action.toggled.connect(button.auto_hide_toggled.emit)
-    menu.addSeparator()
-    settings_action = menu.addAction("设置…")
-    settings_action.triggered.connect(button.settings_requested.emit)
-    hide_action = menu.addAction("隐藏悬浮球")
-    hide_action.triggered.connect(button.hide_requested.emit)
-    about_action = menu.addAction("关于 AI 桌面助手")
-    about_action.triggered.connect(button.about_requested.emit)
-    exit_action = menu.addAction("退出")
-    exit_action.triggered.connect(button.exit_requested.emit)
-    return menu
+    return button._create_context_menu()
 
 
 # ── L1: Signal Tests ───────────────────────────────────
@@ -55,7 +39,8 @@ class TestFloatButtonSignals:
         assert menu is not None
         action_texts = [a.text() for a in menu.actions()]
         assert "设置…" in action_texts
-        assert "隐藏悬浮球" in action_texts
+        assert "桌面宠物形态" in action_texts
+        assert "隐藏桌面宠物" in action_texts
         assert "退出" in action_texts
 
     def test_settings_requested_signal(self, qtbot, button):
@@ -75,7 +60,7 @@ class TestFloatButtonSignals:
         menu = _get_context_menu(button)
         hide_action = None
         for action in menu.actions():
-            if action.text() == "隐藏悬浮球":
+            if action.text() in {"隐藏桌面宠物", "隐藏悬浮球"}:
                 hide_action = action
                 break
         assert hide_action is not None
@@ -138,3 +123,44 @@ class TestFloatButtonState:
         # Signal should carry a bool
         assert len(spy.args) == 1
         assert isinstance(spy.args[0], bool)
+
+    def test_pet_mode_toggled_signal(self, qtbot, button):
+        menu = _get_context_menu(button)
+        action = next(item for item in menu.actions() if item.text() == "桌面宠物形态")
+        with qtbot.waitSignal(button.pet_mode_toggled, timeout=1000) as spy:
+            action.toggle()
+        assert spy.args == [False]
+
+    def test_pet_and_compact_modes_keep_expected_sizes(self, button):
+        assert button._pet_enabled
+        assert not button._pet_content.isNull()
+        assert button.size().width() > 44
+        assert button.size().height() > 44
+        button.set_pet_enabled(False)
+        assert button.size().width() == 44
+        assert button.size().height() == 44
+        button.set_responding(True)
+        assert button._animation_timer.isActive()
+        button.set_responding(False)
+        assert not button._animation_timer.isActive()
+        button.set_pet_enabled(True)
+        assert button._pet_enabled
+
+    def test_working_state_has_priority_over_capture_state(self, button):
+        button.set_listening(True)
+        assert button._effective_state() == "listening"
+        button.set_responding(True)
+        assert button._effective_state() == "working"
+        button.set_responding(False)
+        assert button._effective_state() == "listening"
+        button.set_listening(False)
+        assert button._effective_state() == "idle"
+
+    def test_result_state_returns_to_idle(self, qtbot, button):
+        button.show_result(True)
+        assert button._effective_state() == "success"
+        button._result_timer.start(1)
+        qtbot.waitUntil(lambda: button._effective_state() == "idle", timeout=100)
+
+        button.show_result(False)
+        assert button._effective_state() == "error"

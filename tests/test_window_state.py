@@ -96,7 +96,7 @@ def test_float_button_restores_and_clamps_position(qtbot):
         qtbot.addWidget(button)
         raw = serialize_window_state(QRect(900, 700, 44, 44), "Missing", include_size=False)
         assert button.restore_placement(raw)
-        assert button.pos() == QPoint(756, 556)
+        assert button.pos() == QPoint(800 - button.width(), 600 - button.height())
 
 
 def test_controller_restores_and_debounces_window_state(qtbot, tmp_db, monkeypatch):

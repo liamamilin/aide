@@ -84,7 +84,7 @@ def validate_bundle(bundle: Path, version: str) -> list[str]:
         errors.append(f"missing bundle executable: {executable}")
 
     resources = contents / "Resources" / "ai_desktop"
-    for name in ("图标.icns", "图标.png"):
+    for name in ("图标.icns", "图标.png", "桌面宠物.png"):
         if not (resources / name).is_file():
             errors.append(f"missing bundled resource: ai_desktop/{name}")
 

@@ -44,7 +44,7 @@ def test_bundle_validator_checks_version_dependencies_and_resources(tmp_path):
     executable.touch()
     resources = contents / "Resources" / "ai_desktop"
     resources.mkdir(parents=True)
-    for name in ("图标.icns", "图标.png"):
+    for name in ("图标.icns", "图标.png", "桌面宠物.png"):
         (resources / name).touch()
     frameworks = contents / "Frameworks"
     for name in (

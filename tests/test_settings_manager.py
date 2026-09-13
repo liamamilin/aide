@@ -22,6 +22,7 @@ _ORIG_DEFAULTS = {
     "OLLAMA_MAX_ROUNDS": config.OLLAMA_MAX_ROUNDS,
     "HOTKEY": config.HOTKEY,
     "QUICK_ACTIONS_ENABLED": config.QUICK_ACTIONS_ENABLED,
+    "DESKTOP_PET_ENABLED": config.DESKTOP_PET_ENABLED,
 }
 
 
@@ -63,11 +64,13 @@ class TestSettingsManagerLoad:
         storage.save_setting("ollama_base_url", "http://custom:1234")
         storage.save_setting("ollama_timeout", "60")
         storage.save_setting("quick_actions_enabled", "false")
+        storage.save_setting("desktop_pet_enabled", "false")
         mgr = SettingsManager()
         mgr.load()
         assert config.OLLAMA_BASE_URL == "http://custom:1234"
         assert config.OLLAMA_TIMEOUT == 60
         assert config.QUICK_ACTIONS_ENABLED is False
+        assert config.DESKTOP_PET_ENABLED is False
 
     def test_load_skips_invalid_values(self):
         _reset_config()
@@ -138,6 +141,14 @@ class TestSettingsManagerApply:
         assert "quick_actions" in changed
         assert config.QUICK_ACTIONS_ENABLED is False
         assert storage.get_setting("quick_actions_enabled") == "False"
+
+    def test_apply_persists_desktop_pet_toggle(self):
+        _reset_config()
+        mgr = SettingsManager()
+        changed = mgr.apply({"desktop_pet": False})
+        assert "desktop_pet" in changed
+        assert config.DESKTOP_PET_ENABLED is False
+        assert storage.get_setting("desktop_pet_enabled") == "False"
 
     def test_apply_rejects_invalid_hotkey(self):
         _reset_config()

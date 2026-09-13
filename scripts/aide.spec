@@ -13,6 +13,7 @@ a = Analysis(
     datas=[
         (os.path.join(ROOT, "ai_desktop", "图标.icns"), "ai_desktop"),
         (os.path.join(ROOT, "ai_desktop", "图标.png"), "ai_desktop"),
+        (os.path.join(ROOT, "ai_desktop", "桌面宠物.png"), "ai_desktop"),
     ],
     hiddenimports=[
         'PyQt5.QtNetwork',

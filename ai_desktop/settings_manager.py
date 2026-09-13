@@ -28,6 +28,7 @@ _SETTING_MAP = [
     ("hotkey",          "HOTKEY",                str),
     ("think",           "OLLAMA_THINK",          bool),
     ("quick_actions",   "QUICK_ACTIONS_ENABLED", bool),
+    ("desktop_pet",     "DESKTOP_PET_ENABLED",   bool),
 ]
 
 _DB_KEY_MAP = {
@@ -43,6 +44,7 @@ _DB_KEY_MAP = {
     "hotkey":         "hotkey",
     "think":          "ollama_think",
     "quick_actions":  "quick_actions_enabled",
+    "desktop_pet":    "desktop_pet_enabled",
 }
 
 
