@@ -15,6 +15,8 @@ GitHub Release.
   and chat interfaces.
 - Preserved all enumerable macOS clipboard formats during selection capture and
   skipped restoration when the user copies newer content.
+- Added four validated quick actions with persistent Agent/profile settings and
+  a keyboard-driven action bar after text selection.
 
 ## 1.5.0 — Candidate
 
