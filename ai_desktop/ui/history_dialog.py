@@ -7,6 +7,7 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QDialog,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -16,22 +17,28 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from ai_desktop.config import AGENTS
+from ai_desktop.config import AGENTS, Agent
 from ai_desktop.ui import styles
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 from ai_desktop.utils.storage import (
     delete_conversation,
-    list_conversations_with_counts,
-    search_conversations,
+    page_conversations,
+    update_conversation_title,
 )
 
 
 class HistoryDialog(FramelessDragMixin, QDialog):
+    PAGE_SIZE = 50
     conversation_selected = pyqtSignal(int)
     conversation_deleted = pyqtSignal(int)
+    conversation_renamed = pyqtSignal(int, str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, agents: list[Agent] | None = None):
         super().__init__(parent)
+        self._agents = {agent.id: agent for agent in (agents or AGENTS)}
+        self._query = ""
+        self._cursor: tuple[float, int] | None = None
+        self._loaded_ids: list[int] = []
         self._setup_drag(40)
         self._setup_window()
         self._setup_ui()
@@ -84,9 +91,9 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         self._search_timer.timeout.connect(self._do_search)
 
         # ── 列表区域 ──
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(styles.SCROLL_AREA)
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setStyleSheet(styles.SCROLL_AREA)
 
         self._list_container = QWidget()
         self._list_layout = QVBoxLayout(self._list_container)
@@ -94,8 +101,15 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         self._list_layout.setSpacing(4)
         self._list_layout.addStretch()
 
-        scroll.setWidget(self._list_container)
-        root.addWidget(scroll)
+        self._scroll.setWidget(self._list_container)
+        root.addWidget(self._scroll)
+
+        self._load_more_btn = QPushButton("加载更多")
+        self._load_more_btn.setObjectName("history_load_more")
+        self._load_more_btn.setStyleSheet(styles.SECONDARY_BUTTON)
+        self._load_more_btn.clicked.connect(self._load_more)
+        self._load_more_btn.setVisible(False)
+        root.addWidget(self._load_more_btn)
 
     # ── 搜索 ───────────────────────────────────────────
 
@@ -106,21 +120,7 @@ class HistoryDialog(FramelessDragMixin, QDialog):
     def _do_search(self) -> None:
         """执行搜索并刷新列表"""
         query = self._search.text().strip()
-        self._clear_list()
-        if not query:
-            # 空搜索 → 显示全部
-            self._load()
-            return
-        results = search_conversations(query, limit=50)
-        if not results:
-            empty = QLabel("未找到匹配的对话")
-            empty.setStyleSheet(styles.EMPTY_STATE)
-            empty.setAlignment(Qt.AlignCenter)
-            self._list_layout.insertWidget(0, empty)
-            return
-        for convo in results:
-            row = self._make_row(convo)
-            self._list_layout.insertWidget(self._list_layout.count() - 1, row)
+        self._reset_results(query)
 
     def _clear_list(self) -> None:
         while self._list_layout.count() > 1:
@@ -131,24 +131,58 @@ class HistoryDialog(FramelessDragMixin, QDialog):
     # ── 加载 / 刷新 ────────────────────────────────────
 
     def _load(self) -> None:
-        conversations = list_conversations_with_counts(limit=50)
-        if not conversations:
-            empty = QLabel("暂无历史对话")
+        self._reset_results("")
+
+    def _reset_results(self, query: str, *, target_count: int | None = None) -> None:
+        self._query = query
+        self._cursor = None
+        self._loaded_ids = []
+        self._clear_list()
+        target = max(self.PAGE_SIZE, target_count or 0)
+        while len(self._loaded_ids) < target:
+            before = len(self._loaded_ids)
+            self._append_page()
+            if self._cursor is None or len(self._loaded_ids) == before:
+                break
+        if not self._loaded_ids:
+            empty_text = "未找到匹配的对话" if query else "暂无历史对话"
+            empty = QLabel(empty_text)
+            empty.setObjectName("history_empty")
             empty.setStyleSheet(styles.EMPTY_STATE)
             empty.setAlignment(Qt.AlignCenter)
             self._list_layout.insertWidget(0, empty)
-            return
+        self._load_more_btn.setVisible(self._cursor is not None)
+
+    def _append_page(self) -> None:
+        conversations, next_cursor = page_conversations(
+            limit=self.PAGE_SIZE,
+            cursor=self._cursor,
+            query=self._query,
+        )
 
         for convo in conversations:
+            if convo["id"] in self._loaded_ids:
+                continue
             row = self._make_row(convo)
             self._list_layout.insertWidget(self._list_layout.count() - 1, row)
+            self._loaded_ids.append(convo["id"])
+        self._cursor = next_cursor
+        self._load_more_btn.setVisible(self._cursor is not None)
+
+    def _load_more(self) -> None:
+        if self._cursor is not None:
+            self._append_page()
 
     def _refresh(self) -> None:
-        self._clear_list()
-        if self._search.text().strip():
-            self._do_search()
-        else:
-            self._load()
+        query = self._search.text().strip()
+        target = max(self.PAGE_SIZE, len(self._loaded_ids))
+        scrollbar = self._scroll.verticalScrollBar()
+        position = scrollbar.value()
+        self._reset_results(query, target_count=target)
+        QTimer.singleShot(
+            0,
+            lambda: scrollbar.setValue(min(position, scrollbar.maximum())),
+        )
 
     def _make_row(self, convo: dict) -> QWidget:
         row = QWidget()
@@ -160,7 +194,7 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         rl.setSpacing(8)
 
         # Agent 图标
-        agent = next((a for a in AGENTS if a.id == convo["agent_id"]), None)
+        agent = self._agents.get(convo["agent_id"])
         icon_text = agent.icon if agent else "💬"
         icon = QLabel(icon_text)
         icon.setFixedWidth(24)
@@ -172,16 +206,31 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         text_col.setSpacing(2)
 
         title_lbl = QLabel(convo["title"] or "(空对话)")
+        title_lbl.setObjectName("history_title")
+        title_lbl.setProperty("conversation_id", convo["id"])
         title_lbl.setStyleSheet(styles.LABEL)
         text_col.addWidget(title_lbl)
 
         dt = datetime.fromtimestamp(convo["created_at"])
-        subtitle = f"{dt.month}月{dt.day}日 · {convo['msg_count']}条消息"
+        agent_name = agent.name if agent else "未知 Agent"
+        subtitle = (
+            f"{agent_name} · {dt.month}月{dt.day}日 · "
+            f"{convo['msg_count']}条消息"
+        )
         sub_lbl = QLabel(subtitle)
         sub_lbl.setStyleSheet(styles.LABEL_SECONDARY)
         text_col.addWidget(sub_lbl)
 
         rl.addLayout(text_col, stretch=1)
+
+        rename_btn = QPushButton("✏️")
+        rename_btn.setFixedSize(24, 24)
+        rename_btn.setToolTip("重命名对话")
+        rename_btn.setStyleSheet(styles.HISTORY_DELETE_BUTTON)
+        rename_btn.clicked.connect(
+            lambda checked, item=convo: self._on_rename(item["id"], item["title"])
+        )
+        rl.addWidget(rename_btn)
 
         # 删除按钮
         del_btn = QPushButton("🗑")
@@ -210,6 +259,24 @@ class HistoryDialog(FramelessDragMixin, QDialog):
             return
         delete_conversation(convo_id)
         self.conversation_deleted.emit(convo_id)
+        self._refresh()
+
+    def _on_rename(self, convo_id: int, current_title: str) -> None:
+        title, accepted = QInputDialog.getText(
+            self,
+            "重命名对话",
+            "标题（最多 80 个字符）：",
+            QLineEdit.Normal,
+            current_title,
+        )
+        if not accepted:
+            return
+        try:
+            normalized = update_conversation_title(convo_id, title)
+        except (ValueError, LookupError) as exc:
+            QMessageBox.warning(self, "无法重命名", str(exc))
+            return
+        self.conversation_renamed.emit(convo_id, normalized)
         self._refresh()
 
     # ── 拖拽 / Esc ──（由 FramelessDragMixin 处理）──

@@ -4,6 +4,8 @@ import tempfile
 import threading
 from pathlib import Path
 
+import pytest
+
 import ai_desktop.utils.storage as storage
 
 _ORIG_PATH = storage.DB_PATH
@@ -237,3 +239,63 @@ class TestDbPath:
         if sys.platform == "darwin":
             assert ("Library/Application Support" in str(result)
                     or "chat_history.db" in str(result))
+
+
+class TestHistoryPagination:
+    def test_same_timestamp_cursor_has_no_gaps_or_duplicates(self, tmp_db):
+        created = [
+            storage.create_conversation("code_expert", f"批次 {index}")
+            for index in range(125)
+        ]
+        storage._conn().execute("UPDATE conversations SET created_at=1234")
+        storage._conn().commit()
+
+        loaded = []
+        cursor = None
+        while True:
+            page, cursor = storage.page_conversations(limit=17, cursor=cursor)
+            loaded.extend(item["id"] for item in page)
+            if cursor is None:
+                break
+        expected = sorted((conv.id for conv in created), reverse=True)
+        assert loaded == expected
+        assert len(loaded) == len(set(loaded)) == 125
+
+    def test_search_uses_the_same_stable_cursor(self, tmp_db):
+        matching = [
+            storage.create_conversation("translator", f"needle {index}")
+            for index in range(121)
+        ]
+        storage.create_conversation("translator", "other")
+        loaded = []
+        cursor = None
+        while True:
+            page, cursor = storage.page_conversations(
+                limit=25,
+                cursor=cursor,
+                query="needle",
+            )
+            loaded.extend(item["id"] for item in page)
+            if cursor is None:
+                break
+        assert set(loaded) == {conv.id for conv in matching}
+        assert len(loaded) == len(set(loaded)) == 121
+
+    def test_rename_validates_and_does_not_change_messages(self, tmp_db):
+        conv = storage.create_conversation("code_expert", "旧标题")
+        storage.save_message(conv.id, "user", "正文保持")
+        assert storage.update_conversation_title(conv.id, "  新标题  ") == "新标题"
+        loaded = storage.get_conversation(conv.id)
+        assert loaded.title == "新标题"
+        assert [message.content for message in loaded.messages] == ["正文保持"]
+        with pytest.raises(ValueError, match="不能为空"):
+            storage.update_conversation_title(conv.id, "   ")
+        with pytest.raises(ValueError, match="80"):
+            storage.update_conversation_title(conv.id, "长" * 81)
+        with pytest.raises(LookupError, match="不存在"):
+            storage.update_conversation_title(999999, "标题")
+
+    @pytest.mark.parametrize("limit", [0, 101])
+    def test_page_size_is_bounded(self, tmp_db, limit):
+        with pytest.raises(ValueError, match="1 到 100"):
+            storage.page_conversations(limit=limit)

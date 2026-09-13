@@ -872,7 +872,7 @@ class ChatController(QObject):
 
     @_safe_slot
     def _on_history_requested(self) -> None:
-        dialog = HistoryDialog(parent=self._dialog)
+        dialog = HistoryDialog(parent=self._dialog, agents=self._all_agents)
         dialog.conversation_selected.connect(self._on_conversation_selected)
         dialog.conversation_deleted.connect(self._on_conversation_deleted)
         if self._dialog:

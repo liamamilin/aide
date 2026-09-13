@@ -58,6 +58,8 @@ DB_PATH = _resolve_db_path()
 _local = threading.local()
 _attachment_lock = threading.RLock()
 _active_attachment_uses: dict[str, int] = {}
+MAX_CONVERSATION_TITLE_LENGTH = 80
+ConversationCursor = tuple[float, int]
 
 
 def _conn() -> sqlite3.Connection:
@@ -124,6 +126,12 @@ def init_db() -> None:
             FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
             FOREIGN KEY (attachment_id) REFERENCES attachments(id) ON DELETE CASCADE
         )
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_conversations_created
+            ON conversations(created_at DESC, id DESC)
         """
     )
     db.execute(
@@ -196,7 +204,12 @@ def create_conversation(agent_id: str, title: str = "") -> Conversation:
 def list_conversations(limit: int = 50) -> list[Conversation]:
     db = _conn()
     rows = db.execute(
-        "SELECT id, title, agent_id, created_at FROM conversations ORDER BY created_at DESC LIMIT ?",
+        """
+        SELECT id, title, agent_id, created_at
+        FROM conversations
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+        """,
         (limit,),
     ).fetchall()
     return [
@@ -205,39 +218,85 @@ def list_conversations(limit: int = 50) -> list[Conversation]:
     ]
 
 
-def list_conversations_with_counts(limit: int = 50) -> list[dict]:
-    """列出对话（含消息数），用于历史浏览"""
+def page_conversations(
+    *,
+    limit: int = 50,
+    cursor: ConversationCursor | None = None,
+    query: str = "",
+) -> tuple[list[dict], ConversationCursor | None]:
+    """Return one stable newest-first page using a (created_at, id) cursor."""
+    if limit < 1 or limit > 100:
+        raise ValueError("分页大小必须在 1 到 100 之间。")
     db = _conn()
+    conditions: list[str] = []
+    params: list[object] = []
+    normalized_query = query.strip()
+    if normalized_query:
+        conditions.append(
+            """
+            (c.title LIKE ? OR EXISTS (
+                SELECT 1 FROM messages sm
+                WHERE sm.conversation_id = c.id AND sm.content LIKE ?
+            ))
+            """
+        )
+        pattern = f"%{normalized_query}%"
+        params.extend((pattern, pattern))
+    if cursor is not None:
+        created_at, conversation_id = cursor
+        conditions.append("(c.created_at < ? OR (c.created_at = ? AND c.id < ?))")
+        params.extend((created_at, created_at, conversation_id))
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    params.append(limit + 1)
     rows = db.execute(
-        """
+        f"""
         SELECT c.id, c.title, c.agent_id, c.created_at,
                (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id) AS msg_count
         FROM conversations c
-        ORDER BY c.created_at DESC
+        {where}
+        ORDER BY c.created_at DESC, c.id DESC
         LIMIT ?
         """,
-        (limit,),
+        params,
     ).fetchall()
-    return [dict(r) for r in rows]
+    has_more = len(rows) > limit
+    page = [dict(row) for row in rows[:limit]]
+    next_cursor = None
+    if has_more and page:
+        last = page[-1]
+        next_cursor = (last["created_at"], last["id"])
+    return page, next_cursor
+
+
+def list_conversations_with_counts(limit: int = 50) -> list[dict]:
+    """Compatibility wrapper returning the first history page."""
+    return page_conversations(limit=limit)[0]
 
 
 def search_conversations(query: str, limit: int = 50) -> list[dict]:
-    """全文搜索对话标题和消息内容"""
+    """Compatibility wrapper returning the first matching history page."""
+    return page_conversations(limit=limit, query=query)[0]
+
+
+def update_conversation_title(convo_id: int, title: str) -> str:
+    """Validate and persist a user-edited history title."""
+    normalized = str(title).strip()
+    if not normalized:
+        raise ValueError("对话标题不能为空。")
+    if len(normalized) > MAX_CONVERSATION_TITLE_LENGTH:
+        raise ValueError(
+            f"对话标题不能超过 {MAX_CONVERSATION_TITLE_LENGTH} 个字符。"
+        )
     db = _conn()
-    pattern = f"%{query}%"
-    rows = db.execute(
-        """
-        SELECT c.id, c.title, c.agent_id, c.created_at,
-               (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id) AS msg_count
-        FROM conversations c
-        WHERE c.title LIKE ?
-           OR EXISTS (SELECT 1 FROM messages WHERE conversation_id = c.id AND content LIKE ?)
-        ORDER BY c.created_at DESC
-        LIMIT ?
-        """,
-        (pattern, pattern, limit),
-    ).fetchall()
-    return [dict(r) for r in rows]
+    cur = db.execute(
+        "UPDATE conversations SET title=? WHERE id=?",
+        (normalized, convo_id),
+    )
+    if cur.rowcount == 0:
+        db.rollback()
+        raise LookupError("对话不存在或已被删除。")
+    db.commit()
+    return normalized
 
 
 def get_conversation(convo_id: int) -> Optional[Conversation]:
