@@ -10,6 +10,7 @@ import logging
 import subprocess
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Optional
 
 from pynput.keyboard import Controller, Key
@@ -25,6 +26,65 @@ _COPY_SCRIPT = (
     'to tell (first process whose frontmost is true) '
     'to keystroke "c" using command down'
 )
+
+
+class UnsupportedClipboardFormatError(RuntimeError):
+    """The current clipboard cannot be snapshotted without losing a format."""
+
+
+@dataclass(frozen=True)
+class PasteboardSnapshot:
+    change_count: int
+    items: tuple[tuple[tuple[str, bytes], ...], ...]
+
+
+class NativePasteboard:
+    """Lossless snapshot/conditional restore for enumerable macOS pasteboard items."""
+
+    def __init__(self) -> None:
+        from AppKit import NSPasteboard
+
+        self._pasteboard = NSPasteboard.generalPasteboard()
+
+    def change_count(self) -> int:
+        return int(self._pasteboard.changeCount())
+
+    def snapshot(self) -> PasteboardSnapshot:
+        count = self.change_count()
+        captured: list[tuple[tuple[str, bytes], ...]] = []
+        for item in self._pasteboard.pasteboardItems() or []:
+            values: list[tuple[str, bytes]] = []
+            for pasteboard_type in item.types() or []:
+                data = item.dataForType_(pasteboard_type)
+                if data is None:
+                    raise UnsupportedClipboardFormatError(
+                        f"剪贴板类型 {pasteboard_type} 无法完整读取。"
+                    )
+                values.append((str(pasteboard_type), bytes(data)))
+            captured.append(tuple(values))
+        return PasteboardSnapshot(count, tuple(captured))
+
+    def restore(self, snapshot: PasteboardSnapshot, expected_change_count: int) -> bool:
+        # A new user copy owns the clipboard and must never be overwritten.
+        if self.change_count() != expected_change_count:
+            return False
+        from AppKit import NSPasteboardItem
+        from Foundation import NSData
+
+        items = []
+        for values in snapshot.items:
+            item = NSPasteboardItem.alloc().init()
+            for pasteboard_type, payload in values:
+                data = NSData.dataWithBytes_length_(payload, len(payload))
+                if not item.setData_forType_(data, pasteboard_type):
+                    raise UnsupportedClipboardFormatError(
+                        f"剪贴板类型 {pasteboard_type} 无法完整恢复。"
+                    )
+            items.append(item)
+        self._pasteboard.clearContents()
+        if items and not self._pasteboard.writeObjects_(items):
+            raise UnsupportedClipboardFormatError("剪贴板内容恢复失败。")
+        return True
 
 
 def _read_clipboard() -> str:
@@ -134,16 +194,19 @@ class SelectionCaptureTask(QObject):
     """Capture selected text as a non-blocking QProcess/QTimer state machine.
 
     The quick pynput key event stays on the object's Qt thread. Clipboard and
-    AppleScript subprocesses are asynchronous. This still restores plain text
-    only; callers must not present it as full multi-format clipboard backup.
+    AppleScript and text reads are asynchronous. The original macOS pasteboard
+    is captured with every enumerable item/type and restored only while the
+    selection copy still owns the clipboard.
     """
 
     completed = pyqtSignal(str)
 
     def __init__(self, parent: QObject | None = None, *,
-                 copy_action: Callable[[], bool] | None = None) -> None:
+                 copy_action: Callable[[], bool] | None = None,
+                 pasteboard=None) -> None:
         super().__init__(parent)
         self._copy_action = copy_action or _try_cmd_c_via_pynput
+        self._pasteboard = pasteboard or NativePasteboard()
         self._process: QProcess | None = None
         self._command_callback = None
         self._command_timer = QTimer(self)
@@ -156,8 +219,8 @@ class SelectionCaptureTask(QObject):
         self._started = False
         self._cancelled = False
         self._terminal = False
-        self._saved = ""
-        self._saved_known = False
+        self._snapshot: PasteboardSnapshot | None = None
+        self._capture_change_count: int | None = None
         self._clipboard_modified = False
         self._used_fallback = False
         self._restoring = False
@@ -167,10 +230,13 @@ class SelectionCaptureTask(QObject):
         if self._started or self._terminal:
             return
         self._started = True
-        self._start_command(
-            "/usr/bin/pbpaste", [], timeout_ms=2000,
-            callback=self._on_original_clipboard,
-        )
+        try:
+            self._snapshot = self._pasteboard.snapshot()
+        except Exception as exc:
+            logger.warning("Cannot preserve clipboard before capture: %s", exc)
+            self._complete("")
+            return
+        self._begin_copy()
 
     def cancel(self) -> None:
         if self._terminal or self._cancelled:
@@ -183,18 +249,25 @@ class SelectionCaptureTask(QObject):
             process.kill()
             self._finish_command(process, False)
         elif process is None:
-            self._restore_and_complete()
+            if (self._clipboard_modified and self._snapshot is not None
+                    and self._capture_change_count is None):
+                # The injected copy event may not have reached the pasteboard yet.
+                self._phase_callback = self._capture_cancelled_change
+                self._phase_timer.start(180)
+            else:
+                self._restore_and_complete()
 
-    def _on_original_clipboard(self, success: bool, stdout: str, stderr: str) -> None:
+    def _capture_cancelled_change(self) -> None:
+        if self._snapshot is not None:
+            current = self._pasteboard.change_count()
+            if current != self._snapshot.change_count:
+                self._capture_change_count = current
+        self._restore_and_complete()
+
+    def _begin_copy(self) -> None:
         if self._cancelled:
             self._complete("")
             return
-        if not success:
-            logger.warning("Cannot read clipboard before capture: %s", stderr)
-            self._complete("")
-            return
-        self._saved = stdout
-        self._saved_known = True
         try:
             copy_started = self._copy_action()
         except Exception:
@@ -231,6 +304,16 @@ class SelectionCaptureTask(QObject):
         if self._cancelled:
             self._restore_and_complete()
             return
+        snapshot = self._snapshot
+        current_count = self._pasteboard.change_count()
+        if snapshot is not None and current_count == snapshot.change_count:
+            if self._used_fallback:
+                self._restore_and_complete()
+            else:
+                logger.info("pynput Cmd+C had no effect, trying osascript fallback...")
+                self._run_osascript_copy()
+            return
+        self._capture_change_count = current_count
         self._start_command(
             "/usr/bin/pbpaste", [], timeout_ms=2000,
             callback=self._on_selection_clipboard,
@@ -244,12 +327,12 @@ class SelectionCaptureTask(QObject):
             logger.warning("Cannot read captured clipboard: %s", stderr)
             self._restore_and_complete()
             return
-        selected = stdout
-        if self._saved and selected.strip() == self._saved.strip() and not self._used_fallback:
-            logger.info("pynput Cmd+C had no effect, trying osascript fallback...")
-            self._run_osascript_copy()
+        if self._pasteboard.change_count() != self._capture_change_count:
+            logger.info("Clipboard changed during capture; preserving the newer user content")
+            self._complete("")
             return
-        if not selected or (self._saved and selected.strip() == self._saved.strip()):
+        selected = stdout
+        if not selected:
             selected = ""
         else:
             selected = text_normalizer.normalize(selected)
@@ -269,20 +352,22 @@ class SelectionCaptureTask(QObject):
         if self._terminal:
             return
         self._pending_text = "" if self._cancelled else text
-        if self._clipboard_modified and self._saved_known and not self._restoring:
+        if (self._clipboard_modified and self._snapshot is not None
+                and self._capture_change_count is not None and not self._restoring):
             self._restoring = True
-            self._start_command(
-                "/usr/bin/pbcopy", [], input_text=self._saved, timeout_ms=2000,
-                callback=self._on_clipboard_restored,
-            )
+            try:
+                restored = self._pasteboard.restore(
+                    self._snapshot,
+                    self._capture_change_count,
+                )
+                if not restored:
+                    logger.info("Clipboard changed after selection; skipping restore")
+            except Exception:
+                logger.warning("Failed to restore clipboard formats", exc_info=True)
+            self._restoring = False
+            self._complete(self._pending_text)
         elif not self._restoring:
             self._complete(self._pending_text)
-
-    def _on_clipboard_restored(self, success: bool, _stdout: str, stderr: str) -> None:
-        if not success:
-            logger.warning("Failed to restore clipboard content via pbcopy: %s", stderr)
-        self._restoring = False
-        self._complete(self._pending_text)
 
     def _start_command(self, program: str, arguments: list[str], *, timeout_ms: int,
                        callback, input_text: str | None = None) -> None:
