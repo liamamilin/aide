@@ -31,9 +31,9 @@ class ActionPanel(QWidget):
         root.setContentsMargins(8, 6, 8, 6)
         root.setSpacing(4)
         heading = QHBoxLayout()
-        label = QLabel("快捷动作")
+        label = QLabel("快捷动作 · 处理输入文字")
         label.setStyleSheet(styles.LABEL_BOLD)
-        label.setToolTip("执行前可选择新建对话或在当前对话继续")
+        label.setToolTip("先在输入框输入/粘贴文字，或在其他应用选中文字后按 ⌘⌃L")
         heading.addWidget(label)
         heading.addStretch()
         self._mode_combo = QComboBox()
@@ -42,10 +42,14 @@ class ActionPanel(QWidget):
         self._mode_combo.addItem("在当前对话继续", "current")
         self._mode_combo.setToolTip("选择动作结果所属的对话")
         heading.addWidget(self._mode_combo)
-        hint = QLabel("1–4 / ←→ 选择 · Enter 执行 · Esc 自由提问")
+        hint = QLabel("1–4 / ←→ 选择 · Enter 执行 · Esc 取消")
         hint.setStyleSheet(styles.LABEL_SECONDARY)
         heading.addWidget(hint)
         root.addLayout(heading)
+        self._material_hint = QLabel()
+        self._material_hint.setWordWrap(True)
+        self._material_hint.setStyleSheet(styles.LABEL_SECONDARY)
+        root.addWidget(self._material_hint)
         self._button_row = QHBoxLayout()
         self._button_row.setSpacing(6)
         root.addLayout(self._button_row)
@@ -68,6 +72,7 @@ class ActionPanel(QWidget):
             self._button_row.addWidget(button, stretch=1)
             self._buttons.append(button)
         self._selected_index = min(self._selected_index, max(0, len(self._buttons) - 1))
+        self._update_material_state()
         self._refresh_selection()
 
     def show_for_material(
@@ -95,9 +100,29 @@ class ActionPanel(QWidget):
             self._selected_index = index
         else:
             self._selected_index = 0
+        self._update_material_state()
         self._refresh_selection()
         self.show()
-        self.setFocus(Qt.ShortcutFocusReason)
+        if self._material.strip():
+            self.setFocus(Qt.ShortcutFocusReason)
+
+    def set_material(self, material: str) -> None:
+        """Keep the panel state in sync while the user types or pastes material."""
+        self._material = material
+        self._update_material_state()
+
+    def _update_material_state(self) -> None:
+        ready = bool(self._material.strip())
+        for button in self._buttons:
+            button.setEnabled(ready)
+        if ready:
+            self._material_hint.setText(
+                f"已准备 {len(self._material.strip())} 个字符 · 选择动作后立即执行"
+            )
+        else:
+            self._material_hint.setText(
+                "先在下方输入或粘贴文字；也可以在其他应用选中文字后按 ⌘⌃L。"
+            )
 
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key_Escape:

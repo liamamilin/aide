@@ -1469,6 +1469,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
     def _on_input_text_changed(self) -> None:
         """编辑不退出浏览模式；仅自适应高度。"""
         self._adjust_input_height()
+        if self._action_panel.isVisible():
+            self._action_panel.set_material(self._input.toPlainText())
 
     # ── 插入气泡 ───────────────────────────────────────
 
