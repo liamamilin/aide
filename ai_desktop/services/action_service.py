@@ -14,6 +14,8 @@ _ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _INPUT_TYPES = frozenset({"text", "image"})
 MAX_ACTION_NAME = 30
 MAX_INSTRUCTION = 2_000
+_RECENT_ACTIONS_KEY = "recent_quick_action_ids"
+_MAX_RECENT_ACTIONS = 4
 
 
 @dataclass(frozen=True)
@@ -153,6 +155,50 @@ class ActionService:
     @property
     def visible_actions(self) -> list[Action]:
         return [action for action in self.actions if action.enabled]
+
+    def recent_actions(self, limit: int = 3) -> list[Action]:
+        """Return enabled actions in last-used order, then fill from pinned order."""
+        limit = max(0, min(int(limit), _MAX_RECENT_ACTIONS))
+        if limit == 0:
+            return []
+        try:
+            raw_ids = json.loads(storage.get_setting(_RECENT_ACTIONS_KEY, "[]"))
+        except (TypeError, json.JSONDecodeError):
+            raw_ids = []
+        if not isinstance(raw_ids, list):
+            raw_ids = []
+
+        ordered: list[Action] = []
+        seen: set[str] = set()
+        for action_id in raw_ids:
+            if not isinstance(action_id, str) or action_id in seen:
+                continue
+            action = self._actions.get(action_id)
+            if action is not None and action.enabled:
+                ordered.append(action)
+                seen.add(action_id)
+        for action in self.visible_actions:
+            if action.id not in seen:
+                ordered.append(action)
+                seen.add(action.id)
+        return ordered[:limit]
+
+    def record_use(self, action_id: str) -> list[Action]:
+        """Move an enabled action to the front of the persisted recent list."""
+        action = self._actions.get(action_id)
+        if action is None or not action.enabled:
+            raise LookupError("动作不存在或已隐藏。")
+        recent_ids = [item.id for item in self.recent_actions(_MAX_RECENT_ACTIONS)]
+        ordered_ids = [action.id, *(item for item in recent_ids if item != action.id)]
+        storage.save_setting(
+            _RECENT_ACTIONS_KEY,
+            json.dumps(
+                ordered_ids[:_MAX_RECENT_ACTIONS],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+        )
+        return self.recent_actions()
 
     def get(self, action_id: str) -> Action | None:
         return self._actions.get(action_id)

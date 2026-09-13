@@ -100,6 +100,7 @@ class FloatButton(QPushButton):
     settings_requested = pyqtSignal()
     auto_hide_toggled = pyqtSignal(bool)
     pet_mode_toggled = pyqtSignal(bool)
+    quick_action_requested = pyqtSignal(str)
     placement_changed = pyqtSignal()
 
     def __init__(self, parent=None, *, pet_enabled: bool = True):
@@ -112,6 +113,7 @@ class FloatButton(QPushButton):
         self._responding: bool = False
         self._result_state: str | None = None
         self._hovered = False
+        self._quick_actions: list[tuple[str, str]] = []
         self._animation_phase = 0
         self._pet_source = QPixmap(_PET_PATH) if os.path.exists(_PET_PATH) else QPixmap()
         self._pet_content = self._cropped_pet(self._pet_source)
@@ -127,9 +129,14 @@ class FloatButton(QPushButton):
 
     def _init_ui(self) -> None:
         self.setWindowFlags(
-            Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+            Qt.Window
+            | Qt.FramelessWindowHint
+            | Qt.WindowStaysOnTopHint
+            | Qt.WindowDoesNotAcceptFocus
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setFocusPolicy(Qt.NoFocus)
         self.setCursor(Qt.PointingHandCursor)
         self.setAccessibleName("AI 桌面宠物")
         self._apply_mode()
@@ -193,6 +200,20 @@ class FloatButton(QPushButton):
     @property
     def pet_enabled(self) -> bool:
         return self._pet_enabled
+
+    def set_quick_actions(self, actions: list[tuple[str, str]]) -> None:
+        """Set up to three recent text actions shown in the pet context menu."""
+        cleaned: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for action_id, name in actions:
+            action_id = str(action_id).strip()
+            name = str(name).strip()
+            if action_id and name and action_id not in seen:
+                cleaned.append((action_id, name))
+                seen.add(action_id)
+            if len(cleaned) == 3:
+                break
+        self._quick_actions = cleaned
 
     def paintEvent(self, event) -> None:
         if not self._pet_enabled or self._pet_content.isNull():
@@ -444,6 +465,20 @@ class FloatButton(QPushButton):
     def _create_context_menu(self) -> QMenu:
         menu = QMenu(self)
         menu.setStyleSheet(styles.menu_style())
+        if self._pet_enabled and self._quick_actions:
+            heading = menu.addAction("最近快捷动作")
+            heading.setEnabled(False)
+            busy = self._responding or self._listening
+            for action_id, name in self._quick_actions:
+                action = menu.addAction(f"⚡  {name}")
+                action.setData(action_id)
+                action.setEnabled(not busy)
+                action.triggered.connect(
+                    lambda _checked=False, selected=action_id: self.quick_action_requested.emit(
+                        selected
+                    )
+                )
+            menu.addSeparator()
         auto_hide_action = menu.addAction("自动收起对话框")
         auto_hide_action.setCheckable(True)
         auto_hide_action.setChecked(self._auto_hide)

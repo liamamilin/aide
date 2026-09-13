@@ -12,6 +12,7 @@ from ai_desktop.services.action_service import (
     validate_action,
 )
 from ai_desktop.services.model_profiles import ModelProfile, ModelProfileManager
+from ai_desktop.utils import storage
 
 
 def test_builtin_actions_are_available_without_persisted_rows(tmp_db):
@@ -20,6 +21,35 @@ def test_builtin_actions_are_available_without_persisted_rows(tmp_db):
         "translate", "explain", "summarize", "rewrite",
     ]
     assert [action.pinned_order for action in service.actions] == [0, 1, 2, 3]
+    assert [action.id for action in service.recent_actions()] == [
+        "translate", "explain", "summarize",
+    ]
+
+
+def test_recent_actions_follow_persisted_usage_order(tmp_db):
+    service = ActionService()
+    assert [item.id for item in service.record_use("rewrite")] == [
+        "rewrite", "translate", "explain",
+    ]
+    assert [item.id for item in service.record_use("explain")] == [
+        "explain", "rewrite", "translate",
+    ]
+    assert [item.id for item in ActionService().recent_actions()] == [
+        "explain", "rewrite", "translate",
+    ]
+
+
+def test_recent_actions_recover_from_bad_state_and_filter_hidden(tmp_db):
+    storage.save_setting("recent_quick_action_ids", "not-json")
+    service = ActionService()
+    assert [item.id for item in service.recent_actions(2)] == ["translate", "explain"]
+    service.save(replace(service.get("translate"), enabled=False, updated_at=0))
+    storage.save_setting("recent_quick_action_ids", '["translate","rewrite","rewrite",3]')
+    assert [item.id for item in service.recent_actions()] == [
+        "rewrite", "explain", "summarize",
+    ]
+    with pytest.raises(LookupError, match="已隐藏"):
+        service.record_use("translate")
 
 
 def test_action_customization_round_trip_with_profile(tmp_db):

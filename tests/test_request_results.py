@@ -5,7 +5,7 @@ from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 import pytest
-from PyQt5.QtCore import QRect
+from PyQt5.QtCore import QObject, QPoint, QRect, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QImage
 from PyQt5.QtWidgets import QLabel
 
@@ -30,6 +30,7 @@ def controller(qtbot, tmp_db):
         ctl.float_btn.isVisible.return_value = True
         ctl.float_btn.pet_enabled = True
         ctl.float_btn.frameGeometry.return_value = QRect(700, 300, 116, 122)
+        ctl.float_btn.mapToGlobal.return_value = QPoint(700, 300)
         ctl._dialog = ChatDialog(ctl._all_agents, ctl._active_agent, [ctl._model], ctl._model)
         ctl._image_capability = ImageCapability.SUPPORTED
         ctl._dialog.set_image_capability(ImageCapability.SUPPORTED)
@@ -262,6 +263,115 @@ def test_hidden_dialog_service_failure_uses_action_bubble(
     )
     assert call.kwargs["timeout_ms"] == 9000
     controller._tray.showMessage.assert_not_called()
+
+
+def test_pet_action_captures_selection_and_runs_in_background(
+    qtbot, controller, ollama_server, monkeypatch,
+):
+    class FakeCapture(QObject):
+        completed = pyqtSignal(str)
+
+        def __init__(self, parent):
+            super().__init__(parent)
+
+        def start(self):
+            QTimer.singleShot(0, lambda: self.completed.emit("selected material"))
+
+        def cancel(self):
+            self.completed.emit("")
+
+    monkeypatch.setattr("ai_desktop.main.SelectionCaptureTask", FakeCapture)
+    ollama_server.enqueue({"message": {"content": "translated"}, "done": True})
+    controller._dialog.hide()
+    controller._on_pet_action_requested("translate")
+    qtbot.waitUntil(
+        lambda: controller._worker is None and controller._selection_capture is None,
+        timeout=3000,
+    )
+
+    conversation = get_conversation(controller._convo_id)
+    assert [message.content for message in conversation.messages] == [
+        "selected material", "translated",
+    ]
+    assert not controller._dialog.isVisible()
+    assert controller._action_service.recent_actions()[0].id == "translate"
+    controller._result_bubble.show_result.assert_called()
+
+
+def test_pet_action_can_finish_before_chat_dialog_exists(
+    qtbot, controller, ollama_server, monkeypatch,
+):
+    class FakeCapture(QObject):
+        completed = pyqtSignal(str)
+
+        def __init__(self, parent):
+            super().__init__(parent)
+
+        def start(self):
+            QTimer.singleShot(0, lambda: self.completed.emit("unopened dialog material"))
+
+        def cancel(self):
+            self.completed.emit("")
+
+    monkeypatch.setattr("ai_desktop.main.SelectionCaptureTask", FakeCapture)
+    ollama_server.enqueue({"message": {"content": "background answer"}, "done": True})
+    existing_dialog = controller._dialog
+    controller._dialog = None
+    try:
+        controller._on_pet_action_requested("explain")
+        qtbot.waitUntil(
+            lambda: controller._worker is None and controller._selection_capture is None,
+            timeout=3000,
+        )
+    finally:
+        controller._dialog = existing_dialog
+
+    assert [message.content for message in get_conversation(controller._convo_id).messages] == [
+        "unopened dialog material", "background answer",
+    ]
+    controller._result_bubble.show_result.assert_called()
+    controller._tray.showMessage.assert_not_called()
+
+
+def test_pet_action_without_selection_opens_selected_action(
+    qtbot, controller, monkeypatch,
+):
+    class EmptyCapture(QObject):
+        completed = pyqtSignal(str)
+
+        def __init__(self, parent):
+            super().__init__(parent)
+
+        def start(self):
+            QTimer.singleShot(0, lambda: self.completed.emit(""))
+
+        def cancel(self):
+            self.completed.emit("")
+
+    monkeypatch.setattr("ai_desktop.main.SelectionCaptureTask", EmptyCapture)
+    controller._dialog.refresh_actions(controller._action_service.visible_actions)
+    controller._dialog.hide()
+    controller._on_pet_action_requested("rewrite")
+    qtbot.waitUntil(lambda: controller._selection_capture is None, timeout=1000)
+
+    assert controller._dialog.isVisible()
+    panel = controller._dialog._action_panel
+    assert panel.isVisible()
+    assert panel._actions[panel._selected_index].id == "rewrite"
+    assert controller._worker is None
+
+
+def test_pet_action_does_not_start_capture_while_request_is_busy(controller):
+    worker = MagicMock()
+    controller._worker = worker
+    with patch.object(controller, "_show_dialog") as show_dialog, \
+            patch.object(controller._dialog, "flash_busy") as flash_busy, \
+            patch("ai_desktop.main.SelectionCaptureTask") as capture:
+        controller._on_pet_action_requested("translate")
+    show_dialog.assert_called_once_with()
+    flash_busy.assert_called_once_with()
+    capture.assert_not_called()
+    controller._worker = None
 
 
 @pytest.mark.parametrize("events,display", [

@@ -17,6 +17,7 @@ def _menu_qss(c: ColorSet) -> str:
         f"QMenu {{ background: {c.window}; border: 1px solid {c.border}; "
         f"border-radius: 6px; padding: 4px 0; color: {c.text}; }}"
         f"QMenu::item {{ padding: 6px 24px; font-size: 13px; color: {c.text}; }}"
+        f"QMenu::item:disabled {{ color: {c.text_secondary}; }}"
         f"QMenu::item:selected {{ background: {c.accent}; color: white; border-radius: 4px; }}"
         f"QMenu::separator {{ height: 1px; background: {c.border}; margin: 4px 10px; }}"
     )

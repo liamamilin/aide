@@ -183,10 +183,12 @@ class ChatController(QObject):
         self.float_btn.settings_requested.connect(self._on_settings_requested)
         self.float_btn.auto_hide_toggled.connect(self._on_auto_hide_toggled)
         self.float_btn.pet_mode_toggled.connect(self._on_pet_mode_toggled)
+        self.float_btn.quick_action_requested.connect(self._on_pet_action_requested)
         self.float_btn.placement_changed.connect(self._schedule_window_state_save)
         self.float_btn.placement_changed.connect(self._reposition_result_bubble)
         self.float_btn.set_auto_hide_state(self._auto_hide)
         self._result_bubble.activated.connect(self._show_dialog)
+        self._refresh_pet_actions()
         self._connect_screen_signals()
 
         # 菜单栏图标
@@ -205,6 +207,7 @@ class ChatController(QObject):
         self._selection_delay_timer.setSingleShot(True)
         self._selection_delay_timer.timeout.connect(self._start_selection_capture)
         self._selection_capture: SelectionCaptureTask | None = None
+        self._pending_pet_action_id: str | None = None
 
         # 全局快捷键：⌘⌃S → 截图并附加到对话
         self.hotkey_img = self._create_hotkey_backend()
@@ -298,6 +301,7 @@ class ChatController(QObject):
         for notice in list(self._notices):
             notice.close()
         self._selection_delay_timer.stop()
+        self._pending_pet_action_id = None
         if self._selection_capture is not None:
             self._selection_capture.cancel()
         self._stop_worker(show_cancelled=False)
@@ -451,14 +455,53 @@ class ChatController(QObject):
         task.start()
 
     @_safe_slot
+    def _on_pet_action_requested(self, action_id: str) -> None:
+        if self._stopping or self._stopped:
+            return
+        action = self._action_service.get(action_id)
+        if (
+            not config.QUICK_ACTIONS_ENABLED
+            or action is None
+            or not action.enabled
+            or "text" not in action.input_types
+        ):
+            self._refresh_pet_actions()
+            self._show_dialog()
+            self._show_notice(
+                QMessageBox.Warning,
+                "快捷动作不可用",
+                "该动作已隐藏、被禁用或不支持文字选区。",
+            )
+            return
+        if self._worker is not None or self._selection_capture is not None:
+            self._show_dialog()
+            if self._dialog:
+                self._dialog.flash_busy()
+            return
+        self._pending_pet_action_id = action_id
+        self._start_selection_capture()
+
+    @_safe_slot
     def _on_selection_captured(self, task: SelectionCaptureTask, text: str) -> None:
         if task is not self._selection_capture:
             task.deleteLater()
             return
         self._selection_capture = None
+        action_id = self._pending_pet_action_id
+        self._pending_pet_action_id = None
         self.float_btn.set_listening(False)
         task.deleteLater()
         if self._stopping or self._stopped:
+            self._finish_stop_if_ready()
+            return
+        if action_id:
+            logger.info("Pet action %s captured text length=%d", action_id, len(text))
+            if text.strip():
+                self._on_action_requested(action_id, text, "new")
+            else:
+                self._show_dialog()
+                if self._dialog:
+                    self._dialog.show_actions("", action_id)
             self._finish_stop_if_ready()
             return
         logger.info("Hotkey triggered, text length=%d", len(text))
@@ -601,6 +644,7 @@ class ChatController(QObject):
         config.DESKTOP_PET_ENABLED = checked
         save_setting("desktop_pet_enabled", "true" if checked else "false")
         self.float_btn.set_pet_enabled(checked)
+        self._refresh_pet_actions()
         if not checked:
             self._result_bubble.hide()
         logger.info("Desktop pet mode %s", "enabled" if checked else "disabled")
@@ -644,8 +688,11 @@ class ChatController(QObject):
                 logger.warning("Failed to change hotkey: %s", e)
         if "quick_actions" in changed and self._dialog:
             self._dialog.set_actions_enabled(config.QUICK_ACTIONS_ENABLED)
+        if "quick_actions" in changed:
+            self._refresh_pet_actions()
         if "desktop_pet" in changed:
             self.float_btn.set_pet_enabled(config.DESKTOP_PET_ENABLED)
+            self._refresh_pet_actions()
             if not config.DESKTOP_PET_ENABLED:
                 self._result_bubble.hide()
         if "base_url" in changed:
@@ -1161,6 +1208,7 @@ class ChatController(QObject):
         self._active_agent = self._agent_mgr.active_agent
         if self._dialog:
             self._dialog.refresh_actions(self._action_service.visible_actions)
+        self._refresh_pet_actions()
         self._update_model_profile_summary()
         logger.info("Model profiles saved (%d)", len(profiles))
 
@@ -1169,7 +1217,18 @@ class ChatController(QObject):
         self._action_service.replace_all(actions)
         if self._dialog:
             self._dialog.refresh_actions(self._action_service.visible_actions)
+        self._refresh_pet_actions()
         logger.info("Quick actions saved (%d)", len(actions))
+
+    def _refresh_pet_actions(self) -> None:
+        actions = (
+            self._action_service.recent_actions()
+            if config.QUICK_ACTIONS_ENABLED and self.float_btn.pet_enabled
+            else []
+        )
+        self.float_btn.set_quick_actions(
+            [(action.id, action.name) for action in actions]
+        )
 
     @_safe_slot
     def _on_agent_profile_changed(self, agent_id: str, profile_id: str | None) -> None:
@@ -1229,6 +1288,8 @@ class ChatController(QObject):
                 "快捷动作已回退",
                 "<br>".join(html.escape(warning) for warning in plan.warnings),
             )
+        self._action_service.record_use(plan.action.id)
+        self._refresh_pet_actions()
         if mode == "new":
             self._new_conversation()
             self._active_agent = self._agent_mgr.switch(plan.agent)
@@ -1460,8 +1521,7 @@ class ChatController(QObject):
 
     def _show_result_bubble(self, result: ChatResult) -> bool:
         if (
-            self._dialog is None
-            or self._dialog.isVisible()
+            (self._dialog is not None and self._dialog.isVisible())
             or not self.float_btn.isVisible()
             or not self.float_btn.pet_enabled
         ):

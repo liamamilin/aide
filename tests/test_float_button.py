@@ -44,13 +44,39 @@ class TestFloatButtonSignals:
 
     def test_context_menu_has_expected_actions(self, qtbot, button):
         """Context menu should contain all expected actions."""
+        button.set_quick_actions(
+            [("translate", "翻译"), ("explain", "解释"), ("rewrite", "改写")]
+        )
         menu = _get_context_menu(button)
         assert menu is not None
         action_texts = [a.text() for a in menu.actions()]
+        assert action_texts[:4] == ["最近快捷动作", "⚡  翻译", "⚡  解释", "⚡  改写"]
         assert "设置…" in action_texts
         assert "桌面宠物形态" in action_texts
         assert "隐藏桌面宠物" in action_texts
         assert "退出" in action_texts
+
+    def test_recent_action_signal_and_busy_state(self, qtbot, button):
+        button.set_quick_actions(
+            [("translate", "翻译"), ("translate", "重复"), ("rewrite", "改写")]
+        )
+        menu = _get_context_menu(button)
+        action = next(item for item in menu.actions() if item.data() == "rewrite")
+        with qtbot.waitSignal(button.quick_action_requested, timeout=1000) as spy:
+            action.trigger()
+        assert spy.args == ["rewrite"]
+
+        button.set_responding(True)
+        busy_menu = _get_context_menu(button)
+        assert all(
+            not item.isEnabled()
+            for item in busy_menu.actions()
+            if item.data() in {"translate", "rewrite"}
+        )
+        button.set_responding(False)
+        button.set_pet_enabled(False)
+        compact_menu = _get_context_menu(button)
+        assert "最近快捷动作" not in [item.text() for item in compact_menu.actions()]
 
     def test_settings_requested_signal(self, qtbot, button):
         """Triggering settings action → settings_requested signal."""
@@ -105,6 +131,14 @@ class TestFloatButtonSignals:
 
 class TestFloatButtonState:
     """Verify auto-hide state toggling."""
+
+    def test_pet_click_does_not_require_window_focus(self, qtbot, button):
+        from PyQt5.QtCore import Qt
+
+        assert button.windowFlags() & Qt.WindowDoesNotAcceptFocus
+        assert button.testAttribute(Qt.WA_ShowWithoutActivating)
+        with qtbot.waitSignal(button.clicked, timeout=1000):
+            qtbot.mouseClick(button, Qt.LeftButton)
 
     def test_auto_hide_toggle_on(self, qtbot, button):
         """set_auto_hide_state(True) → _auto_hide is True."""
