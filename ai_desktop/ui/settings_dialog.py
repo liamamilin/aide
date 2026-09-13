@@ -48,7 +48,9 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         self._load()
 
     def _setup_window(self):
-        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setWindowFlags(
+            Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
         self.setMinimumSize(380, 440)
         self.resize(400, 460)
         self.setStyleSheet(styles.DIALOG_BASE)
@@ -128,10 +130,7 @@ class SettingsDialog(FramelessDragMixin, QDialog):
                 self._widgets[key] = w
             else:
                 w = QLineEdit()
-                w.setStyleSheet(
-                    f"QLineEdit {{ {_widget_style} }}"
-                    "QLineEdit:focus { border-color: #007AFF; }"
-                )
+                w.setStyleSheet(styles.FORM_INPUT)
                 self._widgets[key] = w
             lbl = QLabel(label)
             lbl.setStyleSheet(styles.LABEL)

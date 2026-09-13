@@ -114,7 +114,7 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         results = search_conversations(query, limit=50)
         if not results:
             empty = QLabel("未找到匹配的对话")
-            empty.setStyleSheet("color: #999; font-size: 13px; padding: 20px;")
+            empty.setStyleSheet(styles.EMPTY_STATE)
             empty.setAlignment(Qt.AlignCenter)
             self._list_layout.insertWidget(0, empty)
             return
@@ -134,7 +134,7 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         conversations = list_conversations_with_counts(limit=50)
         if not conversations:
             empty = QLabel("暂无历史对话")
-            empty.setStyleSheet("color: #999; font-size: 13px; padding: 20px;")
+            empty.setStyleSheet(styles.EMPTY_STATE)
             empty.setAlignment(Qt.AlignCenter)
             self._list_layout.insertWidget(0, empty)
             return

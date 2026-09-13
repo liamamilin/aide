@@ -26,7 +26,7 @@ from ai_desktop import config
 from ai_desktop.capture.text_normalizer import normalize
 from ai_desktop.config import Agent
 from ai_desktop.llm.service_checks import ServiceState
-from ai_desktop.ui import markdown, styles
+from ai_desktop.ui import markdown, styles, theme
 from ai_desktop.ui.float_button import pin_to_all_spaces
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 from ai_desktop.utils import images as image_utils
@@ -117,6 +117,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._export_feedback_timer = QTimer(self)
         self._export_feedback_timer.setSingleShot(True)
         self._export_feedback_timer.timeout.connect(self._reset_export_button)
+        self._auto_hide_timer = QTimer(self)
+        self._auto_hide_timer.setSingleShot(True)
+        self._auto_hide_timer.timeout.connect(self._apply_auto_hide)
         self._ollama_timer = QTimer(self)
         self._ollama_timer.setInterval(30000)       # 每 30 秒探活
         self._ollama_timer.timeout.connect(self.service_check_requested.emit)
@@ -442,6 +445,20 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     def set_auto_hide(self, enabled: bool) -> None:
         self._auto_hide = enabled
+        if not enabled:
+            self._auto_hide_timer.stop()
+
+    def refresh_theme(self) -> None:
+        """Re-render theme-dependent rich text without changing message state."""
+        for label in self._msg_container.findChildren(QLabel):
+            source = getattr(label, "_markdown_source", None)
+            if source is None:
+                continue
+            thinking = getattr(label, "_thinking_source", "")
+            body, code_map = self._render_assistant_body(source, thinking)
+            label.setText(self._wrap_assistant_html(body))
+            label.code_map = code_map
+        self.update()
 
     # ── 输入 ───────────────────────────────────────────
 
@@ -656,6 +673,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._scroll_timer.stop()
         self._busy_feedback_timer.stop()
         self._export_feedback_timer.stop()
+        self._auto_hide_timer.stop()
         return []
 
     def set_service_status(self, state: ServiceState) -> None:
@@ -681,12 +699,48 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._insert_widget(bubble)
 
     def add_assistant_message(self, text: str) -> None:
-        html, code_map = markdown.to_html(text)
-        bubble = self._make_bubble(html, is_user=False, is_html=True, code_map=code_map)
+        body, code_map = self._render_assistant_body(text)
+        bubble = self._make_bubble(
+            body,
+            is_user=False,
+            is_html=True,
+            code_map=code_map,
+            markdown_source=text,
+        )
         btn = bubble.findChild(QPushButton, "copy_btn_assistant")
         if btn:
             btn.clicked.connect(lambda checked, t=text: self._copy_to_clipboard(t))
         self._insert_widget(bubble)
+
+    @staticmethod
+    def _wrap_assistant_html(body: str) -> str:
+        return (
+            '<html><body style="font-size:13px; font-family:'
+            + config.FONT_FAMILY
+            + ';">'
+            + body
+            + "</body></html>"
+        )
+
+    @staticmethod
+    def _render_assistant_body(
+        text: str, thinking: str = "",
+    ) -> tuple[str, dict[str, str]]:
+        body, code_map = markdown.to_html(text)
+        if thinking.strip():
+            colors = theme.current()
+            escaped = html.escape(thinking, quote=False)
+            body = (
+                f'<details style="margin-bottom:10px;color:{colors.text_secondary};'
+                'font-size:12px;">'
+                f'<summary style="cursor:pointer;color:{colors.text_secondary};">'
+                "💭 思考过程</summary>"
+                '<pre style="white-space:pre-wrap;word-break:break-word;'
+                f'margin-top:4px;color:{colors.text};">{escaped}</pre>'
+                "</details>"
+                + body
+            )
+        return body, code_map
 
     # ── 流式输出 ───────────────────────────────────────
 
@@ -749,25 +803,13 @@ class ChatDialog(FramelessDragMixin, QWidget):
         # 完成结果是权威正文；错误和取消提示不混入正文或后续推理上下文。
         self._stream_text = text
         if ok and self._stream_text:
-            body, code_map = markdown.to_html(self._stream_text)
-            if self._thinking_text.strip():
-                thinking = html.escape(self._thinking_text, quote=False)
-                thinking_html = (
-                    '<details style="margin-bottom:10px;color:#888;font-size:12px;">'
-                    '<summary style="cursor:pointer;color:#666;">💭 思考过程</summary>'
-                    f'<pre style="white-space:pre-wrap;word-break:break-word;margin-top:4px;">{thinking}</pre>'
-                    '</details>'
-                )
-                body = thinking_html + body
-            full_html = (
-                '<html><body style="font-size:13px; font-family:'
-                + config.FONT_FAMILY
-                + ';">'
-                + body
-                + "</body></html>"
+            body, code_map = self._render_assistant_body(
+                self._stream_text, self._thinking_text,
             )
-            self._stream_bubble.setText(full_html)
+            self._stream_bubble.setText(self._wrap_assistant_html(body))
             self._stream_bubble.setTextFormat(Qt.RichText)
+            self._stream_bubble._markdown_source = self._stream_text
+            self._stream_bubble._thinking_source = self._thinking_text
             if code_map:
                 self._stream_bubble.code_map = code_map
                 self._stream_bubble.linkActivated.connect(self._on_link_activated)
@@ -845,6 +887,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self, content: str, is_user: bool, is_html: bool = False,
         code_map: dict[str, str] | None = None,
         images: list[str] | None = None,
+        markdown_source: str | None = None,
     ) -> QWidget:
         wrapper = QWidget()
         wrapper.setStyleSheet("background: transparent;")
@@ -860,6 +903,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if is_html and code_map:
             lbl.linkActivated.connect(self._on_link_activated)
             lbl.code_map = code_map
+        if markdown_source is not None:
+            lbl._markdown_source = markdown_source
+            lbl._thinking_source = ""
 
         if is_user:
             lbl.setStyleSheet(styles.USER_BUBBLE)
@@ -926,14 +972,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if is_html:
             # QLabel doesn't support full HTML with inline styles well;
             # for assistant messages, embed the body into a full HTML string
-            full_html = (
-                '<html><body style="font-size:13px; font-family:'
-                + config.FONT_FAMILY
-                + ';">'
-                + content
-                + "</body></html>"
-            )
-            lbl.setText(full_html)
+            lbl.setText(self._wrap_assistant_html(content))
         else:
             lbl.setText(content)
 
@@ -961,12 +1000,11 @@ class ChatDialog(FramelessDragMixin, QWidget):
             bl.addWidget(thumb, alignment=Qt.AlignLeft)
         return box
 
-    @staticmethod
-    def _view_image_full(path: str) -> None:
+    def _view_image_full(self, path: str) -> None:
         """在新窗口预览大图（查看图片详情）"""
         try:
             from PyQt5.QtWidgets import QDialog, QScrollArea
-            dlg = QDialog()
+            dlg = QDialog(self)
             dlg.setWindowTitle("图片预览")
             dlg.setWindowFlag(Qt.WindowStaysOnTopHint)
             dlg.setMinimumSize(300, 300)
@@ -1139,9 +1177,38 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if code:
             self._copy_to_clipboard(code)
 
-    def changeEvent(self, event) -> None:
-        if self._auto_hide and event.type() == QEvent.ActivationChange and not self.isActiveWindow():
+    def _owns_window(self, candidate: QWidget | None) -> bool:
+        widget = candidate
+        while widget is not None:
+            if widget is self:
+                return True
+            widget = widget.parentWidget()
+        return False
+
+    def _has_active_owned_window(self) -> bool:
+        """Return whether focus moved to a child window owned by this dialog."""
+        return any(
+            self._owns_window(candidate)
+            for candidate in (QApplication.activeModalWidget(), QApplication.activeWindow())
+        )
+
+    def _apply_auto_hide(self) -> None:
+        if (
+            self._auto_hide
+            and self.isVisible()
+            and not self.isActiveWindow()
+            and not self._has_active_owned_window()
+        ):
             self.hide()
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.ActivationChange:
+            if self.isActiveWindow() or not self._auto_hide:
+                self._auto_hide_timer.stop()
+            else:
+                # Active window ownership is only reliable after Qt completes
+                # the activation transition (for example opening HistoryDialog).
+                self._auto_hide_timer.start(0)
         super().changeEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:

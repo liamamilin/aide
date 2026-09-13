@@ -187,6 +187,15 @@ class ChatController(QObject):
         self._startup_service_check: tuple[int, str] | None = None
         self._notices: list[QMessageBox] = []
 
+    @_safe_slot
+    def refresh_theme(self, _palette=None) -> None:
+        """Refresh every live themed surface after a system palette change."""
+        refreshed = styles.refresh_all()
+        self._tray.refresh_theme()
+        if self._dialog is not None:
+            self._dialog.refresh_theme()
+        logger.info("Theme refreshed (%d widget styles updated)", refreshed)
+
     @staticmethod
     def _create_hotkey_backend():
         """按运行模式返回全局快捷键后端（冻结→NSEvent，开发→pynput）"""
@@ -1004,9 +1013,6 @@ def main() -> None:
     app.setApplicationName("AI 桌面助手")
     app.setQuitOnLastWindowClosed(False)
 
-    # 系统明暗切换时清空样式缓存，运行时读取的样式（如右键菜单）跟随当前主题
-    app.paletteChanged.connect(lambda _: styles.invalidate())
-
     _quit_flag = False
 
     def _on_sigint(*_) -> None:
@@ -1017,6 +1023,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, _on_sigint)
 
     controller = ChatController()
+    app.paletteChanged.connect(controller.refresh_theme)
     controller.exit_ready.connect(app.quit)
 
     def _poll_quit() -> None:

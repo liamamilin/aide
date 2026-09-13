@@ -33,6 +33,17 @@ def test_stop_without_tasks_finishes_once(qtbot, controller):
     controller.hotkey_img.stop.assert_called_once()
 
 
+def test_theme_refresh_uses_one_controller_entry(controller):
+    controller._tray.refresh_theme.reset_mock()
+    with patch("ai_desktop.main.styles.refresh_all", return_value=5) as refresh_all, \
+            patch.object(controller._dialog, "refresh_theme") as refresh_dialog:
+        controller.refresh_theme()
+
+    refresh_all.assert_called_once_with()
+    controller._tray.refresh_theme.assert_called_once_with()
+    refresh_dialog.assert_called_once_with()
+
+
 def test_exit_waits_for_chat_abort_and_rejects_new_work(qtbot, controller, ollama_server):
     scenario = ollama_server.enqueue(before_headers=True)
     controller._on_user_message("question")

@@ -45,7 +45,9 @@ class AgentEditor(FramelessDragMixin, QDialog):
         self._load()
 
     def _setup_window(self):
-        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setWindowFlags(
+            Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setMinimumSize(420, 340)
         self.resize(440, 400)
@@ -211,7 +213,9 @@ class _AgentEditDialog(FramelessDragMixin, QDialog):
         self.setWindowTitle(title)
         self.setMinimumSize(360, 300)
         self.resize(380, 360)
-        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setWindowFlags(
+            Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setStyleSheet(styles.DIALOG_BASE)
         self._setup_drag(36)
@@ -333,7 +337,9 @@ class _EmojiPicker(FramelessDragMixin, QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.selected_emoji = "🤖"
-        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setWindowFlags(
+            Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setMinimumSize(370, 300)
         self.resize(370, 320)

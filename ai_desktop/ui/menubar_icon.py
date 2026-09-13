@@ -114,6 +114,12 @@ class MenuBarIcon(QSystemTrayIcon):
         self._agents = agents
         self._build_menu()
 
+    def refresh_theme(self) -> None:
+        """Refresh the persistent tray menu after the system palette changes."""
+        menu = self.contextMenu()
+        if menu is not None:
+            menu.setStyleSheet(styles.menu_style())
+
     def _on_activated(self, reason: int) -> None:
         # macOS 左键点击 = QSystemTrayIcon.Trigger
         if reason == QSystemTrayIcon.Trigger:

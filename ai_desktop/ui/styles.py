@@ -4,6 +4,8 @@
 所有样式在首次访问时生成（此时 QApplication 已创建），
 使用 theme.ColorSet 的两套显式颜色，保证亮/暗模式均有足够对比度。
 """
+from PyQt5.QtWidgets import QApplication
+
 from ai_desktop.ui.theme import ColorSet, current
 
 _generated: dict[str, str] | None = None
@@ -29,6 +31,44 @@ def invalidate() -> None:
     """清空样式缓存（如系统明暗切换时），下次访问按当前主题重新生成。"""
     global _generated
     _generated = None
+
+
+def refresh_all(app: QApplication | None = None) -> int:
+    """Regenerate named styles and update widgets that already use them.
+
+    Widgets created before a palette change hold concrete QSS strings.  Keep a
+    snapshot of those strings, regenerate the theme, then replace matching
+    named styles (including FORM_WIDGET embedded in a selector) in every live
+    widget.  The return value is the number of widgets whose QSS changed.
+    """
+    global _generated
+    app = app or QApplication.instance()
+    old_styles = dict(_generated or {})
+    _generated = _generate()
+    if app is None or not old_styles:
+        return 0
+
+    replacements = sorted(
+        (
+            (old_value, _generated[name])
+            for name, old_value in old_styles.items()
+            if old_value and name in _generated and old_value != _generated[name]
+        ),
+        key=lambda pair: len(pair[0]),
+        reverse=True,
+    )
+    refreshed = 0
+    for widget in app.allWidgets():
+        qss = widget.styleSheet()
+        if not qss:
+            continue
+        updated = qss
+        for old_value, new_value in replacements:
+            updated = updated.replace(old_value, new_value)
+        if updated != qss:
+            widget.setStyleSheet(updated)
+            refreshed += 1
+    return refreshed
 
 
 def _generate() -> dict[str, str]:
@@ -270,6 +310,7 @@ def _generate() -> dict[str, str]:
     s["LABEL"] = f"color: {c.text}; background: none;"
     s["LABEL_SECONDARY"] = f"font-size: 11px; color: {c.text_secondary}; background: none;"
     s["LABEL_BOLD"] = f"font-weight: bold; font-size: 13px; background: none; color: {c.text};"
+    s["EMPTY_STATE"] = f"color: {c.text_secondary}; font-size: 13px; padding: 20px;"
 
     # ── 新增 Agent 按钮 ──
     s["ADD_AGENT_BUTTON"] = (
