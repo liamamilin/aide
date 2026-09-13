@@ -45,6 +45,11 @@ class ActionPanel(QWidget):
         hint = QLabel("1–4 / ←→ 选择 · Enter 执行 · Esc 取消")
         hint.setStyleSheet(styles.LABEL_SECONDARY)
         heading.addWidget(hint)
+        collapse = QPushButton("收起")
+        collapse.setStyleSheet(styles.SECONDARY_BUTTON)
+        collapse.setToolTip("收起快捷动作面板")
+        collapse.clicked.connect(self._collapse)
+        heading.addWidget(collapse)
         root.addLayout(heading)
         self._material_hint = QLabel()
         self._material_hint.setWordWrap(True)
@@ -149,6 +154,10 @@ class ActionPanel(QWidget):
             return
         super().keyPressEvent(event)
 
+    def _collapse(self) -> None:
+        self.hide()
+        self.cancelled.emit()
+
     def _move(self, offset: int) -> None:
         if not self._actions:
             return
@@ -158,9 +167,10 @@ class ActionPanel(QWidget):
     def _trigger(self, index: int) -> None:
         if not 0 <= index < len(self._actions):
             return
+        if not self._material.strip():
+            return
         action = self._actions[index]
         self._selected_index = index
-        self.hide()
         self.action_selected.emit(
             action.id,
             self._material,

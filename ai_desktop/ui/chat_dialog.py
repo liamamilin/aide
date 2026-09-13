@@ -603,6 +603,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
     def _on_action_selected(self, action_id: str, material: str, mode: str) -> None:
         self._input.clear()
         self._exit_input_browsing()
+        self._input.setFocus(Qt.ShortcutFocusReason)
         self._action_mode = mode
         self.action_requested.emit(action_id, material, mode)
 
