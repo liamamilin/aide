@@ -319,6 +319,8 @@ class TestFloatButtonState:
 
         button._animation_phase = 27
         assert button._pet_for_state("idle") == button._pet_idle_frames[2]
+        button._animation_phase = 49
+        assert button._pet_for_state("idle") == button._pet_idle_frames[0]
         button._hovered = True
         button._hover_phase = 13
         assert button._pet_for_state("idle") == button._pet_hover_frames[3]

@@ -479,10 +479,6 @@ class FloatButton(QPushButton):
                     frame_index = 1  # blink
                 elif 26 <= phase < 28:
                     frame_index = 2  # open eyes after blink
-                elif 48 <= phase < 53:
-                    frame_index = 3  # brief glance
-                elif 53 <= phase < 55:
-                    frame_index = 4  # return from glance
                 return self._pet_idle_frames[frame_index]
         return self._pet_content
 
