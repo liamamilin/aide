@@ -7,17 +7,14 @@ import argparse
 import json
 import os
 import tempfile
-import time
 from dataclasses import asdict
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import Vision
-from Foundation import NSURL
 from PyQt5.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter
 
-from ai_desktop.services.ocr_service import probe_ocr_runtime
+from ai_desktop.services.ocr_service import OCRRequest, OCRService
 
 SAMPLES = {
     "english": {
@@ -75,54 +72,32 @@ def _make_sample(path: Path, font_name: str, lines: list[str]) -> str:
     return "\n".join(lines)
 
 
-def _recognize(path: Path, languages: tuple[str, ...]) -> dict:
-    request = Vision.VNRecognizeTextRequest.alloc().init()
-    request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
-    preferred = [code for code in ("en-US", "zh-Hans") if code in languages]
-    request.setRecognitionLanguages_(preferred)
-    request.setUsesLanguageCorrection_(False)
-    if hasattr(request, "setAutomaticallyDetectsLanguage_"):
-        request.setAutomaticallyDetectsLanguage_(True)
-    handler = Vision.VNImageRequestHandler.alloc().initWithURL_options_(
-        NSURL.fileURLWithPath_(str(path)), {}
-    )
-    started = time.perf_counter()
-    succeeded, error = handler.performRequests_error_([request], None)
-    elapsed_ms = (time.perf_counter() - started) * 1000
-    if not succeeded:
-        raise RuntimeError(str(error or "Vision request failed without an error"))
-
-    rows = []
-    for observation in request.results() or ():
-        candidates = observation.topCandidates_(1)
-        if not candidates:
-            continue
-        candidate = candidates[0]
-        box = observation.boundingBox()
-        rows.append({
-            "text": str(candidate.string()),
-            "confidence": round(float(candidate.confidence()), 4),
-            "x": round(float(box.origin.x), 6),
-            "y": round(float(box.origin.y), 6),
-            "width": round(float(box.size.width), 6),
-            "height": round(float(box.size.height), 6),
-        })
-    rows.sort(key=lambda row: (-row["y"], row["x"]))
+def _recognize(service: OCRService, path: Path) -> dict:
+    recognized = service.recognize(OCRRequest(path.stem, str(path)))
+    rows = [
+        {
+            "text": block.text,
+            "confidence": block.confidence,
+            **asdict(block.bounds),
+        }
+        for block in recognized.blocks
+    ]
     return {
-        "elapsed_ms": round(elapsed_ms, 1),
-        "text": "\n".join(row["text"] for row in rows),
+        "elapsed_ms": recognized.elapsed_ms,
+        "text": recognized.text,
         "blocks": rows,
     }
 
 
 def run_benchmark(output_dir: Path) -> dict:
     app = QGuiApplication.instance() or QGuiApplication([])
-    runtime = probe_ocr_runtime()
+    service = OCRService()
+    runtime = service.runtime
     samples = {}
     for name, spec in SAMPLES.items():
         path = output_dir / f"{name}.png"
         truth = _make_sample(path, spec["font"], spec["lines"])
-        result = _recognize(path, runtime.languages)
+        result = _recognize(service, path)
         denominator = max(1, len(truth))
         result["truth"] = truth
         result["cer"] = round(_distance(truth, result["text"]) / denominator, 4)
