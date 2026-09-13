@@ -28,6 +28,9 @@ a = Analysis(
         'HIServices',
         'objc',
         'Quartz',
+        # F02 local OCR (Vision pulls CoreML as its native model bridge)
+        'CoreML',
+        'Vision',
         'PyObjCTools',
     ],
     hookspath=[],

@@ -51,9 +51,11 @@ def test_bundle_validator_checks_version_dependencies_and_resources(tmp_path):
         "AppKit",
         "Foundation",
         "CoreFoundation",
+        "CoreML",
         "HIServices",
         "objc",
         "Quartz",
+        "Vision",
     ):
         (frameworks / name).mkdir(parents=True)
     (frameworks / "PyQt5" / "Qt5" / "lib" / "QtNetwork.framework").mkdir(

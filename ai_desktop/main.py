@@ -1608,6 +1608,13 @@ def main() -> None:
     if "--version" in sys.argv[1:]:
         print(__version__)
         return
+    if "--ocr-runtime" in sys.argv[1:]:
+        from dataclasses import asdict
+
+        from ai_desktop.services.ocr_service import probe_ocr_runtime
+
+        print(json.dumps(asdict(probe_ocr_runtime()), ensure_ascii=False))
+        return
 
     log_util.setup()
 

@@ -97,7 +97,10 @@ def validate_bundle(bundle: Path, version: str) -> list[str]:
     qt_network = frameworks / "PyQt5" / "Qt5" / "lib" / "QtNetwork.framework"
     if not qt_network.exists():
         errors.append("missing bundled QtNetwork.framework")
-    for module in ("AppKit", "Foundation", "CoreFoundation", "HIServices", "objc", "Quartz"):
+    for module in (
+        "AppKit", "Foundation", "CoreFoundation", "CoreML", "HIServices",
+        "objc", "Quartz", "Vision",
+    ):
         if module not in framework_names:
             errors.append(f"missing bundled PyObjC module: {module}")
     return errors

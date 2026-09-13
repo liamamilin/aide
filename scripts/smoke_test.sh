@@ -8,6 +8,7 @@ EXECUTABLE="${APP_PATH}/Contents/MacOS/AI桌面助手"
 PYTHON_BIN="${PYTHON:-python3}"
 TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/aide-smoke.XXXXXX")"
 OUTPUT="${TEMP_ROOT}/process.log"
+OCR_OUTPUT="${TEMP_ROOT}/ocr-runtime.json"
 PID=""
 
 cleanup() {
@@ -30,6 +31,9 @@ BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString'
 echo "==> Smoke environment"
 echo "    macOS: $(sw_vers -productVersion) ($(uname -m))"
 echo "    Source/bundle version: ${VERSION}/${BUNDLE_VERSION}"
+echo "==> Checking packaged Apple Vision OCR runtime"
+"$EXECUTABLE" --ocr-runtime >"$OCR_OUTPUT" 2>&1
+"$PYTHON_BIN" -c 'import json, sys; value = json.load(open(sys.argv[1])); assert value["engine"] == "apple-vision"; assert value["languages"]' "$OCR_OUTPUT"
 echo "==> Launching packaged executable with isolated data and logs"
 
 AIDE_SMOKE_TEST=1 \
