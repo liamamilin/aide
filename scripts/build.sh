@@ -40,7 +40,11 @@ echo "    PyInstaller: $($PYTHON_BIN -m PyInstaller --version)"
 
 if $RUN_TESTS; then
     echo "==> [1/6] 运行 ruff 检查..."
-    "$PYTHON_BIN" -m ruff check ai_desktop/ tests/ scripts/release_check.py scripts/restore_database.py scripts/benchmark_m2.py scripts/benchmark_ocr.py
+    "$PYTHON_BIN" -m ruff check \
+        ai_desktop/ tests/ \
+        scripts/release_check.py scripts/restore_database.py \
+        scripts/benchmark_m2.py scripts/benchmark_ocr.py \
+        scripts/benchmark_ocr_quality.py
 
     echo "==> [2/6] 运行 pytest..."
     QT_QPA_PLATFORM=offscreen "$PYTHON_BIN" -m pytest tests/ -q
