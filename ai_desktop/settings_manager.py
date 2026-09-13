@@ -27,6 +27,7 @@ _SETTING_MAP = [
     ("max_rounds",      "OLLAMA_MAX_ROUNDS",     int),
     ("hotkey",          "HOTKEY",                str),
     ("think",           "OLLAMA_THINK",          bool),
+    ("quick_actions",   "QUICK_ACTIONS_ENABLED", bool),
 ]
 
 _DB_KEY_MAP = {
@@ -41,6 +42,7 @@ _DB_KEY_MAP = {
     "max_rounds":     "ollama_max_rounds",
     "hotkey":         "hotkey",
     "think":          "ollama_think",
+    "quick_actions":  "quick_actions_enabled",
 }
 
 

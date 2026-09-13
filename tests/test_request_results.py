@@ -1,6 +1,7 @@
 """Exercise the real Qt worker/controller/UI pipeline against a temporary DB."""
 import threading
 import time
+from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -124,7 +125,7 @@ def test_quick_action_creates_dedicated_conversation_and_uses_action_profile(
     controller._on_conversation_selected(old.id)
 
     with patch.object(StreamingChatWorker, "start"):
-        controller._on_action_requested("translate", "raw material")
+        controller._on_action_requested("translate", "raw material", "new")
 
     worker = controller._worker
     conversation = get_conversation(controller._convo_id)
@@ -140,6 +141,49 @@ def test_quick_action_creates_dedicated_conversation_and_uses_action_profile(
     controller._worker = None
     worker.release_attachments()
     worker.deleteLater()
+
+
+def test_quick_action_can_continue_current_conversation_without_switching_agent(
+    controller,
+):
+    profile = controller._profile_mgr.save(
+        ModelProfile("translator-fast", "翻译快速", "translator-model", False, 0.2, 444)
+    )
+    controller._agent_mgr.assign_profile("translator", profile.id)
+    controller._all_agents = controller._agent_mgr.all_agents
+    old = storage.create_conversation("code_expert", "old")
+    controller._on_conversation_selected(old.id)
+    active_agent = controller._active_agent
+
+    with patch.object(StreamingChatWorker, "start"):
+        controller._on_action_requested("translate", "raw material", "current")
+
+    worker = controller._worker
+    conversation = get_conversation(old.id)
+    assert controller._convo_id == old.id
+    assert controller._active_agent == active_agent
+    assert conversation.agent_id == "code_expert"
+    assert conversation.messages[0].content == "raw material"
+    assert worker.request.agent_id == "translator"
+    assert worker.request.model == "translator-model"
+    assert storage.get_setting("action_conversation_mode") == "current"
+    controller._worker = None
+    worker.release_attachments()
+    worker.deleteLater()
+
+
+def test_saving_actions_refreshes_visible_buttons(controller):
+    actions = [
+        replace(action, enabled=action.id != "summarize", updated_at=0)
+        for action in controller._action_service.actions
+    ]
+    controller._on_actions_saved(actions)
+    assert controller._action_service.get("summarize").enabled is False
+    assert [action.id for action in controller._dialog._actions] == [
+        "translate",
+        "explain",
+        "rewrite",
+    ]
 
 
 def test_normal_reply_with_cannot_prefix_is_saved(qtbot, controller, ollama_server):

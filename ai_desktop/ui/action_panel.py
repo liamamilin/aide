@@ -1,14 +1,21 @@
 """Compact keyboard-accessible quick-action bar."""
 
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import (
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ai_desktop.services.action_service import Action
 from ai_desktop.ui import styles
 
 
 class ActionPanel(QWidget):
-    action_selected = pyqtSignal(str, str)
+    action_selected = pyqtSignal(str, str, str)
     cancelled = pyqtSignal()
 
     def __init__(self, actions: list[Action], parent=None):
@@ -26,9 +33,15 @@ class ActionPanel(QWidget):
         heading = QHBoxLayout()
         label = QLabel("快捷动作")
         label.setStyleSheet(styles.LABEL_BOLD)
-        label.setToolTip("执行动作会新建专用对话；Esc 返回自由提问")
+        label.setToolTip("执行前可选择新建对话或在当前对话继续")
         heading.addWidget(label)
         heading.addStretch()
+        self._mode_combo = QComboBox()
+        self._mode_combo.setStyleSheet(styles.COMBO_BOX)
+        self._mode_combo.addItem("新建专用对话", "new")
+        self._mode_combo.addItem("在当前对话继续", "current")
+        self._mode_combo.setToolTip("选择动作结果所属的对话")
+        heading.addWidget(self._mode_combo)
         hint = QLabel("1–4 / ←→ 选择 · Enter 执行 · Esc 自由提问")
         hint.setStyleSheet(styles.LABEL_SECONDARY)
         heading.addWidget(hint)
@@ -57,8 +70,23 @@ class ActionPanel(QWidget):
         self._selected_index = min(self._selected_index, max(0, len(self._buttons) - 1))
         self._refresh_selection()
 
-    def show_for_material(self, material: str, selected_id: str | None = None) -> None:
+    def show_for_material(
+        self,
+        material: str,
+        selected_id: str | None = None,
+        *,
+        has_conversation: bool = False,
+        mode: str = "new",
+    ) -> None:
         self._material = material
+        selected_mode = mode if has_conversation and mode == "current" else "new"
+        self._mode_combo.setCurrentIndex(self._mode_combo.findData(selected_mode))
+        self._mode_combo.setEnabled(has_conversation)
+        self._mode_combo.setToolTip(
+            "选择动作结果所属的对话"
+            if has_conversation
+            else "当前尚无已保存对话，执行后将新建专用对话"
+        )
         if selected_id:
             index = next(
                 (i for i, action in enumerate(self._actions) if action.id == selected_id),
@@ -108,7 +136,11 @@ class ActionPanel(QWidget):
         action = self._actions[index]
         self._selected_index = index
         self.hide()
-        self.action_selected.emit(action.id, self._material)
+        self.action_selected.emit(
+            action.id,
+            self._material,
+            str(self._mode_combo.currentData() or "new"),
+        )
 
     def _refresh_selection(self) -> None:
         for index, button in enumerate(self._buttons):

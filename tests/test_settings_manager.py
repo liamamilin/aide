@@ -21,6 +21,7 @@ _ORIG_DEFAULTS = {
     "OLLAMA_REPEAT_PENALTY": config.OLLAMA_REPEAT_PENALTY,
     "OLLAMA_MAX_ROUNDS": config.OLLAMA_MAX_ROUNDS,
     "HOTKEY": config.HOTKEY,
+    "QUICK_ACTIONS_ENABLED": config.QUICK_ACTIONS_ENABLED,
 }
 
 
@@ -61,10 +62,12 @@ class TestSettingsManagerLoad:
         _reset_config()
         storage.save_setting("ollama_base_url", "http://custom:1234")
         storage.save_setting("ollama_timeout", "60")
+        storage.save_setting("quick_actions_enabled", "false")
         mgr = SettingsManager()
         mgr.load()
         assert config.OLLAMA_BASE_URL == "http://custom:1234"
         assert config.OLLAMA_TIMEOUT == 60
+        assert config.QUICK_ACTIONS_ENABLED is False
 
     def test_load_skips_invalid_values(self):
         _reset_config()
@@ -127,6 +130,14 @@ class TestSettingsManagerApply:
         assert "hotkey" in changed
         assert config.HOTKEY == "<cmd>+<shift>+k"
         assert storage.get_setting("hotkey") == "<cmd>+<shift>+k"
+
+    def test_apply_persists_quick_action_toggle(self):
+        _reset_config()
+        mgr = SettingsManager()
+        changed = mgr.apply({"quick_actions": False})
+        assert "quick_actions" in changed
+        assert config.QUICK_ACTIONS_ENABLED is False
+        assert storage.get_setting("quick_actions_enabled") == "False"
 
     def test_apply_rejects_invalid_hotkey(self):
         _reset_config()

@@ -12,7 +12,7 @@ def test_number_key_executes_action_with_unchanged_material(qtbot):
     panel.show_for_material("  raw user material  ")
     with qtbot.waitSignal(panel.action_selected, timeout=1000) as signal:
         qtbot.keyClick(panel, Qt.Key_2)
-    assert signal.args == ["explain", "  raw user material  "]
+    assert signal.args == ["explain", "  raw user material  ", "new"]
     assert not panel.isVisible()
 
 
@@ -24,7 +24,7 @@ def test_arrow_and_enter_select_action(qtbot):
     qtbot.keyClick(panel, Qt.Key_Right)
     with qtbot.waitSignal(panel.action_selected, timeout=1000) as signal:
         qtbot.keyClick(panel, Qt.Key_Return)
-    assert signal.args == ["summarize", "material"]
+    assert signal.args == ["summarize", "material", "new"]
 
 
 def test_escape_returns_to_free_input_without_action(qtbot):
@@ -43,3 +43,22 @@ def test_hidden_or_extra_actions_are_not_rendered(qtbot):
     assert len(panel._buttons) == 2
     panel.refresh_actions(list(BUILTIN_ACTIONS))
     assert len(panel._buttons) == 4
+
+
+def test_existing_conversation_can_continue_in_place(qtbot):
+    panel = ActionPanel(list(BUILTIN_ACTIONS))
+    qtbot.addWidget(panel)
+    panel.show_for_material("material", has_conversation=True, mode="current")
+    assert panel._mode_combo.isEnabled()
+    assert panel._mode_combo.currentData() == "current"
+    with qtbot.waitSignal(panel.action_selected, timeout=1000) as signal:
+        qtbot.keyClick(panel, Qt.Key_1)
+    assert signal.args == ["translate", "material", "current"]
+
+
+def test_empty_conversation_forces_new_mode(qtbot):
+    panel = ActionPanel(list(BUILTIN_ACTIONS))
+    qtbot.addWidget(panel)
+    panel.show_for_material("material", has_conversation=False, mode="current")
+    assert not panel._mode_combo.isEnabled()
+    assert panel._mode_combo.currentData() == "new"

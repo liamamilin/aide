@@ -95,14 +95,15 @@ class ChatDialog(FramelessDragMixin, QWidget):
     agent_changed = pyqtSignal(Agent)
     model_changed = pyqtSignal(str)
     service_check_requested = pyqtSignal()
-    action_requested = pyqtSignal(str, str)
+    action_requested = pyqtSignal(str, str, str)
     closed = pyqtSignal()
     geometry_changed = pyqtSignal()
 
     def __init__(self, agents: list[Agent], active_agent: Agent,
                  models: list[str] | None = None, active_model: str = "",
                  auto_hide: bool = False, parent=None,
-                 actions: list[Action] | None = None):
+                 actions: list[Action] | None = None,
+                 actions_enabled: bool = True):
         super().__init__(parent)
         self._setup_drag(40)
         self._agents = agents
@@ -110,6 +111,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._auto_hide = auto_hide
         self._models = list(models) if models else []
         self._actions = list(actions or [])
+        self._actions_enabled = actions_enabled
+        self._action_has_conversation = False
+        self._action_mode = "new"
         self._active_model = active_model
         self._image_capability = ImageCapability.UNKNOWN
         self._placement_initialized = False
@@ -386,6 +390,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         action_btn.setToolTip("显示快捷动作")
         action_btn.clicked.connect(lambda: self.show_actions())
         self._action_btn = action_btn
+        action_btn.setVisible(self._actions_enabled and bool(self._actions))
         il.addWidget(action_btn)
 
         # 图片附件按钮（📎 菜单：选择文件 / 截图 / 粘贴剪贴板图片）
@@ -560,21 +565,39 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     def show_actions(self, material: str | None = None,
                      selected_id: str | None = None) -> None:
+        if not self._actions_enabled or not self._actions:
+            return
         if material is not None:
             self.set_input_text(material)
         self._action_panel.show_for_material(
             self._input.toPlainText(),
             selected_id,
+            has_conversation=self._action_has_conversation,
+            mode=self._action_mode,
         )
 
     def refresh_actions(self, actions: list[Action]) -> None:
         self._actions = list(actions)
         self._action_panel.refresh_actions(self._actions)
+        self._action_btn.setVisible(self._actions_enabled and bool(self._actions))
+        if not self._actions:
+            self._action_panel.hide()
 
-    def _on_action_selected(self, action_id: str, material: str) -> None:
+    def set_action_context(self, has_conversation: bool, mode: str = "new") -> None:
+        self._action_has_conversation = has_conversation
+        self._action_mode = mode if mode in {"new", "current"} else "new"
+
+    def set_actions_enabled(self, enabled: bool) -> None:
+        self._actions_enabled = bool(enabled)
+        self._action_btn.setVisible(self._actions_enabled and bool(self._actions))
+        if not self._actions_enabled:
+            self._action_panel.hide()
+
+    def _on_action_selected(self, action_id: str, material: str, mode: str) -> None:
         self._input.clear()
         self._exit_input_browsing()
-        self.action_requested.emit(action_id, material)
+        self._action_mode = mode
+        self.action_requested.emit(action_id, material, mode)
 
     def _focus_free_input(self) -> None:
         self._input.setFocus(Qt.ShortcutFocusReason)

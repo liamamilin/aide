@@ -37,7 +37,7 @@ from ai_desktop.llm.service_checks import (
     normalize_service_url,
 )
 from ai_desktop.llm.streaming_worker import StreamingChatWorker
-from ai_desktop.services.action_service import ActionService
+from ai_desktop.services.action_service import Action, ActionService
 from ai_desktop.services.model_profiles import ModelProfile, ModelProfileManager
 from ai_desktop.settings_manager import SettingsManager
 from ai_desktop.ui import styles
@@ -146,6 +146,12 @@ class ChatController(QObject):
 
         self._model: str = saved_model or config.OLLAMA_MODEL
         self._auto_hide: bool = get_setting("auto_hide") == "true"  # 默认不收起
+        saved_action_mode = get_setting("action_conversation_mode")
+        self._action_mode = (
+            saved_action_mode
+            if saved_action_mode in {"new", "current"}
+            else "new"
+        )
 
         self._convo_id: int = 0
         self._messages: list[Message] = []
@@ -478,7 +484,9 @@ class ChatController(QObject):
                 self._model,
                 auto_hide=self._auto_hide,
                 actions=self._action_service.visible_actions,
+                actions_enabled=config.QUICK_ACTIONS_ENABLED,
             )
+            self._sync_action_context()
             self._dialog.restore_geometry(self._chat_geometry)
             self._dialog.geometry_changed.connect(self._schedule_window_state_save)
             self._dialog.message_sent.connect(self._on_user_message)
@@ -586,6 +594,7 @@ class ChatController(QObject):
             "repeat_penalty": config.OLLAMA_REPEAT_PENALTY,
             "max_rounds": config.OLLAMA_MAX_ROUNDS,
             "hotkey": config.HOTKEY,
+            "quick_actions": config.QUICK_ACTIONS_ENABLED,
         }
         dlg = SettingsDialog(current, parent=self._dialog)
         dlg.settings_applied.connect(self._on_settings_applied)
@@ -601,6 +610,8 @@ class ChatController(QObject):
                 logger.info("Hotkey changed to %s", config.HOTKEY)
             except Exception as e:
                 logger.warning("Failed to change hotkey: %s", e)
+        if "quick_actions" in changed and self._dialog:
+            self._dialog.set_actions_enabled(config.QUICK_ACTIONS_ENABLED)
         if "base_url" in changed:
             self._startup_service_check = None
             self._service_checks.cancel_service()
@@ -728,7 +739,11 @@ class ChatController(QObject):
                 cached=self._image_capability != ImageCapability.UNKNOWN,
             )
 
-    def _resolve_model_config(self, action_profile_id: str | None = None):
+    def _resolve_model_config(
+        self,
+        action_profile_id: str | None = None,
+        agent: Agent | None = None,
+    ):
         models = self._load_cached_models(config.OLLAMA_BASE_URL)
         available_models = (
             models
@@ -737,7 +752,7 @@ class ChatController(QObject):
         )
         return self._profile_mgr.resolve(
             global_model=self._model,
-            agent_profile_id=self._active_agent.profile_id,
+            agent_profile_id=(agent or self._active_agent).profile_id,
             action_profile_id=action_profile_id,
             available_models=available_models,
         )
@@ -941,7 +956,12 @@ class ChatController(QObject):
         self._messages = []
         if self._dialog:
             self._dialog.clear_messages()
+        self._sync_action_context()
         logger.info("New conversation started (agent=%s)", self._active_agent.name)
+
+    def _sync_action_context(self) -> None:
+        if self._dialog:
+            self._dialog.set_action_context(self._convo_id != 0, self._action_mode)
 
     # ── 工作线程管理 ───────────────────────────────────
 
@@ -1018,6 +1038,7 @@ class ChatController(QObject):
                         )
                     else:
                         self._dialog.add_assistant_message(m.content)
+            self._sync_action_context()
             logger.info("Loaded conversation %d (%d messages)", convo_id, len(conv.messages))
         except Exception:
             logger.exception("Failed to load conversation %d", convo_id)
@@ -1032,6 +1053,7 @@ class ChatController(QObject):
         if self._dialog:
             self._dialog.clear_messages()
             self._dialog.set_thinking(False)
+        self._sync_action_context()
         logger.info("Current conversation %d deleted", convo_id)
 
     @_safe_slot
@@ -1068,10 +1090,12 @@ class ChatController(QObject):
             parent=self._dialog,
             profiles=self._profile_mgr.profiles,
             models=self._load_cached_models(config.OLLAMA_BASE_URL),
+            actions=self._action_service.actions,
         )
         editor.agents_saved.connect(self._on_custom_agents_saved)
         editor.profiles_saved.connect(self._on_profiles_saved)
         editor.agent_profile_changed.connect(self._on_agent_profile_changed)
+        editor.actions_saved.connect(self._on_actions_saved)
         if self._dialog:
             p = self._dialog.geometry().center()
             editor.move(p.x() - editor.width() // 2, p.y() - editor.height() // 2)
@@ -1094,12 +1118,22 @@ class ChatController(QObject):
     @_safe_slot
     def _on_profiles_saved(self, profiles: list[ModelProfile]) -> None:
         self._profile_mgr.replace_all(profiles)
+        self._action_service.reload()
         self._agent_mgr.refresh_profile_assignments()
         self._all_agents = self._agent_mgr.all_agents
         self._custom_agents = self._agent_mgr.custom_agents
         self._active_agent = self._agent_mgr.active_agent
+        if self._dialog:
+            self._dialog.refresh_actions(self._action_service.visible_actions)
         self._update_model_profile_summary()
         logger.info("Model profiles saved (%d)", len(profiles))
+
+    @_safe_slot
+    def _on_actions_saved(self, actions: list[Action]) -> None:
+        self._action_service.replace_all(actions)
+        if self._dialog:
+            self._dialog.refresh_actions(self._action_service.visible_actions)
+        logger.info("Quick actions saved (%d)", len(actions))
 
     @_safe_slot
     def _on_agent_profile_changed(self, agent_id: str, profile_id: str | None) -> None:
@@ -1123,7 +1157,18 @@ class ChatController(QObject):
         logger.info("Streaming interrupted by user")
 
     @_safe_slot
-    def _on_action_requested(self, action_id: str, material: str) -> None:
+    def _on_action_requested(
+        self,
+        action_id: str,
+        material: str,
+        mode: str = "new",
+    ) -> None:
+        mode = mode if mode in {"new", "current"} else "new"
+        if mode == "current" and self._convo_id == 0:
+            mode = "new"
+        self._action_mode = mode
+        save_setting("action_conversation_mode", mode)
+        self._sync_action_context()
         if self._worker is not None:
             if self._dialog:
                 self._dialog.set_input_text(material)
@@ -1148,17 +1193,20 @@ class ChatController(QObject):
                 "快捷动作已回退",
                 "<br>".join(html.escape(warning) for warning in plan.warnings),
             )
-        self._new_conversation()
-        self._active_agent = self._agent_mgr.switch(plan.agent)
-        if self._dialog:
-            self._dialog.set_active_agent(self._active_agent)
-        self._tray.set_active_agent(self._active_agent)
-        self._update_model_profile_summary()
+        if mode == "new":
+            self._new_conversation()
+            self._active_agent = self._agent_mgr.switch(plan.agent)
+            if self._dialog:
+                self._dialog.set_active_agent(self._active_agent)
+            self._tray.set_active_agent(self._active_agent)
+            self._update_model_profile_summary()
         self._on_user_message(
             plan.material,
             system_prompt=plan.system_prompt,
             action_profile_id=plan.action_profile_id,
             retry_action_id=plan.action.id,
+            retry_action_mode=mode,
+            request_agent=plan.agent,
         )
 
     def _on_user_message(
@@ -1169,6 +1217,8 @@ class ChatController(QObject):
         system_prompt: str | None = None,
         action_profile_id: str | None = None,
         retry_action_id: str | None = None,
+        retry_action_mode: str = "new",
+        request_agent: Agent | None = None,
     ) -> None:
         images = images or []
         if self._stopping or self._stopped:
@@ -1178,7 +1228,8 @@ class ChatController(QObject):
                 self._dialog.restore_draft(text, images)
                 self._dialog.flash_busy()
             return
-        resolved = self._resolve_model_config(action_profile_id)
+        request_agent = request_agent or self._active_agent
+        resolved = self._resolve_model_config(action_profile_id, request_agent)
         image_capability = self._image_capability_for_model(resolved.model)
         if (
             images
@@ -1229,6 +1280,7 @@ class ChatController(QObject):
                 conv = create_conversation(self._active_agent.id)
                 self._convo_id = conv.id
                 created_conversation = True
+                self._sync_action_context()
 
             user_msg = save_message(self._convo_id, "user", text, images=images)
             self._messages.append(user_msg)
@@ -1241,8 +1293,8 @@ class ChatController(QObject):
 
             self._response_text = ""
             worker = StreamingChatWorker(
-                recent, system_prompt or self._active_agent.system_prompt, resolved.model, self,
-                conversation_id=self._convo_id, agent_id=self._active_agent.id,
+                recent, system_prompt or request_agent.system_prompt, resolved.model, self,
+                conversation_id=self._convo_id, agent_id=request_agent.id,
                 think=resolved.think, options=resolved.options,
             )
             worker.thinking_event.connect(self._on_thinking_event)
@@ -1281,6 +1333,7 @@ class ChatController(QObject):
                 except Exception:
                     logger.exception("Failed to roll back conversation %d", self._convo_id)
                 self._convo_id = 0
+                self._sync_action_context()
             if self._dialog:
                 self._dialog.set_thinking(False)
                 self._dialog.clear_messages()
@@ -1295,6 +1348,8 @@ class ChatController(QObject):
                         self._dialog.add_assistant_message(message.content)
                 self._dialog.restore_draft(text, images)
                 if retry_action_id:
+                    self._action_mode = retry_action_mode
+                    self._sync_action_context()
                     self._dialog.show_actions(text, retry_action_id)
             self.float_btn.set_responding(False)
 

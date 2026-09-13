@@ -7,6 +7,7 @@ from PyQt5.QtGui import QTextCursor
 
 from ai_desktop.config import Agent
 from ai_desktop.llm.service_checks import ImageCapability, ServiceState
+from ai_desktop.services.action_service import BUILTIN_ACTIONS
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -98,6 +99,43 @@ class TestChatDialogSignals:
         assert dialog._send_btn.text() == "⏹"
         with qtbot.waitSignal(dialog.stop_requested, timeout=1000):
             qtbot.mouseClick(dialog._send_btn, Qt.LeftButton)
+
+    def test_action_signal_includes_current_conversation_mode(self, qtbot):
+        from ai_desktop.ui.chat_dialog import ChatDialog
+
+        dialog = ChatDialog(
+            AGENTS,
+            ACTIVE,
+            MODELS,
+            MODELS[0],
+            actions=list(BUILTIN_ACTIONS),
+        )
+        qtbot.addWidget(dialog)
+        dialog.set_action_context(True, "current")
+        dialog.show_actions("material")
+        with qtbot.waitSignal(dialog.action_requested, timeout=1000) as signal:
+            dialog._action_panel._trigger(0)
+        assert signal.args == ["translate", "material", "current"]
+
+    def test_disabling_actions_hides_button_and_panel(self, qtbot):
+        from ai_desktop.ui.chat_dialog import ChatDialog
+
+        dialog = ChatDialog(
+            AGENTS,
+            ACTIVE,
+            MODELS,
+            MODELS[0],
+            actions=list(BUILTIN_ACTIONS),
+        )
+        qtbot.addWidget(dialog)
+        dialog.show()
+        dialog.show_actions("material")
+        assert dialog._action_panel.isVisible()
+        dialog.set_actions_enabled(False)
+        assert not dialog._action_btn.isVisible()
+        assert not dialog._action_panel.isVisible()
+        dialog.show_actions("other")
+        assert not dialog._action_panel.isVisible()
 
 
 # ── L2: State Transition Tests ──────────────────────────

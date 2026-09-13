@@ -18,8 +18,10 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from ai_desktop.services.action_service import Action
 from ai_desktop.services.model_profiles import ModelProfile
 from ai_desktop.ui import styles
+from ai_desktop.ui.action_settings_dialog import ActionSettingsDialog
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 from ai_desktop.ui.model_profile_dialog import ModelProfileDialog
 
@@ -39,16 +41,19 @@ class AgentEditor(FramelessDragMixin, QDialog):
     agents_saved = pyqtSignal(list)
     profiles_saved = pyqtSignal(list)
     agent_profile_changed = pyqtSignal(str, object)
+    actions_saved = pyqtSignal(list)
 
     def __init__(self, builtin_agents: list[AgentDef], custom_agents: list[AgentDef],
                  parent=None, *, profiles: list[ModelProfile] | None = None,
-                 models: list[str] | None = None):
+                 models: list[str] | None = None,
+                 actions: list[Action] | None = None):
         super().__init__(parent)
         self._setup_drag(40)
         self._builtin = builtin_agents
         self._custom = list(custom_agents)
         self._profiles = list(profiles or [])
         self._models = list(models or [])
+        self._actions = list(actions or [])
         self._setup_window()
         self._setup_ui()
         self._load()
@@ -119,6 +124,12 @@ class AgentEditor(FramelessDragMixin, QDialog):
         profiles_btn.setStyleSheet(styles.AGENT_EDIT_BUTTON)
         profiles_btn.clicked.connect(self._on_manage_profiles)
         al.addWidget(profiles_btn)
+
+        actions_btn = QPushButton("快捷动作…")
+        actions_btn.setFixedHeight(28)
+        actions_btn.setStyleSheet(styles.AGENT_EDIT_BUTTON)
+        actions_btn.clicked.connect(self._on_manage_actions)
+        al.addWidget(actions_btn)
 
         root.addWidget(add_bar)
 
@@ -231,6 +242,20 @@ class AgentEditor(FramelessDragMixin, QDialog):
         dialog = ModelProfileDialog(self._profiles, self._models, self)
         dialog.profiles_saved.connect(self._on_profiles_updated)
         dialog.exec_()
+
+    def _on_manage_actions(self) -> None:
+        dialog = ActionSettingsDialog(
+            self._actions,
+            list(self._builtin) + self._custom,
+            self._profiles,
+            self,
+        )
+        dialog.actions_saved.connect(self._on_actions_updated)
+        dialog.exec_()
+
+    def _on_actions_updated(self, actions: list[Action]) -> None:
+        self._actions = list(actions)
+        self.actions_saved.emit(self._actions)
 
     def _on_profiles_updated(self, profiles: list[ModelProfile]) -> None:
         self._profiles = list(profiles)
