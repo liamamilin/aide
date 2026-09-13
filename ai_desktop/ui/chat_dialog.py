@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import (
     QApplication,
     QComboBox,
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMenu,
@@ -32,6 +33,7 @@ from ai_desktop.ui import markdown, styles, theme
 from ai_desktop.ui.action_panel import ActionPanel
 from ai_desktop.ui.float_button import pin_to_all_spaces
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
+from ai_desktop.ui.ocr_preview_dialog import OCRPreviewDialog
 from ai_desktop.utils import images as image_utils
 from ai_desktop.utils.window_state import (
     ScreenArea,
@@ -98,6 +100,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
     action_requested = pyqtSignal(str, str, str)
     closed = pyqtSignal()
     geometry_changed = pyqtSignal()
+    ocr_requested = pyqtSignal(str)
+    ocr_cancel_requested = pyqtSignal()
+    pending_images_changed = pyqtSignal(list)
 
     def __init__(self, agents: list[Agent], active_agent: Agent,
                  models: list[str] | None = None, active_model: str = "",
@@ -119,6 +124,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._placement_initialized = False
         self._user_scrolled_up: bool = False
         self._pending_images: list[str] = []     # 发送前暂存的图片（应用数据目录路径）
+        self._ocr_preview_dialog: OCRPreviewDialog | None = None
         self._stream_bubble: QLabel | None = None
         self._stream_copy_btn: QPushButton | None = None
         self._stream_text: str = ""
@@ -746,6 +752,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._refresh_image_preview()
 
     def _refresh_image_preview(self) -> None:
+        self.pending_images_changed.emit(list(self._pending_images))
         layout = self._preview_layout
         while layout.count():
             item = layout.takeAt(0)
@@ -757,11 +764,11 @@ class ChatDialog(FramelessDragMixin, QWidget):
             return
         for idx, path in enumerate(self._pending_images):
             item = QWidget()
-            item.setFixedSize(64, 64)
-            il = QVBoxLayout(item)
-            il.setContentsMargins(0, 0, 0, 0)
-            il.setSpacing(0)
+            item.setFixedSize(68, 68)
+            il = QGridLayout(item)
+            il.setContentsMargins(2, 2, 2, 2)
             thumb = QLabel()
+            thumb.setFixedSize(64, 64)
             pix = QPixmap(path)
             if not pix.isNull():
                 thumb.setPixmap(
@@ -779,7 +786,16 @@ class ChatDialog(FramelessDragMixin, QWidget):
             except Exception:
                 thumb.setToolTip(Path(path).name)
             thumb.setStyleSheet("border-radius: 4px;")
-            il.addWidget(thumb, 1)
+            il.addWidget(thumb, 0, 0)
+            ocr = QPushButton("识字")
+            ocr.setObjectName("ocr_image_btn")
+            ocr.setFixedSize(44, 20)
+            ocr.setToolTip("在本机提取这张图片中的文字")
+            ocr.setStyleSheet(styles.SECONDARY_BUTTON)
+            ocr.clicked.connect(
+                lambda checked=False, image_path=path: self.ocr_requested.emit(image_path)
+            )
+            il.addWidget(ocr, 0, 0, alignment=Qt.AlignBottom | Qt.AlignLeft)
             rm = QPushButton("✕")
             rm.setFixedSize(16, 16)
             rm.setStyleSheet(
@@ -788,9 +804,67 @@ class ChatDialog(FramelessDragMixin, QWidget):
                 "QPushButton:hover { background: #ff3b30; }"
             )
             rm.clicked.connect(lambda checked, i=idx: self._remove_pending_image(i))
-            il.addWidget(rm, alignment=Qt.AlignTop | Qt.AlignRight)
+            il.addWidget(rm, 0, 0, alignment=Qt.AlignTop | Qt.AlignRight)
             layout.addWidget(item)
         self._image_preview.setVisible(True)
+
+    def show_ocr_loading(self, image_path: str) -> None:
+        preview = self._ensure_ocr_preview()
+        preview.begin(image_path)
+
+    def show_ocr_result(
+        self,
+        image_path: str,
+        text: str,
+        *,
+        block_count: int,
+        elapsed_ms: float,
+        languages: tuple[str, ...],
+        low_confidence: bool,
+    ) -> None:
+        preview = self._ensure_ocr_preview()
+        if preview.image_path != image_path:
+            return
+        preview.show_result(
+            text,
+            block_count=block_count,
+            elapsed_ms=elapsed_ms,
+            languages=languages,
+            low_confidence=low_confidence,
+        )
+
+    def show_ocr_empty(self, image_path: str, elapsed_ms: float) -> None:
+        preview = self._ensure_ocr_preview()
+        if preview.image_path == image_path:
+            preview.show_empty(elapsed_ms)
+
+    def show_ocr_error(self, image_path: str, error: str) -> None:
+        preview = self._ensure_ocr_preview()
+        if preview.image_path == image_path:
+            preview.show_error(error)
+
+    def close_ocr_preview(self, image_path: str | None = None) -> None:
+        preview = self._ocr_preview_dialog
+        if preview is None:
+            return
+        if image_path is None or preview.image_path == image_path:
+            preview.close()
+
+    def _ensure_ocr_preview(self) -> OCRPreviewDialog:
+        if self._ocr_preview_dialog is None:
+            preview = OCRPreviewDialog(self)
+            preview.text_accepted.connect(self._insert_ocr_text)
+            preview.cancel_requested.connect(self.ocr_cancel_requested.emit)
+            self._ocr_preview_dialog = preview
+        return self._ocr_preview_dialog
+
+    def _insert_ocr_text(self, text: str) -> None:
+        cursor = self._input.textCursor()
+        if self._input.toPlainText() and cursor.position() > 0:
+            cursor.insertText("\n")
+        cursor.insertText(text)
+        self._input.setTextCursor(cursor)
+        self._input.setFocus()
 
     def _remove_pending_image(self, idx: int) -> None:
         if 0 <= idx < len(self._pending_images):
@@ -856,6 +930,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._busy_feedback_timer.stop()
         self._export_feedback_timer.stop()
         self._auto_hide_timer.stop()
+        self.close_ocr_preview()
         self.clear_pending_images()
         return []
 

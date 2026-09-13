@@ -39,6 +39,7 @@ from ai_desktop.llm.service_checks import (
 from ai_desktop.llm.streaming_worker import StreamingChatWorker
 from ai_desktop.services.action_service import Action, ActionService
 from ai_desktop.services.model_profiles import ModelProfile, ModelProfileManager
+from ai_desktop.services.ocr_service import AsyncOCRService, OCRResult, OCRStatus
 from ai_desktop.settings_manager import SettingsManager
 from ai_desktop.ui import styles
 from ai_desktop.ui.agent_editor import AgentDef, AgentEditor
@@ -218,6 +219,9 @@ class ChatController(QObject):
         self.hotkey_img.register(config.SCREENSHOT_HOTKEY, self._on_global_screenshot_hotkey)
         self._screenshot_hotkey_triggered.connect(self._on_screenshot_hotkey)
         self._screenshot_worker: Optional[ScreenshotWorker] = None
+        self._ocr = AsyncOCRService(self)
+        self._ocr.completed.connect(self._on_ocr_completed)
+        self._ocr_image_path: str | None = None
         self._shutdown_workers: list[QThread] = []
         self._stopping = False
         self._stopped = False
@@ -316,6 +320,9 @@ class ChatController(QObject):
                 worker.deleteLater()
             else:
                 worker.cancel()
+        self._ocr_image_path = None
+        for worker in self._ocr.take_shutdown_workers():
+            self._track_shutdown_worker(worker)
         if self._dialog:
             self._dialog.hide()
             for worker in self._dialog.take_shutdown_workers():
@@ -429,6 +436,57 @@ class ChatController(QObject):
         self.float_btn.set_listening(False)
         worker.deleteLater()
         self._finish_stop_if_ready()
+
+    def _on_ocr_requested(self, image_path: str) -> None:
+        if self._stopping or self._stopped or self._dialog is None:
+            return
+        if image_path not in self._dialog.get_pending_images():
+            return
+        self._ocr_image_path = image_path
+        self._dialog.show_ocr_loading(image_path)
+        self._ocr.start(image_path)
+
+    @_safe_slot
+    def _on_ocr_completed(self, result: OCRResult) -> None:
+        if self._stopping or self._dialog is None:
+            return
+        if result.image_path != self._ocr_image_path:
+            return
+        if result.image_path not in self._dialog.get_pending_images():
+            return
+        self._ocr_image_path = None
+        if result.status == OCRStatus.SUCCEEDED:
+            low_confidence = any(
+                block.confidence < 0.5 for block in result.blocks
+            )
+            self._dialog.show_ocr_result(
+                result.image_path,
+                result.text,
+                block_count=len(result.blocks),
+                elapsed_ms=result.elapsed_ms,
+                languages=result.languages,
+                low_confidence=low_confidence,
+            )
+        elif result.status == OCRStatus.EMPTY:
+            self._dialog.show_ocr_empty(result.image_path, result.elapsed_ms)
+        elif result.status == OCRStatus.FAILED:
+            self._dialog.show_ocr_error(result.image_path, result.error)
+
+    def _on_ocr_cancel_requested(self) -> None:
+        self._ocr_image_path = None
+        self._ocr.cancel()
+
+    def _on_pending_images_changed(self, image_paths: list[str]) -> None:
+        image_path = self._ocr_image_path
+        if image_path is None or image_path in image_paths:
+            return
+        self._ocr_image_path = None
+        self._ocr.cancel()
+        if self._dialog:
+            self._dialog.close_ocr_preview(image_path)
+
+    def _on_dialog_closed(self) -> None:
+        self._on_ocr_cancel_requested()
 
     @staticmethod
     def _open_screen_recording_prefs() -> None:
@@ -551,6 +609,12 @@ class ChatController(QObject):
             self._dialog.geometry_changed.connect(self._schedule_window_state_save)
             self._dialog.message_sent.connect(self._on_user_message)
             self._dialog.screenshot_requested.connect(self._on_screenshot_hotkey)
+            self._dialog.ocr_requested.connect(self._on_ocr_requested)
+            self._dialog.ocr_cancel_requested.connect(self._on_ocr_cancel_requested)
+            self._dialog.pending_images_changed.connect(
+                self._on_pending_images_changed
+            )
+            self._dialog.closed.connect(self._on_dialog_closed)
             self._dialog.new_convo_requested.connect(self._new_conversation)
             self._dialog.history_requested.connect(self._on_history_requested)
             self._dialog.export_requested.connect(self._on_export_requested)
