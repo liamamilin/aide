@@ -8,6 +8,7 @@ from PyQt5.QtCore import QCoreApplication, QEvent, QEventLoop, QObject, Qt, QThr
 from ai_desktop.llm.chat_client import ChatClient, _exception_error, _payload
 from ai_desktop.llm.events import ChatResult, EventKind, ResultStatus
 from ai_desktop.llm.qt_stream import QtChatTransport
+from ai_desktop.utils import storage
 from ai_desktop.utils.storage import Message
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,11 @@ class StreamingChatWorker(QThread):
         )
         # Unlike QThread interruption, this also remembers cancellation before start().
         self._cancelled = threading.Event()
+        self._release_lock = threading.Lock()
+        self._attachments_released = False
+        self._retained_attachments = storage.retain_attachment_paths(
+            [path for message in self.request.messages for path in message.images]
+        )
 
     def cancel(self) -> None:
         self._cancelled.set()
@@ -37,6 +43,14 @@ class StreamingChatWorker(QThread):
 
     def requestInterruption(self) -> None:
         self.cancel()
+
+    def release_attachments(self) -> None:
+        """Release request-owned files once, including setup-failure paths."""
+        with self._release_lock:
+            if self._attachments_released:
+                return
+            self._attachments_released = True
+        storage.release_attachment_paths(self._retained_attachments)
 
     def run(self) -> None:
         transport = None
@@ -74,6 +88,7 @@ class StreamingChatWorker(QThread):
                 transport.deleteLater()
                 # Deferred deletes must run before this thread's event loop disappears.
                 QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+            self.release_attachments()
         self.done.emit(result)
 
     def _forward_event(self, event) -> None:

@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMenu,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -518,23 +519,37 @@ class ChatDialog(FramelessDragMixin, QWidget):
         # by the controller must remain after this method returns.
         self._input.clear()
         self._exit_input_browsing()
-        self.clear_pending_images()
+        self._pending_images = []
+        self._refresh_image_preview()
         self.message_sent.emit(text, images)
 
     # ── 图片附件 ───────────────────────────────────────
 
     def attach_image_paths(self, paths: list[str]) -> None:
         """外部（截图/历史恢复）传入图片文件路径：复制到应用数据目录并加入待发列表。"""
+        errors: list[str] = []
         for p in paths:
+            if len(self._pending_images) >= image_utils.MAX_ATTACHMENTS_PER_MESSAGE:
+                errors.append(
+                    f"每条消息最多添加 {image_utils.MAX_ATTACHMENTS_PER_MESSAGE} 张图片。"
+                )
+                break
             try:
                 if not p or not image_utils.is_image_file(p):
+                    if p:
+                        errors.append(f"{Path(p).name}：格式不受支持。")
                     continue
                 stored = image_utils.store_image(p)
                 if stored not in self._pending_images:
                     self._pending_images.append(stored)
+            except (image_utils.AttachmentError, FileNotFoundError) as exc:
+                errors.append(f"{Path(p).name}：{exc}")
             except Exception:
                 logger.exception("Failed to attach image %s", p)
+                errors.append(f"{Path(p).name}：读取失败，请重试。")
         self._refresh_image_preview()
+        if errors:
+            self._show_attachment_errors(errors)
 
     def restore_draft(self, text: str, image_paths: list[str]) -> None:
         """Restore paths already stored by this dialog without copying again."""
@@ -549,6 +564,11 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self.attach_image_paths(paths)
 
     def _attach_pixmap(self, pixmap) -> None:
+        if len(self._pending_images) >= image_utils.MAX_ATTACHMENTS_PER_MESSAGE:
+            self._show_attachment_errors(
+                [f"每条消息最多添加 {image_utils.MAX_ATTACHMENTS_PER_MESSAGE} 张图片。"]
+            )
+            return
         try:
             if pixmap.isNull():
                 return
@@ -556,8 +576,15 @@ class ChatDialog(FramelessDragMixin, QWidget):
             if stored not in self._pending_images:
                 self._pending_images.append(stored)
             self._refresh_image_preview()
+        except image_utils.AttachmentError as exc:
+            self._show_attachment_errors([str(exc)])
         except Exception:
             logger.exception("Failed to attach pasted pixmap")
+            self._show_attachment_errors(["剪贴板图片读取失败，请重试。"])
+
+    def _show_attachment_errors(self, errors: list[str]) -> None:
+        unique = list(dict.fromkeys(errors))
+        QMessageBox.warning(self, "无法添加图片", "\n".join(unique))
 
     def _pick_image_files(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(
@@ -575,6 +602,11 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._attach_pixmap(pix)
 
     def clear_pending_images(self) -> None:
+        for path in self._pending_images:
+            try:
+                image_utils.discard_staged_image(path)
+            except Exception:
+                logger.warning("Failed to discard draft image %s", path, exc_info=True)
         self._pending_images = []
         self._refresh_image_preview()
 
@@ -600,6 +632,17 @@ class ChatDialog(FramelessDragMixin, QWidget):
                 thumb.setPixmap(
                     pix.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 )
+            try:
+                info = image_utils.inspect_image(path, enforce_limits=False)
+                tooltip = (
+                    f"{info.original_name}\n{info.width} × {info.height}\n"
+                    f"{info.byte_size / (1024 * 1024):.1f} MiB"
+                )
+                if info.needs_inference_resize:
+                    tooltip += "\n发送时生成最长边 2048 像素的推理副本"
+                thumb.setToolTip(tooltip)
+            except Exception:
+                thumb.setToolTip(Path(path).name)
             thumb.setStyleSheet("border-radius: 4px;")
             il.addWidget(thumb, 1)
             rm = QPushButton("✕")
@@ -616,7 +659,11 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     def _remove_pending_image(self, idx: int) -> None:
         if 0 <= idx < len(self._pending_images):
-            del self._pending_images[idx]
+            path = self._pending_images.pop(idx)
+            try:
+                image_utils.discard_staged_image(path)
+            except Exception:
+                logger.warning("Failed to discard draft image %s", path, exc_info=True)
             self._refresh_image_preview()
 
     def get_pending_images(self) -> list[str]:
@@ -674,6 +721,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._busy_feedback_timer.stop()
         self._export_feedback_timer.stop()
         self._auto_hide_timer.stop()
+        self.clear_pending_images()
         return []
 
     def set_service_status(self, state: ServiceState) -> None:
@@ -694,8 +742,18 @@ class ChatDialog(FramelessDragMixin, QWidget):
             self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS)
             self._ollama_dot.setToolTip("正在检测 Ollama…")
 
-    def add_user_message(self, text: str, images: list[str] | None = None) -> None:
-        bubble = self._make_bubble(text, is_user=True, images=images)
+    def add_user_message(
+        self,
+        text: str,
+        images: list[str] | None = None,
+        missing_images: list[str] | None = None,
+    ) -> None:
+        bubble = self._make_bubble(
+            text,
+            is_user=True,
+            images=images,
+            missing_images=missing_images,
+        )
         self._insert_widget(bubble)
 
     def add_assistant_message(self, text: str) -> None:
@@ -887,6 +945,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self, content: str, is_user: bool, is_html: bool = False,
         code_map: dict[str, str] | None = None,
         images: list[str] | None = None,
+        missing_images: list[str] | None = None,
         markdown_source: str | None = None,
     ) -> QWidget:
         wrapper = QWidget()
@@ -913,8 +972,10 @@ class ChatDialog(FramelessDragMixin, QWidget):
             v_layout = QVBoxLayout()
             v_layout.setContentsMargins(0, 0, 0, 0)
             v_layout.setSpacing(2)
-            if images:
-                v_layout.addWidget(self._build_bubble_images(images))
+            if images or missing_images:
+                v_layout.addWidget(
+                    self._build_bubble_images(images or [], missing_images or [])
+                )
             v_layout.addWidget(lbl)
 
             btn_bar = QWidget()
@@ -978,7 +1039,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         return wrapper
 
-    def _build_bubble_images(self, images: list[str]) -> QWidget:
+    def _build_bubble_images(
+        self, images: list[str], missing_images: list[str] | None = None,
+    ) -> QWidget:
         """构建气泡内图片展示区（缩略横排，点击可放大查看）"""
         box = QWidget()
         box.setStyleSheet("background: transparent;")
@@ -998,6 +1061,15 @@ class ChatDialog(FramelessDragMixin, QWidget):
             )
             thumb.clicked.connect(self._view_image_full)
             bl.addWidget(thumb, alignment=Qt.AlignLeft)
+        for path in missing_images or []:
+            missing = QLabel(f"⚠️ 图片缺失\n{Path(path).name}")
+            missing.setObjectName("missing_image_notice")
+            missing.setToolTip(path)
+            missing.setStyleSheet(
+                "padding: 8px; border-radius: 6px; "
+                "border: 1px dashed rgba(255,170,0,0.75); color: #b7791f;"
+            )
+            bl.addWidget(missing, alignment=Qt.AlignLeft)
         return box
 
     def _view_image_full(self, path: str) -> None:

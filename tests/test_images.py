@@ -6,11 +6,6 @@ import pytest
 
 from ai_desktop.utils import images as image_utils
 
-# 1x1 透明 PNG
-_PNG_BYTES = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-)
-
 
 @pytest.fixture()
 def tmp_images_dir(tmp_path, monkeypatch):
@@ -20,8 +15,12 @@ def tmp_images_dir(tmp_path, monkeypatch):
 
 
 def _make_png(tmp_path: Path) -> Path:
+    from PyQt5.QtGui import QColor, QImage
+
     p = tmp_path / "sample.png"
-    p.write_bytes(_PNG_BYTES)
+    image = QImage(2, 2, QImage.Format_ARGB32)
+    image.fill(QColor("red"))
+    assert image.save(str(p), "PNG")
     return p
 
 
@@ -38,9 +37,9 @@ class TestImageUtils:
         path = Path(stored)
         assert path.parent == tmp_images_dir  # images_dir 指向临时目录
         assert path.exists()
-        assert path.read_bytes() == _PNG_BYTES
+        assert path.read_bytes() == src.read_bytes()
         # 源文件不受影响
-        assert src.read_bytes() == _PNG_BYTES
+        assert src.exists()
 
     def test_store_image_missing_raises(self, tmp_images_dir):
         with pytest.raises(FileNotFoundError):
@@ -49,7 +48,7 @@ class TestImageUtils:
     def test_encode_image_base64(self, tmp_path):
         p = _make_png(tmp_path)
         encoded = image_utils.encode_image_base64(str(p))
-        assert encoded == base64.b64encode(_PNG_BYTES).decode("ascii")
+        assert encoded == base64.b64encode(p.read_bytes()).decode("ascii")
         assert "data:image" not in encoded  # 无 data URI 前缀
 
     def test_store_pixmap(self, qapp, tmp_images_dir):

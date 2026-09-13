@@ -760,7 +760,11 @@ class ChatController(QObject):
                 self._dialog.clear_messages()
                 for m in conv.messages:
                     if m.role == "user":
-                        self._dialog.add_user_message(m.content, images=m.images)
+                        self._dialog.add_user_message(
+                            m.content,
+                            images=m.images,
+                            missing_images=m.missing_images,
+                        )
                     else:
                         self._dialog.add_assistant_message(m.content)
             logger.info("Loaded conversation %d (%d messages)", convo_id, len(conv.messages))
@@ -871,7 +875,7 @@ class ChatController(QObject):
             worker.done.connect(self._on_stream_done)
             worker.finished.connect(self._on_worker_finished)
             if self._dialog:
-                self._dialog.add_user_message(text, images=images)
+                self._dialog.add_user_message(text, images=user_msg.images)
                 self._dialog.begin_assistant_stream()
                 self._dialog.set_thinking(True)
             self._worker = worker
@@ -888,10 +892,11 @@ class ChatController(QObject):
                     worker.cancel()
                     self._retire_worker(worker)
                 else:
+                    worker.release_attachments()
                     worker.deleteLater()
             if user_msg is not None:
                 try:
-                    delete_message(user_msg.id)
+                    delete_message(user_msg.id, preserve_attachments=True)
                 except Exception:
                     logger.exception("Failed to roll back message %d", user_msg.id)
                 self._messages = [message for message in self._messages if message.id != user_msg.id]
@@ -906,7 +911,11 @@ class ChatController(QObject):
                 self._dialog.clear_messages()
                 for message in self._messages:
                     if message.role == "user":
-                        self._dialog.add_user_message(message.content, images=message.images)
+                        self._dialog.add_user_message(
+                            message.content,
+                            images=message.images,
+                            missing_images=message.missing_images,
+                        )
                     else:
                         self._dialog.add_assistant_message(message.content)
                 self._dialog.restore_draft(text, images)

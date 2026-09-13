@@ -4,15 +4,11 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from PyQt5.QtGui import QColor, QImage
 
 from ai_desktop.llm.chat_client import ChatClient, list_models
 from ai_desktop.llm.events import ErrorCode, EventKind
 from ai_desktop.utils.storage import Message
-
-# 1x1 透明 PNG
-_PNG_BYTES = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-)
 
 
 def _fake_stream_response(lines: list[str]):
@@ -215,7 +211,10 @@ class TestBuildOllamaMessages:
 
     def test_message_with_images(self, tmp_path):
         img = tmp_path / "shot.png"
-        img.write_bytes(_PNG_BYTES)
+        image = QImage(2, 2, QImage.Format_ARGB32)
+        image.fill(QColor("red"))
+        assert image.save(str(img), "PNG")
+        image_bytes = img.read_bytes()
 
         client = ChatClient()
         msgs = [Message(role="user", content="这是什么", images=[str(img)])]
@@ -223,7 +222,7 @@ class TestBuildOllamaMessages:
         assert len(built) == 1
         assert built[0]["role"] == "user"
         assert built[0]["content"] == "这是什么"
-        assert built[0]["images"] == [base64.b64encode(_PNG_BYTES).decode("ascii")]
+        assert built[0]["images"] == [base64.b64encode(image_bytes).decode("ascii")]
 
     def test_system_prompt_prepended_and_unchanged(self):
         client = ChatClient()

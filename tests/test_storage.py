@@ -82,7 +82,8 @@ class TestConversationCRUD:
         loaded = storage.get_conversation(conv.id)
         assert loaded is not None
         user_msgs = [m for m in loaded.messages if m.role == "user"]
-        assert user_msgs[0].images == paths
+        assert user_msgs[0].images == []
+        assert user_msgs[0].missing_images == paths
 
     def test_image_only_message_title(self):
         conv = storage.create_conversation("vision")
