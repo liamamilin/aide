@@ -8,6 +8,13 @@ from PyQt5.QtCore import QTimer
 from ai_desktop.capture import clipboard_monitor
 
 
+def test_decode_text_output_preserves_utf8_and_utf16_cjk():
+    text = "中文选区：解释这个错误"
+    assert clipboard_monitor._decode_text_output(text.encode("utf-8")) == text
+    assert clipboard_monitor._decode_text_output(text.encode("utf-16")) == text
+    assert clipboard_monitor._decode_text_output(text.encode("utf-16-le")) == text
+
+
 def test_read_selection_restores_empty_clipboard_when_capture_succeeds():
     reads = ["", "selected text"]
 
@@ -79,6 +86,7 @@ def test_async_capture_reads_and_restores_clipboard(qtbot):
         task.start()
     assert signal.args == ["selected text"]
     assert [call[0] for call in task.calls] == ["/usr/bin/pbpaste"]
+    assert task.calls[0][1] == ["-Prefer", "txt"]
     assert task.pasteboard.restores == [(task.pasteboard.saved, 2)]
 
 
