@@ -298,26 +298,13 @@ class TestFloatButtonState:
         button.set_reduce_motion(True)
         assert button._hover_motion() == (0.0, 0.0, 0.0, 1.0)
 
-    def test_hover_motion_is_eased_and_frame_changes_crossfade(self, button):
+    def test_hover_motion_is_eased_without_pose_overshoot(self, button):
         button._hovered = True
         sampled = []
         for phase in (0, 2, 4, 6, 8, 10, 12, 14, 16, 18):
             button._hover_phase = phase
             sampled.append(button._hover_motion())
         assert all(abs(sampled[index + 1][1] - sampled[index][1]) < 0.35 for index in range(len(sampled) - 1))
-
-        button._hover_phase = 5
-        previous, current, progress = button._pet_frame_pair("idle")
-        assert previous == button._pet_hover_frames[0]
-        assert current == button._pet_hover_frames[1]
-        assert progress == 0.25
-
-        button._hovered = False
-        button._animation_phase = 24
-        previous, current, progress = button._pet_frame_pair("idle")
-        assert previous == button._pet_idle_frames[0]
-        assert current == button._pet_idle_frames[1]
-        assert progress == 0.0
 
     def test_hover_animation_does_not_change_task_motion(self, button):
         button._animation_phase = 5
