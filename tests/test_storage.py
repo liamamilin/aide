@@ -107,6 +107,43 @@ class TestConversationCRUD:
         assert loaded.messages[0].content == "Q1"
         assert loaded.messages[-1].content == "A2"
 
+    def test_generations_keep_one_active_and_restore_snapshot(self):
+        conv = storage.create_conversation("general_assistant")
+        user = storage.save_message(conv.id, "user", "同一个问题")
+        first = storage.save_generation(
+            user.id,
+            "request-1",
+            config_snapshot={"model": "qwen", "temperature": 0.2},
+            status="succeeded",
+            answer="第一版答案",
+            active=True,
+        )
+        second = storage.save_generation(
+            user.id,
+            "request-2",
+            config_snapshot={"model": "qwen", "temperature": 0.8},
+            status="succeeded",
+            answer="第二版答案",
+            active=True,
+        )
+        assert storage.get_active_generation(user.id).id == second.id
+        assert storage.list_generations(user.id)[0].config_snapshot["temperature"] == 0.2
+        selected = storage.set_active_generation(first.id)
+        assert selected.active is True
+        assert storage.get_active_generation(user.id).answer == "第一版答案"
+
+    def test_failed_generation_is_retained_but_cannot_be_selected(self):
+        conv = storage.create_conversation("general_assistant")
+        user = storage.save_message(conv.id, "user", "失败重试")
+        failed = storage.save_generation(
+            user.id,
+            "request-failed",
+            status="failed",
+            answer="",
+        )
+        with pytest.raises(ValueError, match="成功"):
+            storage.set_active_generation(failed.id)
+
     def test_list_with_counts(self):
         conv = storage.create_conversation("code_expert")
         storage.save_message(conv.id, "user", "hello")

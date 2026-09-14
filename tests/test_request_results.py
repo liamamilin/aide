@@ -199,6 +199,11 @@ def test_normal_reply_with_cannot_prefix_is_saved(qtbot, controller, ollama_serv
     send_and_wait(qtbot, controller, ollama_server, [{"message": {"content": text}, "done": True}])
     conversation = get_conversation(controller._convo_id)
     assert [(m.role, m.content) for m in conversation.messages] == [("user", "question"), ("assistant", text)]
+    generations = storage.list_generations(conversation.messages[0].id)
+    assert len(generations) == 1
+    assert generations[0].answer == text
+    assert generations[0].active is True
+    assert generations[0].status == "succeeded"
     assert_input_ready(controller)
     assert text in bubble_text(controller)
 

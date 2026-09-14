@@ -61,6 +61,7 @@ from ai_desktop.utils.storage import (
     init_db,
     list_conversations,
     list_input_history,
+    save_generation,
     save_message,
     save_setting,
 )
@@ -1562,6 +1563,30 @@ class ChatController(QObject):
             try:
                 assistant_msg = save_message(worker.request.conversation_id, "assistant", text)
                 self._messages.append(assistant_msg)
+                user_message_id = next(
+                    (
+                        message.id
+                        for message in reversed(worker.request.messages)
+                        if message.role == "user" and message.id
+                    ),
+                    0,
+                )
+                if user_message_id:
+                    save_generation(
+                        user_message_id,
+                        worker.request.request_id,
+                        config_snapshot={
+                            "agent_id": worker.request.agent_id,
+                            "model": worker.request.model,
+                            "think": worker.request.think,
+                            "keep_alive": worker.request.keep_alive,
+                            "options": dict(worker.request.options),
+                        },
+                        status="succeeded",
+                        answer=text,
+                        assistant_message_id=assistant_msg.id,
+                        active=True,
+                    )
             except Exception:
                 logger.exception("Failed to save assistant message")
 

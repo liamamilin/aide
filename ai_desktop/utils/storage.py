@@ -14,7 +14,7 @@ from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class UnsupportedSchemaVersionError(RuntimeError):
@@ -331,7 +331,86 @@ def _migrate_v2_to_v3(db: sqlite3.Connection) -> None:
     )
 
 
-_MIGRATIONS = {0: _migrate_v0_to_v1, 1: _migrate_v1_to_v2, 2: _migrate_v2_to_v3}
+def _migrate_v3_to_v4(db: sqlite3.Connection) -> None:
+    """Add answer generations while preserving existing assistant messages."""
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS generations (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_message_id     INTEGER NOT NULL,
+            assistant_message_id INTEGER,
+            request_id          TEXT NOT NULL UNIQUE,
+            config_snapshot     TEXT NOT NULL DEFAULT '{}',
+            status              TEXT NOT NULL DEFAULT 'pending'
+                                CHECK(status IN ('pending', 'streaming', 'succeeded', 'failed', 'cancelled')),
+            answer              TEXT NOT NULL DEFAULT '',
+            active              INTEGER NOT NULL DEFAULT 0 CHECK(active IN (0, 1)),
+            created_at          REAL NOT NULL,
+            FOREIGN KEY (user_message_id) REFERENCES messages(id) ON DELETE CASCADE,
+            FOREIGN KEY (assistant_message_id) REFERENCES messages(id) ON DELETE SET NULL
+        )
+        """
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_generations_user_message "
+        "ON generations(user_message_id, created_at, id)"
+    )
+    db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_generations_one_active "
+        "ON generations(user_message_id) WHERE active=1"
+    )
+
+    # Legacy conversations had one assistant row per user turn. Convert those
+    # rows into successful default generations without changing message order.
+    last_user_by_conversation: dict[int, int] = {}
+    rows = db.execute(
+        "SELECT id, conversation_id, role, content, created_at "
+        "FROM messages ORDER BY conversation_id, id"
+    ).fetchall()
+    for row in rows:
+        conversation_id = int(row["conversation_id"])
+        if row["role"] == "user":
+            last_user_by_conversation[conversation_id] = int(row["id"])
+            continue
+        if row["role"] != "assistant":
+            continue
+        user_message_id = last_user_by_conversation.get(conversation_id)
+        if user_message_id is None:
+            continue
+        already = db.execute(
+            "SELECT 1 FROM generations WHERE assistant_message_id=?",
+            (row["id"],),
+        ).fetchone()
+        if already is not None:
+            continue
+        has_active = db.execute(
+            "SELECT 1 FROM generations WHERE user_message_id=? AND active=1",
+            (user_message_id,),
+        ).fetchone() is not None
+        db.execute(
+            """
+            INSERT INTO generations (
+                user_message_id, assistant_message_id, request_id,
+                config_snapshot, status, answer, active, created_at
+            ) VALUES (?, ?, ?, '{}', 'succeeded', ?, ?, ?)
+            """,
+            (
+                user_message_id,
+                row["id"],
+                f"legacy-message-{row['id']}",
+                row["content"],
+                0 if has_active else 1,
+                row["created_at"],
+            ),
+        )
+
+
+_MIGRATIONS = {
+    0: _migrate_v0_to_v1,
+    1: _migrate_v1_to_v2,
+    2: _migrate_v2_to_v3,
+    3: _migrate_v3_to_v4,
+}
 
 
 def init_db() -> None:
@@ -384,6 +463,19 @@ class Message:
     created_at: float = 0.0
     images: List[str] = field(default_factory=list)
     missing_images: List[str] = field(default_factory=list)
+
+
+@dataclass
+class Generation:
+    id: int
+    user_message_id: int
+    request_id: str
+    config_snapshot: dict = field(default_factory=dict)
+    status: str = "pending"
+    answer: str = ""
+    active: bool = False
+    created_at: float = 0.0
+    assistant_message_id: int | None = None
 
 
 @dataclass
@@ -622,6 +714,140 @@ def save_message(convo_id: int, role: str, content: str, images: Optional[List[s
         created_at=now,
         images=image_paths,
     )
+
+
+# ── 答案版本 ──────────────────────────────────────────
+
+_GENERATION_STATUSES = frozenset(
+    {"pending", "streaming", "succeeded", "failed", "cancelled"}
+)
+
+
+def _generation_from_row(row: sqlite3.Row) -> Generation:
+    try:
+        snapshot = json.loads(row["config_snapshot"] or "{}")
+    except (TypeError, json.JSONDecodeError):
+        snapshot = {}
+    if not isinstance(snapshot, dict):
+        snapshot = {}
+    return Generation(
+        id=int(row["id"]),
+        user_message_id=int(row["user_message_id"]),
+        assistant_message_id=(
+            int(row["assistant_message_id"])
+            if row["assistant_message_id"] is not None
+            else None
+        ),
+        request_id=str(row["request_id"]),
+        config_snapshot=snapshot,
+        status=str(row["status"]),
+        answer=str(row["answer"]),
+        active=bool(row["active"]),
+        created_at=float(row["created_at"]),
+    )
+
+
+def save_generation(
+    user_message_id: int,
+    request_id: str,
+    *,
+    config_snapshot: dict | None = None,
+    status: str = "pending",
+    answer: str = "",
+    assistant_message_id: int | None = None,
+    active: bool = False,
+    created_at: float | None = None,
+) -> Generation:
+    """Persist one answer attempt for a user message.
+
+    Activating a generation is transactional and clears the previous active
+    version first. Failed or cancelled attempts remain queryable but inactive.
+    """
+    normalized_request_id = str(request_id).strip()
+    if not normalized_request_id:
+        raise ValueError("generation request_id 不能为空。")
+    normalized_status = str(status).strip().lower()
+    if normalized_status not in _GENERATION_STATUSES:
+        raise ValueError(f"无效的 generation 状态：{status}")
+    snapshot = config_snapshot if isinstance(config_snapshot, dict) else {}
+    snapshot_json = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
+    now = time.time() if created_at is None else float(created_at)
+    db = _conn()
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        if active:
+            db.execute(
+                "UPDATE generations SET active=0 WHERE user_message_id=? AND active=1",
+                (user_message_id,),
+            )
+        cur = db.execute(
+            """
+            INSERT INTO generations (
+                user_message_id, assistant_message_id, request_id,
+                config_snapshot, status, answer, active, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_message_id,
+                assistant_message_id,
+                normalized_request_id,
+                snapshot_json,
+                normalized_status,
+                str(answer),
+                int(bool(active)),
+                now,
+            ),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    row = db.execute("SELECT * FROM generations WHERE id=?", (cur.lastrowid,)).fetchone()
+    return _generation_from_row(row)
+
+
+def list_generations(user_message_id: int) -> list[Generation]:
+    rows = _conn().execute(
+        "SELECT * FROM generations WHERE user_message_id=? ORDER BY created_at, id",
+        (user_message_id,),
+    ).fetchall()
+    return [_generation_from_row(row) for row in rows]
+
+
+def get_active_generation(user_message_id: int) -> Generation | None:
+    row = _conn().execute(
+        "SELECT * FROM generations WHERE user_message_id=? AND active=1",
+        (user_message_id,),
+    ).fetchone()
+    return _generation_from_row(row) if row is not None else None
+
+
+def set_active_generation(generation_id: int) -> Generation:
+    """Select one successful answer version and return the selected row."""
+    db = _conn()
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute(
+            "SELECT * FROM generations WHERE id=?",
+            (generation_id,),
+        ).fetchone()
+        if row is None:
+            raise LookupError("答案版本不存在或已被删除。")
+        if row["status"] != "succeeded" or not str(row["answer"]):
+            raise ValueError("只有成功且有内容的答案版本可以设为当前版本。")
+        db.execute(
+            "UPDATE generations SET active=0 WHERE user_message_id=?",
+            (row["user_message_id"],),
+        )
+        db.execute("UPDATE generations SET active=1 WHERE id=?", (generation_id,))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    selected = db.execute(
+        "SELECT * FROM generations WHERE id=?", (generation_id,)
+    ).fetchone()
+    return _generation_from_row(selected)
 
 
 def _load_messages(convo_id: int) -> list[Message]:
