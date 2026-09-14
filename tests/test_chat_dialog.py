@@ -273,6 +273,56 @@ class TestChatDialogState:
         assert long_model in dialog._model_combo.toolTip()
         assert dialog._input.accessibleName() == "消息输入框"
         assert dialog._send_btn.accessibleName() == "发送消息"
+        assert dialog._new_convo_btn.accessibleName() == "开始新对话"
+        assert dialog._hide_btn.accessibleName() == "隐藏对话窗口"
+        assert dialog._agent_combo.accessibleName() == "选择 Agent"
+        assert dialog._model_combo.accessibleName() == "选择模型"
+        assert dialog._more_btn.accessibleName() == "更多操作"
+        assert dialog._action_btn.accessibleName() == "快捷动作"
+        assert dialog._attach_btn.accessibleName() == "添加图片"
+        assert dialog._model_capability_badge.accessibleName() == "模型图片能力"
+        assert dialog._model_profile_badge.accessibleName() == "模型配置"
+        assert dialog._ollama_dot.accessibleName() == "服务连接状态"
+
+    def test_multi_image_bubble_wraps_within_minimum_width(self, qtbot, dialog):
+        from PyQt5.QtGui import QColor, QPixmap
+        from PyQt5.QtWidgets import QGridLayout, QHBoxLayout
+
+        dialog.resize(dialog.minimumWidth(), dialog.height())
+        qtbot.wait(10)
+        bubble_max = max(280, min(440, int(dialog.width() * 0.78)))
+        for count in (1, 2, 3, 4):
+            paths = []
+            for index in range(count):
+                pixmap = QPixmap(300, 200)
+                pixmap.fill(QColor("blue"))
+                path = f"/tmp/aide-ui3-test-{count}-{index}.png"
+                assert pixmap.save(path)
+                paths.append(path)
+            box = dialog._build_bubble_images(paths)
+            box.show()
+            qtbot.wait(10)
+            layout = box.layout()
+            if count == 1:
+                assert isinstance(layout, QHBoxLayout)
+            else:
+                assert isinstance(layout, QGridLayout)
+            assert box.sizeHint().width() <= bubble_max
+            assert box.minimumSizeHint().width() <= bubble_max
+            box.deleteLater()
+
+    def test_preview_image_buttons_expose_accessible_names(self, qtbot, dialog):
+        from PyQt5.QtGui import QColor, QPixmap
+
+        pixmap = QPixmap(200, 200)
+        pixmap.fill(QColor("red"))
+        path = "/tmp/aide-ui3-accessible.png"
+        assert pixmap.save(path)
+        dialog.attach_image_paths([path])
+        ocr_buttons = dialog.findChildren(object, "ocr_image_btn")
+        assert ocr_buttons
+        assert all(button.accessibleName() for button in ocr_buttons)
+        dialog.clear_pending_images()
 
     def test_refresh_agents(self, qtbot, dialog):
         """refresh_agents() → combo items match new agent list."""

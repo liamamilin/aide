@@ -290,6 +290,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         # 服务状态放在标题栏，避免与输入操作混在一起。
         self._ollama_dot = QWidget()
         self._ollama_dot.setFixedSize(8, 8)
+        self._ollama_dot.setAccessibleName("服务连接状态")
         self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS)
         self._ollama_dot.setToolTip("检测中…")
         tl.addWidget(self._ollama_dot)
@@ -358,12 +359,14 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         self._model_capability_badge = QLabel("图片待确认")
         self._model_capability_badge.setObjectName("model_capability_badge")
+        self._model_capability_badge.setAccessibleName("模型图片能力")
         self._model_capability_badge.setStyleSheet(styles.STATUS_TEXT)
         self._model_capability_badge.setToolTip("当前模型的图片输入能力尚未确认")
         tb.addWidget(self._model_capability_badge)
 
         self._model_profile_badge = QLabel("全局配置")
         self._model_profile_badge.setObjectName("model_profile_badge")
+        self._model_profile_badge.setAccessibleName("模型配置")
         self._model_profile_badge.setStyleSheet(styles.STATUS_TEXT)
         self._model_profile_badge.setToolTip("请求将使用全局模型设置")
         tb.addWidget(self._model_profile_badge)
@@ -492,6 +495,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         # Keep keyboard navigation predictable when controls are hidden or
         # long names are visually elided inside the compact toolbar.
+        self._new_convo_btn.setAccessibleName("开始新对话")
+        self._hide_btn.setAccessibleName("隐藏对话窗口")
         focus_chain = (
             self._new_convo_btn,
             self._hide_btn,
@@ -932,6 +937,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
             ocr = QPushButton("识字")
             ocr.setObjectName("ocr_image_btn")
             ocr.setFixedSize(44, 20)
+            ocr.setAccessibleName(f"提取图片文字 {Path(path).name}")
             ocr.setToolTip("在本机提取这张图片中的文字")
             ocr.setStyleSheet(styles.SECONDARY_BUTTON)
             ocr.clicked.connect(
@@ -940,6 +946,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
             il.addWidget(ocr, 0, 0, alignment=Qt.AlignBottom | Qt.AlignLeft)
             rm = QPushButton("✕")
             rm.setFixedSize(16, 16)
+            rm.setAccessibleName(f"移除图片 {Path(path).name}")
+            rm.setToolTip(f"移除图片 {Path(path).name}")
             rm.setStyleSheet(
                 "QPushButton { background: rgba(0,0,0,0.6); color: white; border: none;"
                 " border-radius: 8px; font-size: 9px; }"
@@ -1459,31 +1467,45 @@ class ChatDialog(FramelessDragMixin, QWidget):
         """构建气泡内图片展示区（缩略横排，点击可放大查看）"""
         box = QWidget()
         box.setStyleSheet("background: transparent;")
-        bl = QHBoxLayout(box)
-        bl.setContentsMargins(0, 0, 0, 0)
-        bl.setSpacing(6)
-        for path in images:
+        thumbs: list[QWidget] = []
+        missing = list(missing_images or [])
+        compact = len(images or []) + len(missing) > 1
+        thumb_edge = 148 if compact else 160
+        for path in images or []:
             thumb = _ClickableImage(path)
+            thumb.setAccessibleName(f"查看图片 {Path(path).name}")
             pix = QPixmap(path)
             if pix.isNull():
                 continue
             thumb.setPixmap(
-                pix.scaled(160, 160, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pix.scaled(thumb_edge, thumb_edge, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             )
             thumb.setStyleSheet(
                 "border-radius: 6px; border: 1px solid rgba(255,255,255,0.25);"
             )
             thumb.clicked.connect(self._view_image_full)
-            bl.addWidget(thumb, alignment=Qt.AlignLeft)
-        for path in missing_images or []:
-            missing = QLabel(f"⚠️ 图片缺失\n{Path(path).name}")
-            missing.setObjectName("missing_image_notice")
-            missing.setToolTip(path)
-            missing.setStyleSheet(
+            thumbs.append(thumb)
+        for path in missing:
+            notice = QLabel(f"⚠️ 图片缺失\n{Path(path).name}")
+            notice.setObjectName("missing_image_notice")
+            notice.setToolTip(path)
+            notice.setStyleSheet(
                 "padding: 8px; border-radius: 6px; "
                 "border: 1px dashed rgba(255,170,0,0.75); color: #b7791f;"
             )
-            bl.addWidget(missing, alignment=Qt.AlignLeft)
+            thumbs.append(notice)
+        if not compact:
+            bl = QHBoxLayout(box)
+            bl.setContentsMargins(0, 0, 0, 0)
+            bl.setSpacing(6)
+            for thumb in thumbs:
+                bl.addWidget(thumb, alignment=Qt.AlignLeft)
+            return box
+        grid = QGridLayout(box)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setSpacing(6)
+        for index, thumb in enumerate(thumbs):
+            grid.addWidget(thumb, index // 2, index % 2, alignment=Qt.AlignLeft)
         return box
 
     def _view_image_full(self, path: str) -> None:
