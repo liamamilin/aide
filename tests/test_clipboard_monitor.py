@@ -15,6 +15,21 @@ def test_decode_text_output_preserves_utf8_and_utf16_cjk():
     assert clipboard_monitor._decode_text_output(text.encode("utf-16-le")) == text
 
 
+def test_native_pasteboard_reads_declared_unicode_type_without_locale_guessing():
+    class Pasteboard:
+        def stringForType_(self, pasteboard_type):
+            if pasteboard_type == "public.utf8-plain-text":
+                return "中文选区：解释这个错误"
+            return None
+
+        def dataForType_(self, _pasteboard_type):
+            return None
+
+    native = object.__new__(clipboard_monitor.NativePasteboard)
+    native._pasteboard = Pasteboard()
+    assert native.read_plain_text() == "中文选区：解释这个错误"
+
+
 def test_read_selection_restores_empty_clipboard_when_capture_succeeds():
     reads = ["", "selected text"]
 

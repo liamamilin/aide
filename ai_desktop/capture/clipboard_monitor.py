@@ -27,6 +27,12 @@ _COPY_SCRIPT = (
     'to keystroke "c" using command down'
 )
 _PBPASTE_TEXT_ARGS = ["-Prefer", "txt"]
+_PLAIN_TEXT_TYPES = (
+    "public.utf8-plain-text",
+    "public.utf16-external-plain-text",
+    "public.text",
+    "NSStringPboardType",
+)
 
 
 class UnsupportedClipboardFormatError(RuntimeError):
@@ -49,6 +55,25 @@ class NativePasteboard:
 
     def change_count(self) -> int:
         return int(self._pasteboard.changeCount())
+
+    def read_plain_text(self) -> str:
+        """Read the pasteboard's declared Unicode text without locale guessing."""
+        for pasteboard_type in _PLAIN_TEXT_TYPES:
+            try:
+                value = self._pasteboard.stringForType_(pasteboard_type)
+            except Exception:
+                value = None
+            if value is not None:
+                return text_normalizer.normalize(str(value))
+            try:
+                data = self._pasteboard.dataForType_(pasteboard_type)
+            except Exception:
+                data = None
+            if data is not None:
+                decoded = _decode_text_output(bytes(data))
+                if decoded:
+                    return text_normalizer.normalize(decoded)
+        return ""
 
     def snapshot(self) -> PasteboardSnapshot:
         count = self.change_count()
@@ -348,6 +373,11 @@ class SelectionCaptureTask(QObject):
                 self._run_osascript_copy()
             return
         self._capture_change_count = current_count
+        if isinstance(self._pasteboard, NativePasteboard):
+            selected = self._pasteboard.read_plain_text()
+            if selected:
+                self._restore_and_complete(selected)
+                return
         self._start_command(
             "/usr/bin/pbpaste", _PBPASTE_TEXT_ARGS, timeout_ms=2000,
             callback=self._on_selection_clipboard,
