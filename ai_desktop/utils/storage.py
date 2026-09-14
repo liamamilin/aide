@@ -769,6 +769,8 @@ def save_generation(
     normalized_status = str(status).strip().lower()
     if normalized_status not in _GENERATION_STATUSES:
         raise ValueError(f"无效的 generation 状态：{status}")
+    if active and (normalized_status != "succeeded" or not str(answer)):
+        raise ValueError("只有成功且有内容的答案版本可以设为当前版本。")
     snapshot = config_snapshot if isinstance(config_snapshot, dict) else {}
     snapshot_json = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
     now = time.time() if created_at is None else float(created_at)
