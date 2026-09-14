@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib
+import re
+import statistics
 import sys
 import threading
 import time
@@ -75,12 +77,129 @@ class OCRResult:
     error: str = ""
 
     @property
-    def text(self) -> str:
+    def raw_text(self) -> str:
         return "\n".join(block.text for block in self.blocks)
+
+    @property
+    def text(self) -> str:
+        return assemble_ocr_text(self.blocks)
 
     @property
     def ok(self) -> bool:
         return self.status in (OCRStatus.SUCCEEDED, OCRStatus.EMPTY)
+
+
+_CODE_PREFIX = re.compile(
+    r"^(?:async\s+def|def|class|if|elif|else|for|while|try|except|finally|with|"
+    r"return|raise|yield|import|from|print|function|const|let|var|public|private)\b"
+)
+
+
+def assemble_ocr_text(blocks: Sequence[OCRTextBlock]) -> str:
+    """Join raw blocks and infer leading spaces only for code-like content."""
+    if not blocks:
+        return ""
+    rows = _group_blocks_into_rows(blocks)
+    lines = [_join_ocr_row(row) for row in rows]
+    code_score = sum(
+        bool(_CODE_PREFIX.search(line.strip()))
+        or any(token in line for token in ("()", "->", "{", "}", ";", "=="))
+        for line in lines
+    )
+    if len(lines) < 2 or code_score < max(2, (len(lines) + 1) // 2):
+        return "\n".join(lines)
+
+    character_widths = [
+        block.bounds.width / max(1, len(block.text))
+        for block in blocks
+        if block.text and block.bounds.width > 0
+    ]
+    if not character_widths:
+        return "\n".join(lines)
+    visible_width = statistics.median(character_widths)
+    if visible_width <= 0:
+        return "\n".join(lines)
+    # Vision trims whitespace from each observation, but the resulting left
+    # edges still form stable nesting columns. Merge small OCR jitter, then
+    # use the smallest observed column step as one indentation level.
+    columns: list[float] = []
+    tolerance = visible_width * 0.75
+    line_edges = [min(block.bounds.x for block in row) for row in rows]
+    for x in sorted(line_edges):
+        if columns and x - columns[-1] <= tolerance:
+            columns[-1] = (columns[-1] + x) / 2
+        else:
+            columns.append(x)
+    if len(columns) < 2:
+        return "\n".join(lines)
+    column_step = min(
+        right - left for left, right in zip(columns, columns[1:])
+    )
+    if column_step <= tolerance:
+        return "\n".join(lines)
+    left_edge = columns[0]
+    indent_width = 4 if any(line.rstrip().endswith(":") for line in lines) else 2
+    formatted = []
+    for text, x in zip(lines, line_edges):
+        if text[:1].isspace():
+            formatted.append(text)
+            continue
+        level = round((x - left_edge) / column_step)
+        indentation = min(16, max(0, level * indent_width))
+        formatted.append(" " * indentation + text)
+    return "\n".join(formatted)
+
+
+def _group_blocks_into_rows(
+    blocks: Sequence[OCRTextBlock],
+) -> list[list[OCRTextBlock]]:
+    ordered = sorted(
+        blocks,
+        key=lambda block: (
+            -(block.bounds.y + block.bounds.height / 2),
+            block.bounds.x,
+        ),
+    )
+    rows: list[list[OCRTextBlock]] = []
+    row_centers: list[float] = []
+    row_heights: list[float] = []
+    for block in ordered:
+        center = block.bounds.y + block.bounds.height / 2
+        height = max(block.bounds.height, 0.001)
+        if rows and abs(center - row_centers[-1]) <= max(
+            height,
+            row_heights[-1],
+        ) * 0.45:
+            rows[-1].append(block)
+            count = len(rows[-1])
+            row_centers[-1] = (row_centers[-1] * (count - 1) + center) / count
+            row_heights[-1] = max(row_heights[-1], height)
+        else:
+            rows.append([block])
+            row_centers.append(center)
+            row_heights.append(height)
+    for row in rows:
+        row.sort(key=lambda block: block.bounds.x)
+    return rows
+
+
+def _join_ocr_row(row: Sequence[OCRTextBlock]) -> str:
+    if not row:
+        return ""
+    text = row[0].text
+    for previous, current in zip(row, row[1:]):
+        widths = [
+            block.bounds.width / max(1, len(block.text))
+            for block in (previous, current)
+            if block.text and block.bounds.width > 0
+        ]
+        character_width = statistics.median(widths) if widths else 0.01
+        gap = current.bounds.x - (
+            previous.bounds.x + previous.bounds.width
+        )
+        spaces = min(8, max(1, round(gap / max(character_width, 0.001))))
+        text += " " * spaces + current.text
+    return text
 
 
 def _load_vision():

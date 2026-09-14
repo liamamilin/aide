@@ -1,0 +1,2057 @@
+{
+  "runtime": {
+    "engine": "apple-vision",
+    "revision": 3,
+    "languages": [
+      "en-US",
+      "fr-FR",
+      "it-IT",
+      "de-DE",
+      "es-ES",
+      "pt-BR",
+      "zh-Hans",
+      "zh-Hant",
+      "yue-Hans",
+      "yue-Hant",
+      "ko-KR",
+      "ja-JP",
+      "ru-RU",
+      "uk-UA",
+      "th-TH",
+      "vi-VT",
+      "ar-SA",
+      "ars-SA",
+      "tr-TR",
+      "id-ID",
+      "cs-CZ",
+      "da-DK",
+      "nl-NL",
+      "no-NO",
+      "nn-NO",
+      "nb-NO",
+      "ms-MY",
+      "pl-PL",
+      "ro-RO",
+      "sv-SE"
+    ]
+  },
+  "sample_count": 50,
+  "categories": {
+    "english": {
+      "count": 20,
+      "characters": 1484,
+      "cer": 0.0,
+      "threshold": 0.05,
+      "passed": true,
+      "average_elapsed_ms": 73.3
+    },
+    "chinese": {
+      "count": 20,
+      "characters": 480,
+      "cer": 0.0,
+      "threshold": 0.05,
+      "passed": true,
+      "average_elapsed_ms": 79.9
+    },
+    "mixed_code": {
+      "count": 10,
+      "characters": 714,
+      "cer": 0.0434,
+      "threshold": 0.1,
+      "passed": true,
+      "average_elapsed_ms": 67.9
+    }
+  },
+  "samples": [
+    {
+      "id": "english-01",
+      "category": "english",
+      "font_profile": [
+        "Menlo",
+        28,
+        "#FFFFFF",
+        "#111827"
+      ],
+      "truth": "Local OCR keeps screenshots private.\nCopy the result before asking a question.",
+      "text": "Local OCR keeps screenshots private.\nCopy the result before asking a question.",
+      "raw_text": "Local OCR keeps screenshots private.\nCopy the result before asking a question.",
+      "cer": 0.0,
+      "elapsed_ms": 192.4,
+      "blocks": [
+        {
+          "text": "Local OCR keeps screenshots private.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.8125,
+            "width": 0.559593,
+            "height": 0.071429
+          }
+        },
+        {
+          "text": "Copy the result before asking a question.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.688716,
+            "width": 0.638081,
+            "height": 0.070213
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-02",
+      "category": "english",
+      "font_profile": [
+        "Menlo",
+        28,
+        "#FFFFFF",
+        "#111827"
+      ],
+      "truth": "The service is running on this Mac.\nNo remote vision model is required.",
+      "text": "The service is running on this Mac.\nNo remote vision model is required.",
+      "raw_text": "The service is running on this Mac.\nNo remote vision model is required.",
+      "cer": 0.0,
+      "elapsed_ms": 65.4,
+      "blocks": [
+        {
+          "text": "The service is running on this Mac.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.8125,
+            "width": 0.545058,
+            "height": 0.071429
+          }
+        },
+        {
+          "text": "No remote vision model is required.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.688716,
+            "width": 0.547965,
+            "height": 0.070213
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-03",
+      "category": "english",
+      "font_profile": [
+        "Menlo",
+        28,
+        "#FFFFFF",
+        "#111827"
+      ],
+      "truth": "Select an image and extract its text.\nReview the result before you send it.",
+      "text": "Select an image and extract its text.\nReview the result before you send it.",
+      "raw_text": "Select an image and extract its text.\nReview the result before you send it.",
+      "cer": 0.0,
+      "elapsed_ms": 66.7,
+      "blocks": [
+        {
+          "text": "Select an image and extract its text.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.8125,
+            "width": 0.577035,
+            "height": 0.071429
+          }
+        },
+        {
+          "text": "Review the result before you send it.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.688716,
+            "width": 0.575581,
+            "height": 0.070213
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-04",
+      "category": "english",
+      "font_profile": [
+        "Menlo",
+        28,
+        "#FFFFFF",
+        "#111827"
+      ],
+      "truth": "Connection refused on port 11434.\nCheck whether Ollama is running.",
+      "text": "Connection refused on port 11434.\nCheck whether Ollama is running.",
+      "raw_text": "Connection refused on port 11434.\nCheck whether Ollama is running.",
+      "cer": 0.0,
+      "elapsed_ms": 58.7,
+      "blocks": [
+        {
+          "text": "Connection refused on port 11434.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.8125,
+            "width": 0.513081,
+            "height": 0.071429
+          }
+        },
+        {
+          "text": "Check whether Ollama is running.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.688716,
+            "width": 0.497093,
+            "height": 0.070213
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-05",
+      "category": "english",
+      "font_profile": [
+        "Menlo",
+        28,
+        "#FFFFFF",
+        "#111827"
+      ],
+      "truth": "A clear error message saves debugging time.\nTry the request again after recovery.",
+      "text": "A clear error message saves debugging time.\nTry the request again after recovery.",
+      "raw_text": "A clear error message saves debugging time.\nTry the request again after recovery.",
+      "cer": 0.0,
+      "elapsed_ms": 73.1,
+      "blocks": [
+        {
+          "text": "A clear error message saves debugging time.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.8125,
+            "width": 0.670058,
+            "height": 0.071429
+          }
+        },
+        {
+          "text": "Try the request again after recovery.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.688716,
+            "width": 0.577035,
+            "height": 0.070213
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-06",
+      "category": "english",
+      "font_profile": [
+        "PingFang SC",
+        34,
+        "#F8FAFC",
+        "#172033"
+      ],
+      "truth": "Local OCR keeps screenshots private.\nCopy the result before asking a question.",
+      "text": "Local OCR keeps screenshots private.\nCopy the result before asking a question.",
+      "raw_text": "Local OCR keeps screenshots private.\nCopy the result before asking a question.",
+      "cer": 0.0,
+      "elapsed_ms": 66.8,
+      "blocks": [
+        {
+          "text": "Local OCR keeps screenshots private.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.808929,
+            "width": 0.559593,
+            "height": 0.082143
+          }
+        },
+        {
+          "text": "Copy the result before asking a question.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.041667,
+            "y": 0.666071,
+            "width": 0.608333,
+            "height": 0.1125
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-07",
+      "category": "english",
+      "font_profile": [
+        "PingFang SC",
+        34,
+        "#F8FAFC",
+        "#172033"
+      ],
+      "truth": "The service is running on this Mac.\nNo remote vision model is required.",
+      "text": "The service is running on this Mac.\nNo remote vision model is required.",
+      "raw_text": "The service is running on this Mac.\nNo remote vision model is required.",
+      "cer": 0.0,
+      "elapsed_ms": 66.7,
+      "blocks": [
+        {
+          "text": "The service is running on this Mac.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.805357,
+            "width": 0.513081,
+            "height": 0.085714
+          }
+        },
+        {
+          "text": "No remote vision model is required.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.688716,
+            "width": 0.520349,
+            "height": 0.077821
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-08",
+      "category": "english",
+      "font_profile": [
+        "PingFang SC",
+        34,
+        "#F8FAFC",
+        "#172033"
+      ],
+      "truth": "Select an image and extract its text.\nReview the result before you send it.",
+      "text": "Select an image and extract its text.\nReview the result before you send it.",
+      "raw_text": "Select an image and extract its text.\nReview the result before you send it.",
+      "cer": 0.0,
+      "elapsed_ms": 67.7,
+      "blocks": [
+        {
+          "text": "Select an image and extract its text.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.808929,
+            "width": 0.531977,
+            "height": 0.082143
+          }
+        },
+        {
+          "text": "Review the result before you send it.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.041667,
+            "y": 0.666071,
+            "width": 0.541667,
+            "height": 0.1125
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-09",
+      "category": "english",
+      "font_profile": [
+        "PingFang SC",
+        34,
+        "#F8FAFC",
+        "#172033"
+      ],
+      "truth": "Connection refused on port 11434.\nCheck whether Ollama is running.",
+      "text": "Connection refused on port 11434.\nCheck whether Ollama is running.",
+      "raw_text": "Connection refused on port 11434.\nCheck whether Ollama is running.",
+      "cer": 0.0,
+      "elapsed_ms": 58.1,
+      "blocks": [
+        {
+          "text": "Connection refused on port 11434.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.808929,
+            "width": 0.505814,
+            "height": 0.082143
+          }
+        },
+        {
+          "text": "Check whether Ollama is running.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.041667,
+            "y": 0.666071,
+            "width": 0.5,
+            "height": 0.1125
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-10",
+      "category": "english",
+      "font_profile": [
+        "PingFang SC",
+        34,
+        "#F8FAFC",
+        "#172033"
+      ],
+      "truth": "A clear error message saves debugging time.\nTry the request again after recovery.",
+      "text": "A clear error message saves debugging time.\nTry the request again after recovery.",
+      "raw_text": "A clear error message saves debugging time.\nTry the request again after recovery.",
+      "cer": 0.0,
+      "elapsed_ms": 66.6,
+      "blocks": [
+        {
+          "text": "A clear error message saves debugging time.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.041667,
+            "y": 0.788889,
+            "width": 0.670833,
+            "height": 0.111111
+          }
+        },
+        {
+          "text": "Try the request again after recovery.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.041667,
+            "y": 0.666071,
+            "width": 0.545833,
+            "height": 0.123214
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-11",
+      "category": "english",
+      "font_profile": [
+        "Songti SC",
+        40,
+        "#FFFFFF",
+        "#262626"
+      ],
+      "truth": "Local OCR keeps screenshots private.\nCopy the result before asking a question.",
+      "text": "Local OCR keeps screenshots private.\nCopy the result before asking a question.",
+      "raw_text": "Local OCR keeps screenshots private.\nCopy the result before asking a question.",
+      "cer": 0.0,
+      "elapsed_ms": 72.2,
+      "blocks": [
+        {
+          "text": "Local OCR keeps screenshots private.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.041667,
+            "y": 0.8,
+            "width": 0.5875,
+            "height": 0.133929
+          }
+        },
+        {
+          "text": "Copy the result before asking a question.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.045833,
+            "y": 0.655357,
+            "width": 0.620833,
+            "height": 0.123214
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-12",
+      "category": "english",
+      "font_profile": [
+        "Songti SC",
+        40,
+        "#FFFFFF",
+        "#262626"
+      ],
+      "truth": "The service is running on this Mac.\nNo remote vision model is required.",
+      "text": "The service is running on this Mac.\nNo remote vision model is required.",
+      "raw_text": "The service is running on this Mac.\nNo remote vision model is required.",
+      "cer": 0.0,
+      "elapsed_ms": 69.5,
+      "blocks": [
+        {
+          "text": "The service is running on this Mac.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.8125,
+            "width": 0.531977,
+            "height": 0.091071
+          }
+        },
+        {
+          "text": "No remote vision model is required.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.669261,
+            "width": 0.546512,
+            "height": 0.089668
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-13",
+      "category": "english",
+      "font_profile": [
+        "Songti SC",
+        40,
+        "#FFFFFF",
+        "#262626"
+      ],
+      "truth": "Select an image and extract its text.\nReview the result before you send it.",
+      "text": "Select an image and extract its text.\nReview the result before you send it.",
+      "raw_text": "Select an image and extract its text.\nReview the result before you send it.",
+      "cer": 0.0,
+      "elapsed_ms": 66.3,
+      "blocks": [
+        {
+          "text": "Select an image and extract its text.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.8125,
+            "width": 0.540698,
+            "height": 0.091071
+          }
+        },
+        {
+          "text": "Review the result before you send it.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.66537,
+            "width": 0.549419,
+            "height": 0.093559
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-14",
+      "category": "english",
+      "font_profile": [
+        "Songti SC",
+        40,
+        "#FFFFFF",
+        "#262626"
+      ],
+      "truth": "Connection refused on port 11434.\nCheck whether Ollama is running.",
+      "text": "Connection refused on port 11434.\nCheck whether Ollama is running.",
+      "raw_text": "Connection refused on port 11434.\nCheck whether Ollama is running.",
+      "cer": 0.0,
+      "elapsed_ms": 58.9,
+      "blocks": [
+        {
+          "text": "Connection refused on port 11434.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.808929,
+            "width": 0.521802,
+            "height": 0.094643
+          }
+        },
+        {
+          "text": "Check whether Ollama is running.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.045833,
+            "y": 0.655357,
+            "width": 0.525,
+            "height": 0.123214
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-15",
+      "category": "english",
+      "font_profile": [
+        "Songti SC",
+        40,
+        "#FFFFFF",
+        "#262626"
+      ],
+      "truth": "A clear error message saves debugging time.\nTry the request again after recovery.",
+      "text": "A clear error message saves debugging time.\nTry the request again after recovery.",
+      "raw_text": "A clear error message saves debugging time.\nTry the request again after recovery.",
+      "cer": 0.0,
+      "elapsed_ms": 68.7,
+      "blocks": [
+        {
+          "text": "A clear error message saves debugging time.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.8125,
+            "width": 0.671512,
+            "height": 0.091071
+          }
+        },
+        {
+          "text": "Try the request again after recovery.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.66537,
+            "width": 0.553779,
+            "height": 0.097276
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-16",
+      "category": "english",
+      "font_profile": [
+        "STHeiti",
+        32,
+        "#111827",
+        "#F9FAFB"
+      ],
+      "truth": "Local OCR keeps screenshots private.\nCopy the result before asking a question.",
+      "text": "Local OCR keeps screenshots private.\nCopy the result before asking a question.",
+      "raw_text": "Local OCR keeps screenshots private.\nCopy the result before asking a question.",
+      "cer": 0.0,
+      "elapsed_ms": 74.7,
+      "blocks": [
+        {
+          "text": "Local OCR keeps screenshots private.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.8125,
+            "width": 0.534884,
+            "height": 0.082442
+          }
+        },
+        {
+          "text": "Copy the result before asking a question.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.684825,
+            "width": 0.579942,
+            "height": 0.085603
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-17",
+      "category": "english",
+      "font_profile": [
+        "STHeiti",
+        32,
+        "#111827",
+        "#F9FAFB"
+      ],
+      "truth": "The service is running on this Mac.\nNo remote vision model is required.",
+      "text": "The service is running on this Mac.\nNo remote vision model is required.",
+      "raw_text": "The service is running on this Mac.\nNo remote vision model is required.",
+      "cer": 0.0,
+      "elapsed_ms": 65.4,
+      "blocks": [
+        {
+          "text": "The service is running on this Mac.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.045058,
+            "y": 0.808929,
+            "width": 0.478198,
+            "height": 0.086013
+          }
+        },
+        {
+          "text": "No remote vision model is required.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.692607,
+            "width": 0.49564,
+            "height": 0.077821
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-18",
+      "category": "english",
+      "font_profile": [
+        "STHeiti",
+        32,
+        "#111827",
+        "#F9FAFB"
+      ],
+      "truth": "Select an image and extract its text.\nReview the result before you send it.",
+      "text": "Select an image and extract its text.\nReview the result before you send it.",
+      "raw_text": "Select an image and extract its text.\nReview the result before you send it.",
+      "cer": 0.0,
+      "elapsed_ms": 67.2,
+      "blocks": [
+        {
+          "text": "Select an image and extract its text.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.045058,
+            "y": 0.8125,
+            "width": 0.513081,
+            "height": 0.082442
+          }
+        },
+        {
+          "text": "Review the result before you send it.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.688716,
+            "width": 0.507267,
+            "height": 0.081712
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-19",
+      "category": "english",
+      "font_profile": [
+        "STHeiti",
+        32,
+        "#111827",
+        "#F9FAFB"
+      ],
+      "truth": "Connection refused on port 11434.\nCheck whether Ollama is running.",
+      "text": "Connection refused on port 11434.\nCheck whether Ollama is running.",
+      "raw_text": "Connection refused on port 11434.\nCheck whether Ollama is running.",
+      "cer": 0.0,
+      "elapsed_ms": 65.5,
+      "blocks": [
+        {
+          "text": "Connection refused on port 11434.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.8125,
+            "width": 0.492733,
+            "height": 0.082442
+          }
+        },
+        {
+          "text": "Check whether Ollama is running.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.688716,
+            "width": 0.479651,
+            "height": 0.081712
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-20",
+      "category": "english",
+      "font_profile": [
+        "STHeiti",
+        32,
+        "#111827",
+        "#F9FAFB"
+      ],
+      "truth": "A clear error message saves debugging time.\nTry the request again after recovery.",
+      "text": "A clear error message saves debugging time.\nTry the request again after recovery.",
+      "raw_text": "A clear error message saves debugging time.\nTry the request again after recovery.",
+      "cer": 0.0,
+      "elapsed_ms": 74.5,
+      "blocks": [
+        {
+          "text": "A clear error message saves debugging time.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.8125,
+            "width": 0.642442,
+            "height": 0.082442
+          }
+        },
+        {
+          "text": "Try the request again after recovery.",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.045058,
+            "y": 0.688716,
+            "width": 0.515988,
+            "height": 0.081712
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-01",
+      "category": "chinese",
+      "font_profile": [
+        "Menlo",
+        28,
+        "#FFFFFF",
+        "#111827"
+      ],
+      "truth": "本地识字不会上传截图。\n请在发送前检查识别结果。",
+      "text": "本地识字不会上传截图。\n请在发送前检查识别结果。",
+      "raw_text": "本地识字不会上传截图。\n请在发送前检查识别结果。",
+      "cer": 0.0,
+      "elapsed_ms": 150.8,
+      "blocks": [
+        {
+          "text": "本地识字不会上传截图。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.801556,
+            "width": 0.277616,
+            "height": 0.085944
+          }
+        },
+        {
+          "text": "请在发送前检查识别结果。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.041667,
+            "y": 0.666071,
+            "width": 0.308333,
+            "height": 0.100595
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-02",
+      "category": "chinese",
+      "font_profile": [
+        "Menlo",
+        28,
+        "#FFFFFF",
+        "#111827"
+      ],
+      "truth": "服务暂时无法连接。\n请确认本地模型已经启动。",
+      "text": "服务暂时无法连接。\n请确认本地模型已经启动。",
+      "raw_text": "服务暂时无法连接。\n请确认本地模型已经启动。",
+      "cer": 0.0,
+      "elapsed_ms": 80.2,
+      "blocks": [
+        {
+          "text": "服务暂时无法连接。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.805357,
+            "width": 0.223837,
+            "height": 0.082143
+          }
+        },
+        {
+          "text": "请确认本地模型已经启动。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.676786,
+            "width": 0.302326,
+            "height": 0.08586
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-03",
+      "category": "chinese",
+      "font_profile": [
+        "Menlo",
+        28,
+        "#FFFFFF",
+        "#111827"
+      ],
+      "truth": "选择图片后点击识字。\n结果可以编辑、复制或提问。",
+      "text": "选择图片后点击识字。\n结果可以编辑、复制或提问。",
+      "raw_text": "选择图片后点击识字。\n结果可以编辑、复制或提问。",
+      "cer": 0.0,
+      "elapsed_ms": 88.4,
+      "blocks": [
+        {
+          "text": "选择图片后点击识字。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.801556,
+            "width": 0.25,
+            "height": 0.085944
+          }
+        },
+        {
+          "text": "结果可以编辑、复制或提问。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.676786,
+            "width": 0.327035,
+            "height": 0.08586
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-04",
+      "category": "chinese",
+      "font_profile": [
+        "Menlo",
+        28,
+        "#FFFFFF",
+        "#111827"
+      ],
+      "truth": "这是一段固定质量样本。\n它不包含任何私人屏幕内容。",
+      "text": "这是一段固定质量样本。\n它不包含任何私人屏幕内容。",
+      "raw_text": "这是一段固定质量样本。\n它不包含任何私人屏幕内容。",
+      "cer": 0.0,
+      "elapsed_ms": 82.9,
+      "blocks": [
+        {
+          "text": "这是一段固定质量样本。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.801556,
+            "width": 0.276163,
+            "height": 0.085944
+          }
+        },
+        {
+          "text": "它不包含任何私人屏幕内容。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.676786,
+            "width": 0.327035,
+            "height": 0.08586
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-05",
+      "category": "chinese",
+      "font_profile": [
+        "Menlo",
+        28,
+        "#FFFFFF",
+        "#111827"
+      ],
+      "truth": "图片中的文字已经提取。\n低置信度内容需要人工核对。",
+      "text": "图片中的文字已经提取。\n低置信度内容需要人工核对。",
+      "raw_text": "图片中的文字已经提取。\n低置信度内容需要人工核对。",
+      "cer": 0.0,
+      "elapsed_ms": 73.6,
+      "blocks": [
+        {
+          "text": "图片中的文字已经提取。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.801556,
+            "width": 0.276163,
+            "height": 0.085944
+          }
+        },
+        {
+          "text": "低置信度内容需要人工核对。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.676786,
+            "width": 0.327035,
+            "height": 0.08586
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-06",
+      "category": "chinese",
+      "font_profile": [
+        "PingFang SC",
+        34,
+        "#F8FAFC",
+        "#172033"
+      ],
+      "truth": "本地识字不会上传截图。\n请在发送前检查识别结果。",
+      "text": "本地识字不会上传截图。\n请在发送前检查识别结果。",
+      "raw_text": "本地识字不会上传截图。\n请在发送前检查识别结果。",
+      "cer": 0.0,
+      "elapsed_ms": 67.9,
+      "blocks": [
+        {
+          "text": "本地识字不会上传截图。",
+          "confidence": 0.5,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.797665,
+            "width": 0.332849,
+            "height": 0.105906
+          }
+        },
+        {
+          "text": "请在发送前检查识别结果。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.673152,
+            "width": 0.363372,
+            "height": 0.10542
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-07",
+      "category": "chinese",
+      "font_profile": [
+        "PingFang SC",
+        34,
+        "#F8FAFC",
+        "#172033"
+      ],
+      "truth": "服务暂时无法连接。\n请确认本地模型已经启动。",
+      "text": "服务暂时无法连接。\n请确认本地模型已经启动。",
+      "raw_text": "服务暂时无法连接。\n请确认本地模型已经启动。",
+      "cer": 0.0,
+      "elapsed_ms": 64.1,
+      "blocks": [
+        {
+          "text": "服务暂时无法连接。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.801556,
+            "width": 0.268895,
+            "height": 0.102015
+          }
+        },
+        {
+          "text": "请确认本地模型已经启动。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.673152,
+            "width": 0.363372,
+            "height": 0.10542
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-08",
+      "category": "chinese",
+      "font_profile": [
+        "PingFang SC",
+        34,
+        "#F8FAFC",
+        "#172033"
+      ],
+      "truth": "选择图片后点击识字。\n结果可以编辑、复制或提问。",
+      "text": "选择图片后点击识字。\n结果可以编辑、复制或提问。",
+      "raw_text": "选择图片后点击识字。\n结果可以编辑、复制或提问。",
+      "cer": 0.0,
+      "elapsed_ms": 76.1,
+      "blocks": [
+        {
+          "text": "选择图片后点击识字。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.801556,
+            "width": 0.305233,
+            "height": 0.102015
+          }
+        },
+        {
+          "text": "结果可以编辑、复制或提问。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.673152,
+            "width": 0.393895,
+            "height": 0.10542
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-09",
+      "category": "chinese",
+      "font_profile": [
+        "PingFang SC",
+        34,
+        "#F8FAFC",
+        "#172033"
+      ],
+      "truth": "这是一段固定质量样本。\n它不包含任何私人屏幕内容。",
+      "text": "这是一段固定质量样本。\n它不包含任何私人屏幕内容。",
+      "raw_text": "这是一段固定质量样本。\n它不包含任何私人屏幕内容。",
+      "cer": 0.0,
+      "elapsed_ms": 71.4,
+      "blocks": [
+        {
+          "text": "这是一段固定质量样本。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.797665,
+            "width": 0.332849,
+            "height": 0.105906
+          }
+        },
+        {
+          "text": "它不包含任何私人屏幕内容。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.673152,
+            "width": 0.395349,
+            "height": 0.10542
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-10",
+      "category": "chinese",
+      "font_profile": [
+        "PingFang SC",
+        34,
+        "#F8FAFC",
+        "#172033"
+      ],
+      "truth": "图片中的文字已经提取。\n低置信度内容需要人工核对。",
+      "text": "图片中的文字已经提取。\n低置信度内容需要人工核对。",
+      "raw_text": "图片中的文字已经提取。\n低置信度内容需要人工核对。",
+      "cer": 0.0,
+      "elapsed_ms": 71.4,
+      "blocks": [
+        {
+          "text": "图片中的文字已经提取。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.045833,
+            "y": 0.777778,
+            "width": 0.3375,
+            "height": 0.122222
+          }
+        },
+        {
+          "text": "低置信度内容需要人工核对。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.673152,
+            "width": 0.395349,
+            "height": 0.10542
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-11",
+      "category": "chinese",
+      "font_profile": [
+        "Songti SC",
+        40,
+        "#FFFFFF",
+        "#262626"
+      ],
+      "truth": "本地识字不会上传截图。\n请在发送前检查识别结果。",
+      "text": "本地识字不会上传截图。\n请在发送前检查识别结果。",
+      "raw_text": "本地识字不会上传截图。\n请在发送前检查识别结果。",
+      "cer": 0.0,
+      "elapsed_ms": 82.3,
+      "blocks": [
+        {
+          "text": "本地识字不会上传截图。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.797665,
+            "width": 0.396802,
+            "height": 0.113049
+          }
+        },
+        {
+          "text": "请在发送前检查识别结果。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.657143,
+            "width": 0.43314,
+            "height": 0.109394
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-12",
+      "category": "chinese",
+      "font_profile": [
+        "Songti SC",
+        40,
+        "#FFFFFF",
+        "#262626"
+      ],
+      "truth": "服务暂时无法连接。\n请确认本地模型已经启动。",
+      "text": "服务暂时无法连接。\n请确认本地模型已经启动。",
+      "raw_text": "服务暂时无法连接。\n请确认本地模型已经启动。",
+      "cer": 0.0,
+      "elapsed_ms": 74.6,
+      "blocks": [
+        {
+          "text": "服务暂时无法连接。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.797665,
+            "width": 0.322674,
+            "height": 0.109477
+          }
+        },
+        {
+          "text": "请确认本地模型已经启动。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.657143,
+            "width": 0.43314,
+            "height": 0.109394
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-13",
+      "category": "chinese",
+      "font_profile": [
+        "Songti SC",
+        40,
+        "#FFFFFF",
+        "#262626"
+      ],
+      "truth": "选择图片后点击识字。\n结果可以编辑、复制或提问。",
+      "text": "选择图片后点击识字。\n结果可以编辑、复制或提问。",
+      "raw_text": "选择图片后点击识字。\n结果可以编辑、复制或提问。",
+      "cer": 0.0,
+      "elapsed_ms": 76.0,
+      "blocks": [
+        {
+          "text": "选择图片后点击识字。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.797665,
+            "width": 0.360465,
+            "height": 0.109477
+          }
+        },
+        {
+          "text": "结果可以编辑、复制或提问。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.653571,
+            "width": 0.47093,
+            "height": 0.112966
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-14",
+      "category": "chinese",
+      "font_profile": [
+        "Songti SC",
+        40,
+        "#FFFFFF",
+        "#262626"
+      ],
+      "truth": "这是一段固定质量样本。\n它不包含任何私人屏幕内容。",
+      "text": "这是一段固定质量样本。\n它不包含任何私人屏幕内容。",
+      "raw_text": "这是一段固定质量样本。\n它不包含任何私人屏幕内容。",
+      "cer": 0.0,
+      "elapsed_ms": 80.4,
+      "blocks": [
+        {
+          "text": "这是一段固定质量样本。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.797665,
+            "width": 0.398256,
+            "height": 0.109477
+          }
+        },
+        {
+          "text": "它不包含任何私人屏幕内容。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.653571,
+            "width": 0.47093,
+            "height": 0.112966
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-15",
+      "category": "chinese",
+      "font_profile": [
+        "Songti SC",
+        40,
+        "#FFFFFF",
+        "#262626"
+      ],
+      "truth": "图片中的文字已经提取。\n低置信度内容需要人工核对。",
+      "text": "图片中的文字已经提取。\n低置信度内容需要人工核对。",
+      "raw_text": "图片中的文字已经提取。\n低置信度内容需要人工核对。",
+      "cer": 0.0,
+      "elapsed_ms": 84.3,
+      "blocks": [
+        {
+          "text": "图片中的文字已经提取。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.797665,
+            "width": 0.395349,
+            "height": 0.109477
+          }
+        },
+        {
+          "text": "低置信度内容需要人工核对。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.653571,
+            "width": 0.47093,
+            "height": 0.112966
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-16",
+      "category": "chinese",
+      "font_profile": [
+        "STHeiti",
+        32,
+        "#111827",
+        "#F9FAFB"
+      ],
+      "truth": "本地识字不会上传截图。\n请在发送前检查识别结果。",
+      "text": "本地识字不会上传截图。\n请在发送前检查识别结果。",
+      "raw_text": "本地识字不会上传截图。\n请在发送前检查识别结果。",
+      "cer": 0.0,
+      "elapsed_ms": 75.2,
+      "blocks": [
+        {
+          "text": "本地识字不会上传截图。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.808929,
+            "width": 0.3125,
+            "height": 0.089904
+          }
+        },
+        {
+          "text": "请在发送前检查识别结果。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.684825,
+            "width": 0.34157,
+            "height": 0.090175
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-17",
+      "category": "chinese",
+      "font_profile": [
+        "STHeiti",
+        32,
+        "#111827",
+        "#F9FAFB"
+      ],
+      "truth": "服务暂时无法连接。\n请确认本地模型已经启动。",
+      "text": "服务暂时无法连接。\n请确认本地模型已经启动。",
+      "raw_text": "服务暂时无法连接。\n请确认本地模型已经启动。",
+      "cer": 0.0,
+      "elapsed_ms": 76.8,
+      "blocks": [
+        {
+          "text": "服务暂时无法连接。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.808929,
+            "width": 0.255814,
+            "height": 0.089904
+          }
+        },
+        {
+          "text": "请确认本地模型已经启动。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.684825,
+            "width": 0.337209,
+            "height": 0.085603
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-18",
+      "category": "chinese",
+      "font_profile": [
+        "STHeiti",
+        32,
+        "#111827",
+        "#F9FAFB"
+      ],
+      "truth": "选择图片后点击识字。\n结果可以编辑、复制或提问。",
+      "text": "选择图片后点击识字。\n结果可以编辑、复制或提问。",
+      "raw_text": "选择图片后点击识字。\n结果可以编辑、复制或提问。",
+      "cer": 0.0,
+      "elapsed_ms": 70.7,
+      "blocks": [
+        {
+          "text": "选择图片后点击识字。",
+          "confidence": 0.5,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.808929,
+            "width": 0.28343,
+            "height": 0.089904
+          }
+        },
+        {
+          "text": "结果可以编辑、复制或提问。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.684825,
+            "width": 0.37064,
+            "height": 0.090175
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-19",
+      "category": "chinese",
+      "font_profile": [
+        "STHeiti",
+        32,
+        "#111827",
+        "#F9FAFB"
+      ],
+      "truth": "这是一段固定质量样本。\n它不包含任何私人屏幕内容。",
+      "text": "这是一段固定质量样本。\n它不包含任何私人屏幕内容。",
+      "raw_text": "这是一段固定质量样本。\n它不包含任何私人屏幕内容。",
+      "cer": 0.0,
+      "elapsed_ms": 74.2,
+      "blocks": [
+        {
+          "text": "这是一段固定质量样本。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.808929,
+            "width": 0.313953,
+            "height": 0.089904
+          }
+        },
+        {
+          "text": "它不包含任何私人屏幕内容。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.684825,
+            "width": 0.369186,
+            "height": 0.090175
+          }
+        }
+      ]
+    },
+    {
+      "id": "chinese-20",
+      "category": "chinese",
+      "font_profile": [
+        "STHeiti",
+        32,
+        "#111827",
+        "#F9FAFB"
+      ],
+      "truth": "图片中的文字已经提取。\n低置信度内容需要人工核对。",
+      "text": "图片中的文字已经提取。\n低置信度内容需要人工核对。",
+      "raw_text": "图片中的文字已经提取。\n低置信度内容需要人工核对。",
+      "cer": 0.0,
+      "elapsed_ms": 76.5,
+      "blocks": [
+        {
+          "text": "图片中的文字已经提取。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.808929,
+            "width": 0.3125,
+            "height": 0.089904
+          }
+        },
+        {
+          "text": "低置信度内容需要人工核对。",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.684825,
+            "width": 0.372093,
+            "height": 0.090175
+          }
+        }
+      ]
+    },
+    {
+      "id": "mixed_code-01",
+      "category": "mixed_code",
+      "font_profile": [
+        "Menlo",
+        28,
+        "#FFFFFF",
+        "#111827"
+      ],
+      "truth": "def greet(name: str) -> str:\n    return f\"你好, {name}!\"\nprint(greet(\"Codex\"))",
+      "text": "def greet(name: str) -> str:\n    return f\"你好，｛name｝！\"\nprint(greet(\"Codex\"))",
+      "raw_text": "def greet(name: str) -> str:\nreturn f\"你好，｛name｝！\"\nprint(greet(\"Codex\"))",
+      "cer": 0.0658,
+      "elapsed_ms": 70.8,
+      "blocks": [
+        {
+          "text": "def greet(name: str) -> str:",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.8125,
+            "width": 0.436047,
+            "height": 0.071429
+          }
+        },
+        {
+          "text": "return f\"你好，｛name｝！\"",
+          "confidence": 0.5,
+          "bounds": {
+            "x": 0.111919,
+            "y": 0.673152,
+            "width": 0.350291,
+            "height": 0.097276
+          }
+        },
+        {
+          "text": "print(greet(\"Codex\"))",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.564202,
+            "width": 0.325581,
+            "height": 0.077821
+          }
+        }
+      ]
+    },
+    {
+      "id": "mixed_code-02",
+      "category": "mixed_code",
+      "font_profile": [
+        "Menlo",
+        28,
+        "#FFFFFF",
+        "#111827"
+      ],
+      "truth": "if response.status_code == 200:\n    print(\"请求成功\")\nelse:\n    print(\"请重试\")",
+      "text": "if response.status_code == 200:\n    print（\"请求成功\"）\nelse:\n    print（\"请重试\"）",
+      "raw_text": "if response.status_code == 200:\nprint（\"请求成功\"）\nelse:\nprint（\"请重试\"）",
+      "cer": 0.0556,
+      "elapsed_ms": 74.3,
+      "blocks": [
+        {
+          "text": "if response.status_code == 200:",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.805357,
+            "width": 0.481105,
+            "height": 0.078571
+          }
+        },
+        {
+          "text": "print（\"请求成功\"）",
+          "confidence": 0.5,
+          "bounds": {
+            "x": 0.109012,
+            "y": 0.684825,
+            "width": 0.24564,
+            "height": 0.085603
+          }
+        },
+        {
+          "text": "else:",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047678,
+            "y": 0.569391,
+            "width": 0.076155,
+            "height": 0.067443
+          }
+        },
+        {
+          "text": "print（\"请重试\"）",
+          "confidence": 0.5,
+          "bounds": {
+            "x": 0.108632,
+            "y": 0.43518,
+            "width": 0.223036,
+            "height": 0.09112
+          }
+        }
+      ]
+    },
+    {
+      "id": "mixed_code-03",
+      "category": "mixed_code",
+      "font_profile": [
+        "Menlo",
+        28,
+        "#FFFFFF",
+        "#111827"
+      ],
+      "truth": "for item in results:\n    label = f\"结果: {item}\"\n    print(label)",
+      "text": "for item in results:\n    Label = f\"结果：｛item｝\"\n    print(label)",
+      "raw_text": "for item in results:\nLabel = f\"结果：｛item｝\"\nprint(label)",
+      "cer": 0.0794,
+      "elapsed_ms": 71.5,
+      "blocks": [
+        {
+          "text": "for item in results:",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.05,
+            "y": 0.810714,
+            "width": 0.3125,
+            "height": 0.078571
+          }
+        },
+        {
+          "text": "Label = f\"结果：｛item｝\"",
+          "confidence": 0.5,
+          "bounds": {
+            "x": 0.111919,
+            "y": 0.696429,
+            "width": 0.350291,
+            "height": 0.073999
+          }
+        },
+        {
+          "text": "print(label)",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.110465,
+            "y": 0.564202,
+            "width": 0.186047,
+            "height": 0.070039
+          }
+        }
+      ]
+    },
+    {
+      "id": "mixed_code-04",
+      "category": "mixed_code",
+      "font_profile": [
+        "Menlo",
+        28,
+        "#FFFFFF",
+        "#111827"
+      ],
+      "truth": "class LocalOCR:\n    def run(self, image):\n        return self.vision(image)",
+      "text": "class LocalOCR:\n    def run(self, image):\n        return self.vision (image)",
+      "raw_text": "class LocalOCR:\ndef run(self, image):\nreturn self.vision (image)",
+      "cer": 0.0133,
+      "elapsed_ms": 60.1,
+      "blocks": [
+        {
+          "text": "class LocalOCR:",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.824903,
+            "width": 0.231105,
+            "height": 0.059026
+          }
+        },
+        {
+          "text": "def run(self, image):",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.110465,
+            "y": 0.680357,
+            "width": 0.327035,
+            "height": 0.078571
+          }
+        },
+        {
+          "text": "return self.vision (image)",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.175872,
+            "y": 0.564202,
+            "width": 0.385174,
+            "height": 0.07393
+          }
+        }
+      ]
+    },
+    {
+      "id": "mixed_code-05",
+      "category": "mixed_code",
+      "font_profile": [
+        "Menlo",
+        28,
+        "#FFFFFF",
+        "#111827"
+      ],
+      "truth": "try:\n    text = recognize(image)\nexcept RuntimeError:\n    text = \"识别失败\"",
+      "text": "try:\n    text = recognize (image)\nexcept RuntimeError:\n    text = \"识别失败\"",
+      "raw_text": "try:\ntext = recognize (image)\nexcept RuntimeError:\ntext = \"识别失败\"",
+      "cer": 0.0141,
+      "elapsed_ms": 67.7,
+      "blocks": [
+        {
+          "text": "try:",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.049419,
+            "y": 0.81323,
+            "width": 0.059593,
+            "height": 0.070039
+          }
+        },
+        {
+          "text": "text = recognize (image)",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.110465,
+            "y": 0.688716,
+            "width": 0.357558,
+            "height": 0.07393
+          }
+        },
+        {
+          "text": "except RuntimeError:",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.564202,
+            "width": 0.311047,
+            "height": 0.070039
+          }
+        },
+        {
+          "text": "text = \"识别失败\"",
+          "confidence": 0.3,
+          "bounds": {
+            "x": 0.109012,
+            "y": 0.439286,
+            "width": 0.248547,
+            "height": 0.082143
+          }
+        }
+      ]
+    },
+    {
+      "id": "mixed_code-06",
+      "category": "mixed_code",
+      "font_profile": [
+        "PingFang SC",
+        34,
+        "#F8FAFC",
+        "#172033"
+      ],
+      "truth": "def greet(name: str) -> str:\n    return f\"你好, {name}!\"\nprint(greet(\"Codex\"))",
+      "text": "def greet(name: str) -> str:\n    return f\"你好，｛name｝！\"\nprint(greet(\"Codex\"))",
+      "raw_text": "def greet(name: str) -> str:\nreturn f\"你好，｛name｝！\"\nprint(greet(\"Codex\"))",
+      "cer": 0.0658,
+      "elapsed_ms": 63.0,
+      "blocks": [
+        {
+          "text": "def greet(name: str) -> str:",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.808929,
+            "width": 0.396802,
+            "height": 0.089904
+          }
+        },
+        {
+          "text": "return f\"你好，｛name｝！\"",
+          "confidence": 0.3,
+          "bounds": {
+            "x": 0.087209,
+            "y": 0.669261,
+            "width": 0.335756,
+            "height": 0.112882
+          }
+        },
+        {
+          "text": "print(greet(\"Codex\"))",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.045833,
+            "y": 0.544444,
+            "width": 0.308333,
+            "height": 0.111111
+          }
+        }
+      ]
+    },
+    {
+      "id": "mixed_code-07",
+      "category": "mixed_code",
+      "font_profile": [
+        "PingFang SC",
+        34,
+        "#F8FAFC",
+        "#172033"
+      ],
+      "truth": "if response.status_code == 200:\n    print(\"请求成功\")\nelse:\n    print(\"请重试\")",
+      "text": "if response.status_code == 200:\n    print（\"请求成功\"）\nelse:\n    print（\"请重试\"）",
+      "raw_text": "if response.status_code == 200:\nprint（\"请求成功\"）\nelse:\nprint（\"请重试\"）",
+      "cer": 0.0556,
+      "elapsed_ms": 73.6,
+      "blocks": [
+        {
+          "text": "if response.status_code == 200:",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.045058,
+            "y": 0.801556,
+            "width": 0.475291,
+            "height": 0.089515
+          }
+        },
+        {
+          "text": "print（\"请求成功\"）",
+          "confidence": 0.5,
+          "bounds": {
+            "x": 0.088313,
+            "y": 0.684217,
+            "width": 0.244801,
+            "height": 0.092412
+          }
+        },
+        {
+          "text": "else:",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.575875,
+            "width": 0.068314,
+            "height": 0.062257
+          }
+        },
+        {
+          "text": "print（\"请重试\"）",
+          "confidence": 0.5,
+          "bounds": {
+            "x": 0.088595,
+            "y": 0.434644,
+            "width": 0.210891,
+            "height": 0.091801
+          }
+        }
+      ]
+    },
+    {
+      "id": "mixed_code-08",
+      "category": "mixed_code",
+      "font_profile": [
+        "PingFang SC",
+        34,
+        "#F8FAFC",
+        "#172033"
+      ],
+      "truth": "for item in results:\n    label = f\"结果: {item}\"\n    print(label)",
+      "text": "for item in results:\n    label = f\"结果：｛item｝\"\n    print(label)",
+      "raw_text": "for item in results:\nlabel = f\"结果：｛item｝\"\nprint(label)",
+      "cer": 0.0635,
+      "elapsed_ms": 69.4,
+      "blocks": [
+        {
+          "text": "for item in results:",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.821012,
+            "width": 0.270349,
+            "height": 0.07006
+          }
+        },
+        {
+          "text": "label = f\"结果：｛item｝\"",
+          "confidence": 0.5,
+          "bounds": {
+            "x": 0.085756,
+            "y": 0.692607,
+            "width": 0.319767,
+            "height": 0.085964
+          }
+        },
+        {
+          "text": "print(label)",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.088523,
+            "y": 0.558413,
+            "width": 0.15871,
+            "height": 0.089399
+          }
+        }
+      ]
+    },
+    {
+      "id": "mixed_code-09",
+      "category": "mixed_code",
+      "font_profile": [
+        "PingFang SC",
+        34,
+        "#F8FAFC",
+        "#172033"
+      ],
+      "truth": "class LocalOCR:\n    def run(self, image):\n        return self.vision(image)",
+      "text": "class LocalOCR:\n    def run(self, image):\n        return self.vision(image)",
+      "raw_text": "class LocalOCR:\ndef run(self, image):\nreturn self.vision(image)",
+      "cer": 0.0,
+      "elapsed_ms": 58.0,
+      "blocks": [
+        {
+          "text": "class LocalOCR:",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.821012,
+            "width": 0.242733,
+            "height": 0.07006
+          }
+        },
+        {
+          "text": "def run(self, image):",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.088663,
+            "y": 0.673152,
+            "width": 0.295058,
+            "height": 0.097276
+          }
+        },
+        {
+          "text": "return self.vision(image)",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.130814,
+            "y": 0.560311,
+            "width": 0.351744,
+            "height": 0.086117
+          }
+        }
+      ]
+    },
+    {
+      "id": "mixed_code-10",
+      "category": "mixed_code",
+      "font_profile": [
+        "PingFang SC",
+        34,
+        "#F8FAFC",
+        "#172033"
+      ],
+      "truth": "try:\n    text = recognize(image)\nexcept RuntimeError:\n    text = \"识别失败\"",
+      "text": "try:\n    text = recognize(image)\nexcept RuntimeError:\n    text=\"识别失败\"",
+      "raw_text": "try:\ntext = recognize(image)\nexcept RuntimeError:\ntext=\"识别失败\"",
+      "cer": 0.0282,
+      "elapsed_ms": 70.7,
+      "blocks": [
+        {
+          "text": "try:",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.046512,
+            "y": 0.809339,
+            "width": 0.049419,
+            "height": 0.077821
+          }
+        },
+        {
+          "text": "text = recognize(image)",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.088663,
+            "y": 0.684825,
+            "width": 0.348837,
+            "height": 0.085603
+          }
+        },
+        {
+          "text": "except RuntimeError:",
+          "confidence": 1.0,
+          "bounds": {
+            "x": 0.047965,
+            "y": 0.564202,
+            "width": 0.309593,
+            "height": 0.078655
+          }
+        },
+        {
+          "text": "text=\"识别失败\"",
+          "confidence": 0.5,
+          "bounds": {
+            "x": 0.087209,
+            "y": 0.439286,
+            "width": 0.255814,
+            "height": 0.089897
+          }
+        }
+      ]
+    }
+  ]
+}

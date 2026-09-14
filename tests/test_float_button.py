@@ -50,11 +50,25 @@ class TestFloatButtonSignals:
         menu = _get_context_menu(button)
         assert menu is not None
         action_texts = [a.text() for a in menu.actions()]
-        assert action_texts[:4] == ["最近快捷动作", "⚡  翻译", "⚡  解释", "⚡  改写"]
+        assert action_texts[:2] == ["截图到对话…", ""]
+        assert action_texts[2:6] == ["最近快捷动作", "⚡  翻译", "⚡  解释", "⚡  改写"]
         assert "设置…" in action_texts
         assert "桌面宠物形态" in action_texts
         assert "隐藏桌面宠物" in action_texts
         assert "退出" in action_texts
+
+    def test_screenshot_action_emits_signal(self, qtbot, button):
+        menu = _get_context_menu(button)
+        action = next(item for item in menu.actions() if item.data() == "screenshot")
+        with qtbot.waitSignal(button.screenshot_requested, timeout=1000):
+            action.trigger()
+
+        button.set_listening(True)
+        busy_menu = _get_context_menu(button)
+        busy_action = next(
+            item for item in busy_menu.actions() if item.data() == "screenshot"
+        )
+        assert not busy_action.isEnabled()
 
     def test_recent_action_signal_and_busy_state(self, qtbot, button):
         button.set_quick_actions(
@@ -200,7 +214,7 @@ class TestFloatButtonState:
 
         button.set_pet_size("unknown")
         assert button.pet_size == "medium"
-        assert (button.width(), button.height()) == (116, 122)
+        assert (button.width(), button.height()) == (104, 110)
 
     def test_reduce_motion_stops_periodic_animation(self, button):
         button.set_responding(True)
@@ -209,6 +223,7 @@ class TestFloatButtonState:
         assert button.reduce_motion
         assert not button._animation_timer.isActive()
         assert button._animation_phase == 0
+        assert button._hover_phase == 0
         button._advance_animation()
         assert button._animation_phase == 0
 
@@ -238,6 +253,104 @@ class TestFloatButtonState:
         assert button._effective_state() == "listening"
         button.set_listening(False)
         assert button._effective_state() == "idle"
+
+    def test_semantic_states_have_distinct_motion(self, button):
+        button._animation_phase = 3
+        idle = button._motion_for_state("idle")
+        listening = button._motion_for_state("listening")
+        working = button._motion_for_state("working")
+        success = button._motion_for_state("success")
+        error = button._motion_for_state("error")
+
+        assert idle != listening
+        assert working != success
+        assert error[0] != 0
+
+        button.set_reduce_motion(True)
+        assert button._motion_for_state("working") == (0.0, 0.0, 0.0, 1.0)
+
+    def test_idle_sprite_cycle_stays_subtle(self, button):
+        phases = (3, 24, 49, 54, 78)
+        motions = []
+        for phase in phases:
+            button._animation_phase = phase
+            motions.append(button._motion_for_state("idle"))
+
+        assert all(abs(motion[2]) == 0 for motion in motions)
+        assert all(abs(motion[1]) <= 0.35 for motion in motions)
+        assert all(motion[3] <= 1.001 for motion in motions)
+
+    def test_hover_cycle_has_five_friendly_clips(self, button):
+        button._hovered = True
+        phases = (2, 6, 10, 14, 18)
+        motions = []
+        for phase in phases:
+            button._hover_phase = phase
+            motions.append(button._hover_motion())
+
+        assert len(set(motions)) == len(phases)
+        assert motions[0][1] < 0  # 致意
+        assert motions[1][2] != 0  # 专注侧倾
+        assert motions[2][1] < 0  # 开心回应
+        assert motions[3][0] != 0  # 轻挥翅膀
+        assert motions[4] == (0.0, 0.0, 0.0, 1.0)  # 回到稳定姿态
+
+        button.set_reduce_motion(True)
+        assert button._hover_motion() == (0.0, 0.0, 0.0, 1.0)
+
+    def test_hover_motion_is_eased_without_pose_overshoot(self, button):
+        button._hovered = True
+        sampled = []
+        for phase in (0, 2, 4, 6, 8, 10, 12, 14, 16, 18):
+            button._hover_phase = phase
+            sampled.append(button._hover_motion())
+        assert all(abs(sampled[index + 1][1] - sampled[index][1]) < 0.35 for index in range(len(sampled) - 1))
+
+    def test_hover_animation_does_not_change_task_motion(self, button):
+        button._animation_phase = 5
+        before = button._motion_for_state("working")
+        button._hovered = True
+        button._hover_phase = 18
+        after = button._motion_for_state("working")
+        assert after == before
+
+    def test_generated_sprite_sheets_load_five_consistent_frames(self, button):
+        assert len(button._pet_idle_frames) == 5
+        assert len(button._pet_hover_frames) == 5
+        idle_sizes = {(frame.width(), frame.height()) for frame in button._pet_idle_frames}
+        hover_sizes = {(frame.width(), frame.height()) for frame in button._pet_hover_frames}
+        assert len(idle_sizes) == 1
+        assert len(hover_sizes) == 1
+        assert all(frame.toImage().pixelColor(0, 0).alpha() == 0 for frame in button._pet_idle_frames)
+        assert all(frame.toImage().pixelColor(0, 0).alpha() == 0 for frame in button._pet_hover_frames)
+        assert button._pet_for_state("working") == button._pet_content
+
+        button._animation_phase = 27
+        assert button._pet_for_state("idle") == button._pet_idle_frames[2]
+        button._animation_phase = 49
+        assert button._pet_for_state("idle") == button._pet_idle_frames[0]
+        button._hovered = True
+        button._hover_phase = 13
+        assert button._pet_for_state("idle") == button._pet_hover_frames[3]
+
+    def test_hover_animation_finishes_and_holds_last_frame(self, button):
+        button._hovered = True
+        button._hover_phase = 99
+        button._advance_animation()
+        assert button._hover_phase == 20
+        assert button._pet_for_state("idle") == button._pet_hover_frames[4]
+
+    def test_new_semantic_state_restarts_animation(self, button):
+        button._animation_phase = 7
+        button.set_listening(True)
+        assert button._animation_phase == 0
+        button._animation_phase = 7
+        button.set_listening(False)
+        button.set_responding(True)
+        assert button._animation_phase == 0
+        button._animation_phase = 7
+        button.show_result(True)
+        assert button._animation_phase == 0
 
     def test_result_state_returns_to_idle(self, qtbot, button):
         button.show_result(True)

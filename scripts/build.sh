@@ -2,18 +2,28 @@
 # build.sh — build and validate the macOS application bundle.
 #
 # Usage:
-#   ./scripts/build.sh                    # build + ad-hoc sign + validate
+#   ./scripts/build.sh                    # build + stable local sign (or ad-hoc fallback) + validate
 #   ./scripts/build.sh --test             # run ruff/pytest before building
 #   ./scripts/build.sh --smoke            # launch the packaged executable in isolation
 #   ./scripts/build.sh --dmg              # also create a versioned DMG
 #   AIDE_SIGN_IDENTITY="Developer ID Application: ..." ./scripts/build.sh
+#   AIDE_SIGN_IDENTITY=- ./scripts/build.sh  # explicitly force ad-hoc
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="AI桌面助手"
 APP="${ROOT}/dist/${APP_NAME}.app"
 PYTHON_BIN="${PYTHON:-python3}"
-SIGN_IDENTITY="${AIDE_SIGN_IDENTITY:--}"
+if [[ -n "${AIDE_SIGN_IDENTITY:-}" ]]; then
+    SIGN_IDENTITY="$AIDE_SIGN_IDENTITY"
+else
+    # TCC permissions are tied to the signed app identity. Prefer a stable
+    # certificate so rebuilding the bundle does not look like a new app.
+    SIGN_IDENTITY="$({
+        security find-identity -v -p codesigning 2>/dev/null || true
+    } | awk -F '\"' '/Developer ID Application:|Apple Development:|AI Desktop Assistant/ { print $2; exit }')"
+    SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+fi
 
 RUN_TESTS=false
 SMOKE=false
@@ -40,7 +50,11 @@ echo "    PyInstaller: $($PYTHON_BIN -m PyInstaller --version)"
 
 if $RUN_TESTS; then
     echo "==> [1/6] 运行 ruff 检查..."
-    "$PYTHON_BIN" -m ruff check ai_desktop/ tests/ scripts/release_check.py scripts/restore_database.py scripts/benchmark_m2.py scripts/benchmark_ocr.py
+    "$PYTHON_BIN" -m ruff check \
+        ai_desktop/ tests/ \
+        scripts/release_check.py scripts/restore_database.py \
+        scripts/benchmark_m2.py scripts/benchmark_ocr.py \
+        scripts/benchmark_ocr_quality.py
 
     echo "==> [2/6] 运行 pytest..."
     QT_QPA_PLATFORM=offscreen "$PYTHON_BIN" -m pytest tests/ -q
@@ -62,6 +76,8 @@ fi
 echo "==> [5/6] 签名并验证 .app..."
 if [ "$SIGN_IDENTITY" = "-" ]; then
     echo "    使用 ad-hoc 签名；该候选包未经过 Developer ID 签名或公证"
+else
+    echo "    使用稳定签名身份：${SIGN_IDENTITY}"
 fi
 codesign --force --deep --sign "$SIGN_IDENTITY" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"

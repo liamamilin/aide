@@ -93,6 +93,13 @@ def _generate() -> dict[str, str]:
         f"border-top-left-radius: 10px; border-top-right-radius: 10px; color: {c.text};"
     )
 
+    s["HEADER_ACTION_BUTTON"] = (
+        f"QPushButton {{ background: {c.button}; border: none; border-radius: 7px; "
+        f"padding: 4px 10px; font-size: 11px; font-weight: 600; color: {c.text}; }}"
+        f"QPushButton:hover {{ background: {c.button_hover}; }}"
+        f"QPushButton:pressed {{ background: {c.accent}; color: white; }}"
+    )
+
     # ── 关闭按钮 ──
     s["CLOSE_BUTTON"] = (
         f"QPushButton {{ background: transparent; border: none; font-size: 16px; color: {c.text_secondary}; }}"
@@ -138,8 +145,7 @@ def _generate() -> dict[str, str]:
 
     # ── 底部输入栏 ──
     s["INPUT_BAR"] = (
-        f"background: {c.surface}; border: none; "
-        f"border-bottom-left-radius: 10px; border-bottom-right-radius: 10px;"
+        f"background: {c.surface}; border: 1px solid {c.border}; border-radius: 12px;"
     )
 
     # ── 对话框基础样式 ──
@@ -184,17 +190,23 @@ def _generate() -> dict[str, str]:
         f"QPushButton {{ background: transparent; border: none; font-size: 14px; color: {c.text_secondary}; }}"
         f"QPushButton:hover {{ color: {c.text}; background: {c.button}; border-radius: 12px; }}"
     )
+    s["MORE_BUTTON"] = (
+        f"QPushButton {{ background: transparent; border: none; font-size: 13px; "
+        f"font-weight: bold; color: {c.text_secondary}; padding: 0; }}"
+        f"QPushButton:hover {{ color: {c.text}; background: {c.button}; border-radius: 12px; }}"
+        "QPushButton::menu-indicator { image: none; width: 0; }"
+    )
 
     # ── 用户消息气泡 ──
     s["USER_BUBBLE"] = (
-        f"QLabel {{ background: {c.accent}; color: white; border: none; border-radius: 10px;"
-        f"padding: 8px 12px; font-size: 13px; }}"
+        f"QLabel {{ background: {c.accent}; color: white; border: none; border-radius: 12px;"
+        f"padding: 9px 12px; font-size: 13px; }}"
     )
 
     # ── 助手消息气泡 ──
     s["ASSISTANT_BUBBLE"] = (
-        f"QLabel {{ background: {c.button}; color: {c.text}; border: none; border-radius: 10px;"
-        f"padding: 8px 12px; font-size: 13px; }}"
+        f"QLabel {{ background: {c.button}; color: {c.text}; border: none; border-radius: 12px;"
+        f"padding: 9px 12px; font-size: 13px; }}"
     )
 
     # ── 编辑按钮（用户消息 hover）──
@@ -269,8 +281,14 @@ def _generate() -> dict[str, str]:
     )
 
     # ── 标题栏图标/名称 ──
-    s["TITLE_ICON"] = "font-size: 18px; background: none;"
-    s["TITLE_NAME"] = f"font-weight: bold; font-size: 13px; background: none; color: {c.text};"
+    s["TITLE_ICON"] = "background: transparent;"
+    s["TITLE_NAME"] = f"font-weight: 700; font-size: 13px; background: none; color: {c.text};"
+    s["TITLE_AGENT"] = f"font-size: 11px; background: none; color: {c.text_secondary};"
+
+    s["STATUS_TEXT"] = (
+        f"background: transparent; color: {c.text_secondary}; border: none; "
+        f"padding: 2px 0; font-size: 10px;"
+    )
 
     # ── 模型下拉框（窄版）──
     s["MODEL_COMBO_BOX"] = (
@@ -312,6 +330,17 @@ def _generate() -> dict[str, str]:
     s["LABEL_SECONDARY"] = f"font-size: 11px; color: {c.text_secondary}; background: none;"
     s["LABEL_BOLD"] = f"font-weight: bold; font-size: 13px; background: none; color: {c.text};"
     s["EMPTY_STATE"] = f"color: {c.text_secondary}; font-size: 13px; padding: 20px;"
+    s["EMPTY_CHAT_PANEL"] = "QWidget#chat_empty_state { background: transparent; border: none; }"
+    s["EMPTY_CHAT_TITLE"] = (
+        f"font-size: 17px; font-weight: 700; color: {c.text}; background: transparent;"
+    )
+    s["EMPTY_CHAT_DESCRIPTION"] = (
+        f"font-size: 12px; color: {c.text_secondary}; background: transparent;"
+    )
+    s["SHORTCUT_HINT"] = (
+        f"font-size: 10px; color: {c.text_secondary}; background: {c.surface}; "
+        f"border: 1px solid {c.border}; border-radius: 8px; padding: 7px 10px;"
+    )
 
     # ── 新增 Agent 按钮 ──
     s["ADD_AGENT_BUTTON"] = (
@@ -331,7 +360,7 @@ def _generate() -> dict[str, str]:
 
     # ── 多行输入框 ──
     s["INPUT_AREA"] = (
-        f"QPlainTextEdit {{ border: 1px solid {c.border}; border-radius: 8px;"
+        f"QPlainTextEdit {{ border: 1px solid transparent; border-radius: 9px;"
         f"padding: 8px 10px; font-size: 13px; background: {c.window}; color: {c.text}; }}"
         f"QPlainTextEdit:focus {{ border-color: {c.accent}; }}"
     )

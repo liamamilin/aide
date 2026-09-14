@@ -28,24 +28,40 @@ class ActionPanel(QWidget):
         self.setStyleSheet(styles.AGENT_LIST_BAR)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(8, 6, 8, 6)
-        root.setSpacing(4)
+        root.setContentsMargins(10, 7, 10, 7)
+        root.setSpacing(6)
         heading = QHBoxLayout()
+        heading.setSpacing(7)
         label = QLabel("快捷动作")
         label.setStyleSheet(styles.LABEL_BOLD)
-        label.setToolTip("执行前可选择新建对话或在当前对话继续")
+        label.setToolTip("先在输入框输入/粘贴文字，或在其他应用选中文字后按 ⌘⌃L")
         heading.addWidget(label)
         heading.addStretch()
         self._mode_combo = QComboBox()
         self._mode_combo.setStyleSheet(styles.COMBO_BOX)
-        self._mode_combo.addItem("新建专用对话", "new")
-        self._mode_combo.addItem("在当前对话继续", "current")
+        self._mode_combo.setFixedWidth(106)
+        self._mode_combo.addItem("新对话", "new")
+        self._mode_combo.addItem("当前对话", "current")
         self._mode_combo.setToolTip("选择动作结果所属的对话")
         heading.addWidget(self._mode_combo)
-        hint = QLabel("1–4 / ←→ 选择 · Enter 执行 · Esc 自由提问")
-        hint.setStyleSheet(styles.LABEL_SECONDARY)
-        heading.addWidget(hint)
+        collapse = QPushButton("收起")
+        collapse.setStyleSheet(styles.SECONDARY_BUTTON)
+        collapse.setToolTip("收起快捷动作面板")
+        collapse.clicked.connect(self._collapse)
+        heading.addWidget(collapse)
         root.addLayout(heading)
+
+        context = QHBoxLayout()
+        context.setSpacing(8)
+        self._material_hint = QLabel()
+        self._material_hint.setWordWrap(True)
+        self._material_hint.setStyleSheet(styles.LABEL_SECONDARY)
+        context.addWidget(self._material_hint, stretch=1)
+        hint = QLabel("数字键选择 · Enter 执行")
+        hint.setStyleSheet(styles.LABEL_SECONDARY)
+        hint.setToolTip("也可用 ←→ 切换，Esc 收起")
+        context.addWidget(hint)
+        root.addLayout(context)
         self._button_row = QHBoxLayout()
         self._button_row.setSpacing(6)
         root.addLayout(self._button_row)
@@ -68,6 +84,7 @@ class ActionPanel(QWidget):
             self._button_row.addWidget(button, stretch=1)
             self._buttons.append(button)
         self._selected_index = min(self._selected_index, max(0, len(self._buttons) - 1))
+        self._update_material_state()
         self._refresh_selection()
 
     def show_for_material(
@@ -95,9 +112,29 @@ class ActionPanel(QWidget):
             self._selected_index = index
         else:
             self._selected_index = 0
+        self._update_material_state()
         self._refresh_selection()
         self.show()
-        self.setFocus(Qt.ShortcutFocusReason)
+        if self._material.strip():
+            self.setFocus(Qt.ShortcutFocusReason)
+
+    def set_material(self, material: str) -> None:
+        """Keep the panel state in sync while the user types or pastes material."""
+        self._material = material
+        self._update_material_state()
+
+    def _update_material_state(self) -> None:
+        ready = bool(self._material.strip())
+        for button in self._buttons:
+            button.setEnabled(ready)
+        if ready:
+            self._material_hint.setText(
+                f"已准备 {len(self._material.strip())} 个字符 · 可连续处理"
+            )
+        else:
+            self._material_hint.setText(
+                "先在下方输入或粘贴文字；也可以在其他应用选中文字后按 ⌘⌃L。"
+            )
 
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key_Escape:
@@ -124,6 +161,10 @@ class ActionPanel(QWidget):
             return
         super().keyPressEvent(event)
 
+    def _collapse(self) -> None:
+        self.hide()
+        self.cancelled.emit()
+
     def _move(self, offset: int) -> None:
         if not self._actions:
             return
@@ -133,9 +174,10 @@ class ActionPanel(QWidget):
     def _trigger(self, index: int) -> None:
         if not 0 <= index < len(self._actions):
             return
+        if not self._material.strip():
+            return
         action = self._actions[index]
         self._selected_index = index
-        self.hide()
         self.action_selected.emit(
             action.id,
             self._material,

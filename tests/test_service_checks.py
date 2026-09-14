@@ -251,7 +251,7 @@ def test_capability_result_updates_cache_and_badge(controller, monkeypatch):
         )
     )
     assert controller._image_capability == ImageCapability.SUPPORTED
-    assert controller._dialog._model_capability_badge.text() == "图片 ✓"
+    assert controller._dialog._model_capability_badge.text() == "支持图片"
     assert get_setting(
         model_capability_cache_key(base_url, "vision-model", "digest")
     ) == ImageCapability.SUPPORTED.value

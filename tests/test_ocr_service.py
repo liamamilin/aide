@@ -18,6 +18,7 @@ from ai_desktop.services.ocr_service import (
     OCRTextBlock,
     OCRUnavailableError,
     OCRWorker,
+    assemble_ocr_text,
     probe_ocr_runtime,
 )
 
@@ -199,6 +200,58 @@ def test_recognize_rejects_unsupported_languages(monkeypatch):
     )
     with pytest.raises(OCRRecognitionError, match="不支持"):
         service.recognize(OCRRequest("task", "image.png", ("zh-Hans",)))
+
+
+def test_code_layout_infers_indentation_without_changing_raw_blocks():
+    blocks = (
+        OCRTextBlock(
+            "def greet(name: str) -> str:",
+            1.0,
+            OCRBounds(0.05, 0.8, 0.419, 0.09),
+        ),
+        OCRTextBlock(
+            'return f"hello, {name}!"',
+            1.0,
+            OCRBounds(0.08, 0.63, 0.36, 0.1),
+        ),
+        OCRTextBlock(
+            'print(greet("Codex"))',
+            1.0,
+            OCRBounds(0.05, 0.49, 0.34, 0.09),
+        ),
+    )
+    result = OCRResult("task", "code.png", OCRStatus.SUCCEEDED, blocks)
+
+    assert result.raw_text == (
+        'def greet(name: str) -> str:\nreturn f"hello, {name}!"\n'
+        'print(greet("Codex"))'
+    )
+    assert result.text == (
+        'def greet(name: str) -> str:\n    return f"hello, {name}!"\n'
+        'print(greet("Codex"))'
+    )
+    assert [block.text for block in result.blocks][1] == 'return f"hello, {name}!"'
+
+
+def test_prose_layout_does_not_infer_leading_spaces():
+    blocks = (
+        OCRTextBlock("first sentence", 1.0, OCRBounds(0.05, 0.8, 0.3, 0.1)),
+        OCRTextBlock("second sentence", 1.0, OCRBounds(0.12, 0.6, 0.3, 0.1)),
+    )
+    assert assemble_ocr_text(blocks) == "first sentence\nsecond sentence"
+
+
+def test_same_row_blocks_are_ordered_left_to_right_before_next_row():
+    blocks = (
+        OCRTextBlock("Value", 1.0, OCRBounds(0.5, 0.79, 0.12, 0.08)),
+        OCRTextBlock("alpha", 1.0, OCRBounds(0.05, 0.6, 0.12, 0.08)),
+        OCRTextBlock("42", 1.0, OCRBounds(0.5, 0.61, 0.04, 0.08)),
+        OCRTextBlock("Name", 1.0, OCRBounds(0.05, 0.8, 0.12, 0.08)),
+    )
+    lines = assemble_ocr_text(blocks).splitlines()
+    assert len(lines) == 2
+    assert lines[0].startswith("Name ") and lines[0].endswith("Value")
+    assert lines[1].startswith("alpha ") and lines[1].endswith("42")
 
 
 def _success(request, text="recognized"):
