@@ -275,11 +275,15 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         name_lbl = QLabel("AI 桌面助手")
         name_lbl.setStyleSheet(styles.TITLE_NAME)
+        name_lbl.setMinimumWidth(0)
         tl.addWidget(name_lbl)
         self._title_name = name_lbl
 
         agent_lbl = QLabel(f"· {self._active_agent.name}")
         agent_lbl.setStyleSheet(styles.TITLE_AGENT)
+        agent_lbl.setMinimumWidth(0)
+        agent_lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        agent_lbl.setToolTip(self._active_agent.name)
         tl.addWidget(agent_lbl)
         self._title_agent = agent_lbl
 
@@ -301,8 +305,11 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         hide_btn = QPushButton("−")
         hide_btn.setFixedSize(24, 24)
+        hide_btn.setAccessibleName("隐藏对话窗口")
+        hide_btn.setToolTip("隐藏对话窗口")
         hide_btn.setStyleSheet(styles.ICON_BUTTON)
         hide_btn.clicked.connect(self.hide)
+        self._hide_btn = hide_btn
         tl.addWidget(hide_btn)
 
         root.addWidget(title)
@@ -319,6 +326,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._agent_combo = QComboBox()
         self._agent_combo.setFixedHeight(26)
         self._agent_combo.setFixedWidth(112)
+        self._agent_combo.setAccessibleName("选择 Agent")
         self._agent_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self._agent_combo.setStyleSheet(styles.COMBO_BOX)
         for ag in self._agents:
@@ -332,6 +340,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._model_combo = QComboBox()
         self._model_combo.setFixedHeight(26)
         self._model_combo.setMinimumWidth(110)
+        self._model_combo.setAccessibleName("选择模型")
         self._model_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._model_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self._model_combo.setStyleSheet(styles.MODEL_COMBO_BOX)
@@ -361,6 +370,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         more_btn = QPushButton("•••")
         more_btn.setFixedSize(30, 26)
+        more_btn.setAccessibleName("更多操作")
         more_btn.setToolTip("更多操作")
         more_btn.setStyleSheet(styles.MORE_BUTTON)
         more_menu = QMenu(more_btn)
@@ -426,6 +436,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._input = _ChatInputEdit()
         self._input.setPlaceholderText("输入消息 · Enter 发送 · Shift+Enter 换行")
         self._input.setToolTip("可直接粘贴或拖入图片")
+        self._input.setAccessibleName("消息输入框")
         self._input.setFixedHeight(40)
         self._input.setStyleSheet(styles.INPUT_AREA)
         self._input.installEventFilter(self)
@@ -435,6 +446,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         action_btn = QPushButton("⚡")
         action_btn.setFixedSize(30, 40)
+        action_btn.setAccessibleName("快捷动作")
         action_btn.setStyleSheet(styles.ICON_BUTTON)
         action_btn.setToolTip("显示快捷动作")
         action_btn.clicked.connect(lambda: self.show_actions())
@@ -445,6 +457,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         # 图片附件按钮（📎 菜单：选择文件 / 截图 / 粘贴剪贴板图片）
         attach_btn = QPushButton("📎")
         attach_btn.setFixedSize(30, 40)
+        attach_btn.setAccessibleName("添加图片")
         attach_btn.setStyleSheet(styles.ICON_BUTTON)
         attach_btn.setToolTip("添加图片")
         self._attach_btn = attach_btn
@@ -463,6 +476,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         self._send_btn = QPushButton("发送")
         self._send_btn.setFixedSize(58, 40)
+        self._send_btn.setAccessibleName("发送消息")
         self._send_btn.setStyleSheet(styles.BUTTON_PRIMARY)
         self._send_btn.clicked.connect(self._on_send)
         il.addWidget(self._send_btn)
@@ -475,6 +489,23 @@ class ChatDialog(FramelessDragMixin, QWidget):
         input_row.addWidget(grip, alignment=Qt.AlignBottom | Qt.AlignRight)
 
         root.addLayout(input_row)
+
+        # Keep keyboard navigation predictable when controls are hidden or
+        # long names are visually elided inside the compact toolbar.
+        focus_chain = (
+            self._new_convo_btn,
+            self._hide_btn,
+            self._agent_combo,
+            self._model_combo,
+            self._more_btn,
+            self._action_btn,
+            self._attach_btn,
+            self._input,
+            self._send_btn,
+        )
+        for current, following in zip(focus_chain, focus_chain[1:]):
+            self.setTabOrder(current, following)
+        self._refresh_context_tooltips()
 
     def _build_empty_state(self) -> QWidget:
         """构建首屏引导，让用户在空对话中立即看懂三个核心入口。"""
@@ -528,10 +559,23 @@ class ChatDialog(FramelessDragMixin, QWidget):
         agent = next(ag for ag in self._agents if ag.id == agent_id)
         self._active_agent = agent
         self._title_agent.setText(f"· {agent.name}")
+        self._title_agent.setToolTip(agent.name)
+        self._agent_combo.setToolTip(agent.name)
         self.agent_changed.emit(agent)
+
+    def _refresh_context_tooltips(self) -> None:
+        """Keep the full context names available when compact controls elide them."""
+        if hasattr(self, "_agent_combo"):
+            self._agent_combo.setToolTip(self._active_agent.name)
+        if hasattr(self, "_title_agent"):
+            self._title_agent.setToolTip(self._active_agent.name)
+        if hasattr(self, "_model_combo"):
+            model = self._active_model or self._model_combo.currentText()
+            self._model_combo.setToolTip(model or "选择模型")
 
     def _on_model_combo(self, text: str) -> None:
         self._active_model = text
+        self._refresh_context_tooltips()
         self.model_changed.emit(text)
 
     @property
@@ -581,7 +625,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if current in self._models:
             self._model_combo.setCurrentText(current)
             changed = False
-            self._model_combo.setToolTip("选择模型")
+            self._model_combo.setToolTip(current)
         else:
             self._model_combo.setCurrentText(self._models[0])
             changed = True
@@ -603,6 +647,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._agent_combo.blockSignals(True)
         self._agent_combo.setCurrentIndex(idx)
         self._agent_combo.blockSignals(False)
+        self._refresh_context_tooltips()
 
     def set_model_profile_summary(self, profile_name: str, summary: str,
                                   warnings: tuple[str, ...] = ()) -> None:
@@ -625,6 +670,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         idx = next(i for i, ag in enumerate(agents) if ag.id == self._active_agent.id)
         self._agent_combo.setCurrentIndex(idx)
         self._agent_combo.blockSignals(False)
+        self._refresh_context_tooltips()
 
     def set_auto_hide(self, enabled: bool) -> None:
         self._auto_hide = enabled

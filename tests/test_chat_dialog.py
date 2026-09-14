@@ -256,6 +256,24 @@ class TestChatDialogState:
         right_edge = dialog._more_btn.mapTo(dialog, dialog._more_btn.rect().bottomRight()).x()
         assert right_edge <= dialog.width()
 
+    def test_long_context_names_keep_tooltips_and_accessible_controls(self, dialog):
+        long_agent = Agent(
+            id="long_agent",
+            name="这是一个用于验证窄窗口显示的超长 Agent 名称",
+            icon="🦉",
+            system_prompt="...",
+        )
+        dialog.refresh_agents([long_agent, ACTIVE])
+        dialog.set_active_agent(long_agent)
+        long_model = "qwen3.5:9b-mlx-very-long-local-profile"
+        dialog.refresh_models([long_model])
+
+        assert dialog._title_agent.toolTip() == long_agent.name
+        assert dialog._agent_combo.toolTip() == long_agent.name
+        assert long_model in dialog._model_combo.toolTip()
+        assert dialog._input.accessibleName() == "消息输入框"
+        assert dialog._send_btn.accessibleName() == "发送消息"
+
     def test_refresh_agents(self, qtbot, dialog):
         """refresh_agents() → combo items match new agent list."""
         # Must include the currently active agent (general_assistant) or refresh fails
