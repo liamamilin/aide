@@ -342,8 +342,18 @@ class FloatButton(QPushButton):
         painter.rotate(rotation)
         painter.scale(motion_scale, motion_scale)
         painter.translate(-center.x(), -center.y())
-        pet_content = self._pet_for_state(state)
-        painter.drawPixmap(target, pet_content, QRectF(pet_content.rect()))
+        previous_frame, current_frame, frame_progress = self._pet_frame_pair(state)
+        if previous_frame is current_frame or frame_progress >= 1.0:
+            painter.drawPixmap(target, current_frame, QRectF(current_frame.rect()))
+        else:
+            # Cross-fade the generated poses during a frame boundary.  This
+            # avoids the cutout-like snap while keeping the original artwork
+            # and the semantic state motion unchanged.
+            painter.setOpacity(1.0 - frame_progress)
+            painter.drawPixmap(target, previous_frame, QRectF(previous_frame.rect()))
+            painter.setOpacity(frame_progress)
+            painter.drawPixmap(target, current_frame, QRectF(current_frame.rect()))
+            painter.setOpacity(1.0)
         painter.restore()
 
         if state == "success":
@@ -482,24 +492,47 @@ class FloatButton(QPushButton):
                 return self._pet_idle_frames[frame_index]
         return self._pet_content
 
+    def _pet_frame_pair(self, state: str) -> tuple[QPixmap, QPixmap, float]:
+        """Return the current pose and a short cross-fade from the prior pose."""
+        if state != "idle":
+            return (self._pet_content, self._pet_content, 1.0)
+        if self._hovered and self._pet_hover_frames:
+            phase = min(self._hover_phase, 20)
+            index = min(phase // 4, _PET_FRAME_COUNT - 1)
+            current = self._pet_hover_frames[index]
+            if index == 0 or phase >= 20:
+                return (current, current, 1.0)
+            previous = self._pet_hover_frames[index - 1]
+            progress = (phase % 4) / 4.0
+            return (previous, current, progress)
+        if self._pet_idle_frames:
+            phase = self._animation_phase % 96
+            if 24 <= phase < 26:
+                return (self._pet_idle_frames[0], self._pet_idle_frames[1], (phase - 24) / 2.0)
+            if 26 <= phase < 28:
+                return (self._pet_idle_frames[1], self._pet_idle_frames[2], (phase - 26) / 2.0)
+            if phase == 28:
+                return (self._pet_idle_frames[2], self._pet_idle_frames[0], 0.5)
+            return (self._pet_idle_frames[0], self._pet_idle_frames[0], 1.0)
+        return (self._pet_content, self._pet_content, 1.0)
+
     def _hover_motion(self) -> tuple[float, float, float, float]:
-        """Return one of five friendly hover clips for the idle pet."""
+        """Return one continuous, eased greeting motion for the idle pet."""
         if self._reduce_motion or not self._hovered:
             return (0.0, 0.0, 0.0, 1.0)
         phase = min(self._hover_phase, 20)
         if self._pet_hover_frames:
-            if phase < 4:
-                greeting = math.sin(phase * math.pi / 3)
-                return (0.0, -greeting * 0.7, -greeting * 0.35, 1.0 + greeting * 0.008)
-            if phase < 8:
-                focus = math.sin((phase - 4) * math.pi / 3)
-                return (0.0, -focus * 0.45, focus * 0.65, 1.0)
-            if phase < 12:
-                return (0.0, -0.35, 0.0, 1.004)
-            if phase < 16:
-                wave = math.sin((phase - 12) * math.pi / 3)
-                return (wave * 0.25, 0.0, -wave * 0.45, 1.0)
-            return (0.0, 0.0, 0.0, 1.0)
+            if phase >= 18:
+                return (0.0, 0.0, 0.0, 1.0)
+            progress = phase / 18.0
+            lift = math.sin(progress * math.pi)
+            sway = math.sin(progress * math.pi * 2.0)
+            return (
+                sway * 0.18,
+                -lift * 0.75,
+                -sway * 0.45,
+                1.0 + lift * 0.006,
+            )
         if phase < 10:  # 抬头致意
             greeting = math.sin(phase * math.pi / 9)
             return (0.0, -greeting * 2.8, -greeting * 1.2, 1.0 + greeting * 0.028)
