@@ -17,6 +17,8 @@ GitHub Release.
   skipped restoration when the user copies newer content.
 - Added four validated quick actions with persistent Agent/profile settings and
   a keyboard-driven action bar after text selection.
+- Added a menu-bar restore action for the floating pet, so hiding it never
+  removes the last visible entry point.
 
 ## 1.5.0 — Candidate
 
