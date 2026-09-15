@@ -2189,12 +2189,19 @@ def main() -> None:
         """检测两个热键后端是否均已运行（兼容 NSEventMonitor / HotkeyListener）"""
         for h in (controller.hotkey, controller.hotkey_img):
             if hasattr(h, "_monitor"):
-                if h._monitor is None:
+                if h._monitor is None and getattr(h, "_local_monitor", None) is None:
                     return False
             elif hasattr(h, "_listener"):
                 if h._listener is None:
                     return False
         return True
+
+    def _global_hotkey_missing() -> bool:
+        """权限已恢复时，检查 NSEvent 全局监听是否仍需补装。"""
+        return any(
+            hasattr(h, "_monitor") and h._monitor is None
+            for h in (controller.hotkey, controller.hotkey_img)
+        )
 
     _perm_recheck = QTimer()
     _recheck_count = 0
@@ -2205,6 +2212,7 @@ def main() -> None:
         for name, hk in (("hotkey", controller.hotkey),
                          ("hotkey_img", controller.hotkey_img)):
             running = (hasattr(hk, "_monitor") and hk._monitor is not None) or \
+                      (hasattr(hk, "_local_monitor") and hk._local_monitor is not None) or \
                       (hasattr(hk, "_listener") and hk._listener is not None)
             if not running:
                 continue
@@ -2219,7 +2227,7 @@ def main() -> None:
         _recheck_count += 1
         cur = _check_permissions()
         if cur.all_granted:
-            if not _hotkey_running():
+            if not _hotkey_running() or _global_hotkey_missing():
                 # 权限刚授予，热键尚未启动 → 启动热键
                 logger.info("权限已授予，启动热键监听")
                 try:

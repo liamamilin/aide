@@ -1,15 +1,15 @@
 """
-基于 NSEvent 全局事件监听的全局快捷键检测
+基于 NSEvent 全局/本地事件监听的快捷键检测
 
-用 PyObjC 的 NSEvent.addGlobalMonitorForEventsMatchingMask_handler_ 在主线程
-监听全局键盘事件。无需后台线程，不触发 libdispatch 主队列断言。
+用 PyObjC 的 NSEvent 监听 API 在主线程接收键盘事件。全局监听接收其他应用的
+事件，本地监听补上当前应用前台时的事件；无需后台线程，不触发 libdispatch 主队列断言。
 
 优势（相比 pynput / CGEventTap）：
   - 运行在主线程，无 dispatch queue 断言崩溃
   - 事件驱动（非轮询），无丢帧
   - PyObjC（AppKit/objc）已通过 pynput 依赖打包进 .app
 
-需要权限：辅助功能 + 输入监听（NSEvent 全局监听需要两者）。
+需要权限：全局监听需要辅助功能 + 输入监听；本地监听不需要系统权限。
 """
 import logging
 import re
@@ -94,6 +94,7 @@ class NSEventMonitor:
         self._mod_flags: int = 0
         self._callback: Optional[Callable[[], None]] = None
         self._monitor: object = None  # NSEvent global monitor handle（防 GC）
+        self._local_monitor: object = None  # 当前应用内事件监听句柄（防 GC）
         self._handler: object = None  # block 引用（防 GC）
 
     def register(self, hotkey: str, callback: Callable[[], None]) -> None:
@@ -104,19 +105,14 @@ class NSEventMonitor:
         self._callback = callback
 
     def start(self) -> None:
-        """安装全局事件监听（主线程）"""
-        if self._monitor is not None:
-            return  # 已安装
+        """安装本地与全局事件监听（主线程）"""
+        if self._monitor is not None and self._local_monitor is not None:
+            return  # 本地与全局均已安装
 
-        # 先检查权限，未授权则不安装（等 recheck 定时器授权后再启动）
+        # 本地监听不需要输入监听权限；即使用户正在本应用窗口内，也应能触发快捷键。
+        # 全局监听则需要输入监听权限，未授权时只跳过全局部分，避免把本地快捷键一并禁用。
         from ai_desktop.utils.permissions import check_all
         perm = check_all()
-        if not perm.all_granted:
-            logger.warning(
-                "NSEventMonitor 未启动：权限不足 (AX=%s, IM=%s)",
-                perm.accessibility, perm.input_monitoring,
-            )
-            return
 
         try:
             from AppKit import NSEvent
@@ -127,7 +123,7 @@ class NSEventMonitor:
         key_code = self._key_code
         mod_flags = self._mod_flags
 
-        def _handler(event):
+        def _dispatch(event):
             # 只记录带 ⌘⌃ 修饰键的 keyDown，避免日志刷屏
             flags = event.modifierFlags()
             if flags & (_NSEvent_MOD_CMD | _NSEvent_MOD_CTRL):
@@ -142,28 +138,53 @@ class NSEventMonitor:
                         cb()
                     except Exception:
                         logger.exception("Hotkey callback error")
+            # 本地监听器必须返回事件，否则会阻断 Qt/AppKit 后续处理。
+            return event
 
-        self._handler = _handler
-        self._monitor = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
-            _NSKeyDown_MASK, _handler
-        )
-        if self._monitor is None:
-            logger.error("NSEvent.addGlobalMonitor returned None — 权限不足？")
+        self._handler = _dispatch
+        if self._local_monitor is None:
+            self._local_monitor = NSEvent.addLocalMonitorForEventsMatchingMask_handler_(
+                _NSKeyDown_MASK, _dispatch
+            )
+            if self._local_monitor is None:
+                logger.warning("NSEvent.addLocalMonitor returned None")
+
+        if perm.all_granted:
+            self._monitor = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
+                _NSKeyDown_MASK, _dispatch
+            )
+            if self._monitor is None:
+                logger.error("NSEvent.addGlobalMonitor returned None — 权限不足？")
+            else:
+                logger.info(
+                    "NSEventMonitor global installed: keyCode=%d modFlags=0x%x",
+                    key_code, mod_flags,
+                )
         else:
+            logger.warning(
+                "NSEventMonitor global 未启动：权限不足 (AX=%s, IM=%s)，本地监听仍可用",
+                perm.accessibility, perm.input_monitoring,
+            )
+        if self._local_monitor is not None or self._monitor is not None:
             logger.info(
-                "NSEventMonitor installed: keyCode=%d modFlags=0x%x",
+                "NSEventMonitor installed: keyCode=%d modFlags=0x%x local=%s global=%s",
                 key_code, mod_flags,
+                self._local_monitor is not None, self._monitor is not None,
             )
 
     def stop(self) -> None:
-        """移除全局事件监听"""
-        if self._monitor is not None:
+        """移除本地与全局事件监听"""
+        if self._monitor is not None or self._local_monitor is not None:
             try:
                 from AppKit import NSEvent
-                NSEvent.removeMonitor_(self._monitor)
+                if self._monitor is not None:
+                    NSEvent.removeMonitor_(self._monitor)
+                if self._local_monitor is not None:
+                    NSEvent.removeMonitor_(self._local_monitor)
             except Exception as e:
                 logger.warning("Failed to remove NSEvent monitor: %s", e)
             self._monitor = None
+            self._local_monitor = None
             self._handler = None
             logger.info("NSEventMonitor removed")
 
@@ -171,7 +192,7 @@ class NSEventMonitor:
         """运行时更换快捷键"""
         if not validate_hotkey(hotkey):
             raise ValueError(f"Invalid hotkey: {hotkey}")
-        was_running = self._monitor is not None
+        was_running = self._monitor is not None or self._local_monitor is not None
         self.stop()
         self._key_code, self._mod_flags = _parse(hotkey)
         self._callback = callback
