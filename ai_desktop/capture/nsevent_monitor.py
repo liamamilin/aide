@@ -128,8 +128,13 @@ class NSEventMonitor:
         mod_flags = self._mod_flags
 
         def _handler(event):
-            # 只在按键修饰标志完全匹配时触发
+            # 只记录带 ⌘⌃ 修饰键的 keyDown，避免日志刷屏
             flags = event.modifierFlags()
+            if flags & (_NSEvent_MOD_CMD | _NSEvent_MOD_CTRL):
+                logger.debug(
+                    "NSEvent keyDown: keyCode=%d flags=0x%x (expect kc=%d mod=0x%x)",
+                    event.keyCode(), flags, key_code, mod_flags,
+                )
             if (flags & mod_flags) == mod_flags and event.keyCode() == key_code:
                 cb = self._callback
                 if cb:
