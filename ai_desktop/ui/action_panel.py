@@ -78,6 +78,7 @@ class ActionPanel(QWidget):
         for index, action in enumerate(self._actions):
             button = QPushButton(f"{index + 1}  {action.name}")
             button.setStyleSheet(styles.SECONDARY_BUTTON)
+            button.setToolTip(action.name)
             button.clicked.connect(
                 lambda checked, selected=index: self._trigger(selected)
             )

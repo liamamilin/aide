@@ -26,6 +26,13 @@ _COPY_SCRIPT = (
     'to tell (first process whose frontmost is true) '
     'to keystroke "c" using command down'
 )
+_PBPASTE_TEXT_ARGS = ["-Prefer", "txt"]
+_PLAIN_TEXT_TYPES = (
+    "public.utf8-plain-text",
+    "public.utf16-external-plain-text",
+    "public.text",
+    "NSStringPboardType",
+)
 
 
 class UnsupportedClipboardFormatError(RuntimeError):
@@ -48,6 +55,25 @@ class NativePasteboard:
 
     def change_count(self) -> int:
         return int(self._pasteboard.changeCount())
+
+    def read_plain_text(self) -> str:
+        """Read the pasteboard's declared Unicode text without locale guessing."""
+        for pasteboard_type in _PLAIN_TEXT_TYPES:
+            try:
+                value = self._pasteboard.stringForType_(pasteboard_type)
+            except Exception:
+                value = None
+            if value is not None:
+                return text_normalizer.normalize(str(value))
+            try:
+                data = self._pasteboard.dataForType_(pasteboard_type)
+            except Exception:
+                data = None
+            if data is not None:
+                decoded = _decode_text_output(bytes(data))
+                if decoded:
+                    return text_normalizer.normalize(decoded)
+        return ""
 
     def snapshot(self) -> PasteboardSnapshot:
         count = self.change_count()
@@ -87,12 +113,45 @@ class NativePasteboard:
         return True
 
 
-def _read_clipboard() -> str:
-    """通过 pbpaste 读取剪贴板"""
+def _decode_text_output(payload: bytes) -> str:
+    """Decode pasteboard text without replacing valid CJK characters."""
+    if not payload:
+        return ""
+    if payload.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return payload.decode("utf-16", errors="replace")
+    def quality(text: str) -> int:
+        controls = sum(
+            ord(char) < 32 and char not in "\t\r\n" for char in text
+        )
+        replacements = text.count("\ufffd")
+        return controls * 4 + replacements * 8
+
     try:
-        return subprocess.run(
-            ["pbpaste"], capture_output=True, text=True, timeout=2
-        ).stdout
+        decoded = payload.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        decoded = payload.decode("utf-8", errors="replace")
+
+    # Some Cocoa clients expose plain text as UTF-16 without a BOM. UTF-16LE
+    # can technically decode as UTF-8 while producing control characters, so
+    # compare both candidates instead of accepting the first successful decode.
+    if quality(decoded):
+        candidates = [decoded]
+        for encoding in ("utf-16-le", "utf-16-be"):
+            try:
+                candidates.append(payload.decode(encoding))
+            except UnicodeDecodeError:
+                continue
+        decoded = min(candidates, key=quality)
+    return decoded
+
+
+def _read_clipboard() -> str:
+    """通过 pbpaste 读取纯文本剪贴板内容。"""
+    try:
+        result = subprocess.run(
+            ["pbpaste", *_PBPASTE_TEXT_ARGS], capture_output=True, timeout=2
+        )
+        return _decode_text_output(result.stdout)
     except Exception:
         return ""
 
@@ -314,8 +373,13 @@ class SelectionCaptureTask(QObject):
                 self._run_osascript_copy()
             return
         self._capture_change_count = current_count
+        if isinstance(self._pasteboard, NativePasteboard):
+            selected = self._pasteboard.read_plain_text()
+            if selected:
+                self._restore_and_complete(selected)
+                return
         self._start_command(
-            "/usr/bin/pbpaste", [], timeout_ms=2000,
+            "/usr/bin/pbpaste", _PBPASTE_TEXT_ARGS, timeout_ms=2000,
             callback=self._on_selection_clipboard,
         )
 
@@ -407,8 +471,8 @@ class SelectionCaptureTask(QObject):
         if process is not self._process:
             return
         self._command_timer.stop()
-        stdout = bytes(process.readAllStandardOutput()).decode("utf-8", errors="replace")
-        stderr = bytes(process.readAllStandardError()).decode("utf-8", errors="replace")
+        stdout = _decode_text_output(bytes(process.readAllStandardOutput()))
+        stderr = _decode_text_output(bytes(process.readAllStandardError()))
         callback = self._command_callback
         self._command_callback = None
         self._process = None

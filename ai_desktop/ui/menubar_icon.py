@@ -44,6 +44,7 @@ def _make_tray_icon() -> QIcon:
 
 class MenuBarIcon(QSystemTrayIcon):
     dialog_toggle = pyqtSignal()
+    float_entry_toggle = pyqtSignal()
     agent_selected = pyqtSignal(Agent)
     settings_clicked = pyqtSignal()
     about_clicked = pyqtSignal()
@@ -53,6 +54,8 @@ class MenuBarIcon(QSystemTrayIcon):
         super().__init__(parent)
         self._agents = agents
         self._active_agent = active_agent
+        self._float_entry_visible = True
+        self._float_entry_pet_enabled = True
         self._icon = _make_tray_icon()
         if not self._icon.isNull():
             self.setIcon(self._icon)
@@ -77,6 +80,9 @@ class MenuBarIcon(QSystemTrayIcon):
 
         show_action = menu.addAction("打开对话")
         show_action.triggered.connect(self.dialog_toggle.emit)
+
+        self._float_entry_action = menu.addAction(self._float_entry_label())
+        self._float_entry_action.triggered.connect(self.float_entry_toggle.emit)
 
         menu.addSeparator()
 
@@ -103,6 +109,19 @@ class MenuBarIcon(QSystemTrayIcon):
         exit_action.triggered.connect(self.exit_clicked.emit)
 
         self.setContextMenu(menu)
+
+    def _float_entry_label(self) -> str:
+        entry_name = "桌面宠物" if self._float_entry_pet_enabled else "悬浮球"
+        return f"{'隐藏' if self._float_entry_visible else '显示'}{entry_name}"
+
+    def set_float_entry_visible(self, visible: bool, pet_enabled: bool | None = None) -> None:
+        """同步悬浮入口的可见状态，让菜单栏始终保留恢复入口。"""
+        self._float_entry_visible = bool(visible)
+        if pet_enabled is not None:
+            self._float_entry_pet_enabled = bool(pet_enabled)
+        action = getattr(self, "_float_entry_action", None)
+        if action is not None:
+            action.setText(self._float_entry_label())
 
     def set_active_agent(self, agent: Agent) -> None:
         self._active_agent = agent

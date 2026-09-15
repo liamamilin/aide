@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 
 from PyQt5.QtCore import QEvent, QPoint, QRectF, QSize, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QKeyEvent, QPainter, QPainterPath, QPixmap, QRegion, QTextCursor
+from PyQt5.QtGui import QCursor, QKeyEvent, QPainter, QPainterPath, QPixmap, QRegion, QTextCursor
 from PyQt5.QtWidgets import (
     QApplication,
     QComboBox,
@@ -119,6 +119,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
     model_changed = pyqtSignal(str)
     service_check_requested = pyqtSignal()
     action_requested = pyqtSignal(str, str, str)
+    regenerate_requested = pyqtSignal()
+    generation_selected = pyqtSignal(int)
     closed = pyqtSignal()
     geometry_changed = pyqtSignal()
     ocr_requested = pyqtSignal(str)
@@ -149,6 +151,11 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._ocr_preview_dialog: OCRPreviewDialog | None = None
         self._stream_bubble: QLabel | None = None
         self._stream_copy_btn: QPushButton | None = None
+        self._stream_regen_btn: QPushButton | None = None
+        self._stream_version_btn: QPushButton | None = None
+        self._stream_versions: list = []
+        self._stream_version_index: int = -1
+        self._regen_available: bool = False
         self._stream_text: str = ""
         self._stream_buffer: str = ""               # 积攒的回复 token
         self._thinking_text: str = ""               # 完整思考文本
@@ -290,6 +297,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         # 服务状态放在标题栏，避免与输入操作混在一起。
         self._ollama_dot = QWidget()
         self._ollama_dot.setFixedSize(8, 8)
+        self._ollama_dot.setAccessibleName("服务连接状态")
         self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS)
         self._ollama_dot.setToolTip("检测中…")
         tl.addWidget(self._ollama_dot)
@@ -358,12 +366,14 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         self._model_capability_badge = QLabel("图片待确认")
         self._model_capability_badge.setObjectName("model_capability_badge")
+        self._model_capability_badge.setAccessibleName("模型图片能力")
         self._model_capability_badge.setStyleSheet(styles.STATUS_TEXT)
         self._model_capability_badge.setToolTip("当前模型的图片输入能力尚未确认")
         tb.addWidget(self._model_capability_badge)
 
         self._model_profile_badge = QLabel("全局配置")
         self._model_profile_badge.setObjectName("model_profile_badge")
+        self._model_profile_badge.setAccessibleName("模型配置")
         self._model_profile_badge.setStyleSheet(styles.STATUS_TEXT)
         self._model_profile_badge.setToolTip("请求将使用全局模型设置")
         tb.addWidget(self._model_profile_badge)
@@ -492,6 +502,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         # Keep keyboard navigation predictable when controls are hidden or
         # long names are visually elided inside the compact toolbar.
+        self._new_convo_btn.setAccessibleName("开始新对话")
+        self._hide_btn.setAccessibleName("隐藏对话窗口")
         focus_chain = (
             self._new_convo_btn,
             self._hide_btn,
@@ -932,6 +944,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
             ocr = QPushButton("识字")
             ocr.setObjectName("ocr_image_btn")
             ocr.setFixedSize(44, 20)
+            ocr.setAccessibleName(f"提取图片文字 {Path(path).name}")
             ocr.setToolTip("在本机提取这张图片中的文字")
             ocr.setStyleSheet(styles.SECONDARY_BUTTON)
             ocr.clicked.connect(
@@ -940,6 +953,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
             il.addWidget(ocr, 0, 0, alignment=Qt.AlignBottom | Qt.AlignLeft)
             rm = QPushButton("✕")
             rm.setFixedSize(16, 16)
+            rm.setAccessibleName(f"移除图片 {Path(path).name}")
+            rm.setToolTip(f"移除图片 {Path(path).name}")
             rm.setStyleSheet(
                 "QPushButton { background: rgba(0,0,0,0.6); color: white; border: none;"
                 " border-radius: 8px; font-size: 9px; }"
@@ -1168,7 +1183,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
         )
         self._insert_widget(bubble)
 
-    def add_assistant_message(self, text: str) -> None:
+    def add_assistant_message(self, text: str, *, versions: list | None = None,
+                              version_index: int = -1, regen_available: bool = False) -> None:
         body, code_map = self._render_assistant_body(text)
         bubble = self._make_bubble(
             body,
@@ -1180,7 +1196,64 @@ class ChatDialog(FramelessDragMixin, QWidget):
         btn = bubble.findChild(QPushButton, "copy_btn_assistant")
         if btn:
             btn.clicked.connect(lambda checked, t=text: self._copy_to_clipboard(t))
+        regen = bubble.findChild(QPushButton, "regen_btn_assistant")
+        if regen is not None:
+            try:
+                regen.clicked.disconnect()
+            except TypeError:
+                pass
+            regen.clicked.connect(self.regenerate_requested.emit)
+            regen.setVisible(regen_available)
+        version = bubble.findChild(QPushButton, "version_btn_assistant")
+        if version is not None:
+            try:
+                version.clicked.disconnect()
+            except TypeError:
+                pass
+            snapshots = list(versions or [])
+            if len(snapshots) > 1 and 0 <= version_index < len(snapshots):
+                version.setText(f"{version_index + 1}/{len(snapshots)}")
+                version.setVisible(True)
+                version.clicked.connect(self._show_stream_versions)
+            else:
+                version.setVisible(False)
+        if regen_available or (versions and len(list(versions)) > 1):
+            self._stream_versions = list(versions or [])
+            self._stream_version_index = version_index
+            self._regen_available = regen_available
+            self._stream_regen_btn = regen
+            self._stream_version_btn = version
         self._insert_widget(bubble)
+
+    def show_generation(self, generation_id: int, answer: str) -> bool:
+        """Display one stored version on the newest assistant bubble."""
+        latest = self._latest_finalized_assistant_buttons()
+        if latest is None:
+            return False
+        labels = [
+            label
+            for label in self._msg_container.findChildren(QLabel, "message_bubble")
+            if getattr(label, "_markdown_source", None) is not None
+        ]
+        if not labels:
+            return False
+        label = labels[-1]
+        body, code_map = self._render_assistant_body(answer)
+        label.setText(self._wrap_assistant_html(body))
+        label._markdown_source = answer
+        label._thinking_source = ""
+        if code_map:
+            label.code_map = code_map
+        try:
+            index = next(
+                i for i, item in enumerate(self._stream_versions)
+                if int(item.get("id", 0)) == int(generation_id)
+            )
+        except StopIteration:
+            index = self._stream_version_index
+        self._stream_version_index = index
+        self._apply_version_label()
+        return True
 
     @staticmethod
     def _wrap_assistant_html(body: str) -> str:
@@ -1221,7 +1294,10 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._stream_buffer = ""
         self._thinking_text = ""
         self._thinking_buffer = ""
+        self._stream_thinking_source: str = ""
         self._stream_copy_btn = None
+        self._stream_regen_btn = None
+        self._stream_version_btn = None
         bubble = self._make_bubble("", is_user=False, is_html=True)
         lbl = bubble.findChild(QLabel)
         if lbl:
@@ -1229,6 +1305,14 @@ class ChatDialog(FramelessDragMixin, QWidget):
         btn = bubble.findChild(QPushButton, "copy_btn_assistant")
         if btn:
             self._stream_copy_btn = btn
+        regen = bubble.findChild(QPushButton, "regen_btn_assistant")
+        if regen is not None:
+            regen.clicked.connect(self.regenerate_requested.emit)
+            self._stream_regen_btn = regen
+        version = bubble.findChild(QPushButton, "version_btn_assistant")
+        if version is not None:
+            version.clicked.connect(self._show_stream_versions)
+            self._stream_version_btn = version
         self._insert_widget(bubble)
         self._stream_timer.start()
 
@@ -1301,9 +1385,13 @@ class ChatDialog(FramelessDragMixin, QWidget):
             )
             self._stream_copy_btn.setVisible(True)
 
+        self._refresh_stream_regen_buttons(ok)
+
         self._scroll_to_bottom()
         self._stream_bubble = None
         self._stream_copy_btn = None
+        self._stream_regen_btn = None
+        self._stream_version_btn = None
         self._stream_text = ""
         self._stream_buffer = ""
         self._thinking_text = ""
@@ -1316,6 +1404,90 @@ class ChatDialog(FramelessDragMixin, QWidget):
             QApplication.clipboard().setText(text)
         except Exception:
             pass
+
+    def set_regenerate_state(self, available: bool, versions: list | None = None) -> None:
+        """Expose regeneration for the latest finalized answer bubble."""
+        latest = self._latest_finalized_assistant_buttons()
+        if latest is None:
+            self._regen_available = False
+            self._stream_versions = []
+            self._stream_version_index = -1
+            self._stream_regen_btn = None
+            self._stream_version_btn = None
+            return
+        regen, version = latest
+        if not available:
+            self._regen_available = False
+            self._stream_versions = []
+            self._stream_version_index = -1
+            self._stream_regen_btn = None
+            self._stream_version_btn = None
+            regen.setVisible(False)
+            version.setText("")
+            version.setVisible(False)
+            return
+        self._stream_regen_btn = regen
+        self._stream_version_btn = version
+        self._regen_available = True
+        snapshots = list(versions or [])
+        self._stream_versions = snapshots
+        active = next((i for i, v in enumerate(snapshots) if v.get("active")), -1)
+        self._stream_version_index = active if active >= 0 else (len(snapshots) - 1 if snapshots else -1)
+        regen.setVisible(True)
+        self._apply_version_label()
+
+    def _latest_finalized_assistant_buttons(self):
+        """Find regen/version buttons on the newest finalized assistant bubble."""
+        found = None
+        for bubble in self._msg_container.findChildren(QWidget):
+            regen = bubble.findChild(QPushButton, "regen_btn_assistant")
+            version = bubble.findChild(QPushButton, "version_btn_assistant")
+            if regen is None or version is None:
+                continue
+            if bubble.parentWidget() is not self._msg_container:
+                continue
+            label = bubble.findChild(QLabel, "message_bubble")
+            if label is None:
+                continue
+            source = getattr(label, "_markdown_source", None)
+            if source is None and label.textFormat() != Qt.RichText:
+                continue
+            found = (regen, version)
+        return found
+
+    def _refresh_stream_regen_buttons(self, ok: bool) -> None:
+        if not ok:
+            if self._stream_regen_btn is not None:
+                self._stream_regen_btn.setVisible(False)
+            if self._stream_version_btn is not None:
+                self._stream_version_btn.setVisible(False)
+                self._stream_version_btn.setText("")
+
+    def _apply_version_label(self) -> None:
+        button = self._stream_version_btn
+        if button is None:
+            return
+        versions = self._stream_versions
+        if len(versions) > 1 and 0 <= self._stream_version_index < len(versions):
+            button.setText(f"{self._stream_version_index + 1}/{len(versions)}")
+            button.setVisible(True)
+        else:
+            button.setText("")
+            button.setVisible(False)
+
+    def _show_stream_versions(self) -> None:
+        versions = list(self._stream_versions)
+        if len(versions) <= 1:
+            return
+        menu = QMenu(self)
+        menu.setStyleSheet(styles.menu_style())
+        for index, version in enumerate(versions):
+            label = str(version.get("answer", ""))[:24].replace("\n", " ") or f"版本 {index + 1}"
+            action = menu.addAction(f"{index + 1}. {label}")
+            action.setData(int(version.get("id", 0)))
+        chosen = menu.exec_(QCursor.pos())
+        if chosen is not None and int(chosen.data() or 0):
+            self.generation_selected.emit(int(chosen.data()))
 
     def set_thinking(self, thinking: bool) -> None:
         self._send_btn.setEnabled(True)
@@ -1341,6 +1513,11 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._stream_timer.stop()
         self._stream_bubble = None
         self._stream_copy_btn = None
+        self._stream_regen_btn = None
+        self._stream_version_btn = None
+        self._stream_versions = []
+        self._stream_version_index = -1
+        self._regen_available = False
         self._stream_text = ""
         self._stream_buffer = ""
         self._thinking_text = ""
@@ -1438,6 +1615,28 @@ class ChatDialog(FramelessDragMixin, QWidget):
             copy_btn.setStyleSheet(styles.COPY_BUTTON)
             bl.addWidget(copy_btn)
 
+            regen_btn = QPushButton("🔁")
+            regen_btn.setFixedSize(18, 18)
+            regen_btn.setToolTip("重新生成")
+            regen_btn.setAccessibleName("重新生成回答")
+            regen_btn.setFocusPolicy(Qt.NoFocus)
+            regen_btn.setObjectName("regen_btn_assistant")
+            regen_btn.setCursor(Qt.PointingHandCursor)
+            regen_btn.setVisible(False)
+            regen_btn.setStyleSheet(styles.COPY_BUTTON)
+            bl.addWidget(regen_btn)
+
+            version_btn = QPushButton("")
+            version_btn.setFixedSize(44, 18)
+            version_btn.setToolTip("查看答案版本")
+            version_btn.setAccessibleName("查看答案版本")
+            version_btn.setFocusPolicy(Qt.NoFocus)
+            version_btn.setObjectName("version_btn_assistant")
+            version_btn.setCursor(Qt.PointingHandCursor)
+            version_btn.setVisible(False)
+            version_btn.setStyleSheet(styles.COPY_BUTTON)
+            bl.addWidget(version_btn)
+
             v_layout.addWidget(btn_bar)
             wl.addLayout(v_layout)
             wl.addStretch()
@@ -1459,31 +1658,45 @@ class ChatDialog(FramelessDragMixin, QWidget):
         """构建气泡内图片展示区（缩略横排，点击可放大查看）"""
         box = QWidget()
         box.setStyleSheet("background: transparent;")
-        bl = QHBoxLayout(box)
-        bl.setContentsMargins(0, 0, 0, 0)
-        bl.setSpacing(6)
-        for path in images:
+        thumbs: list[QWidget] = []
+        missing = list(missing_images or [])
+        compact = len(images or []) + len(missing) > 1
+        thumb_edge = 148 if compact else 160
+        for path in images or []:
             thumb = _ClickableImage(path)
+            thumb.setAccessibleName(f"查看图片 {Path(path).name}")
             pix = QPixmap(path)
             if pix.isNull():
                 continue
             thumb.setPixmap(
-                pix.scaled(160, 160, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pix.scaled(thumb_edge, thumb_edge, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             )
             thumb.setStyleSheet(
                 "border-radius: 6px; border: 1px solid rgba(255,255,255,0.25);"
             )
             thumb.clicked.connect(self._view_image_full)
-            bl.addWidget(thumb, alignment=Qt.AlignLeft)
-        for path in missing_images or []:
-            missing = QLabel(f"⚠️ 图片缺失\n{Path(path).name}")
-            missing.setObjectName("missing_image_notice")
-            missing.setToolTip(path)
-            missing.setStyleSheet(
+            thumbs.append(thumb)
+        for path in missing:
+            notice = QLabel(f"⚠️ 图片缺失\n{Path(path).name}")
+            notice.setObjectName("missing_image_notice")
+            notice.setToolTip(path)
+            notice.setStyleSheet(
                 "padding: 8px; border-radius: 6px; "
                 "border: 1px dashed rgba(255,170,0,0.75); color: #b7791f;"
             )
-            bl.addWidget(missing, alignment=Qt.AlignLeft)
+            thumbs.append(notice)
+        if not compact:
+            bl = QHBoxLayout(box)
+            bl.setContentsMargins(0, 0, 0, 0)
+            bl.setSpacing(6)
+            for thumb in thumbs:
+                bl.addWidget(thumb, alignment=Qt.AlignLeft)
+            return box
+        grid = QGridLayout(box)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setSpacing(6)
+        for index, thumb in enumerate(thumbs):
+            grid.addWidget(thumb, index // 2, index % 2, alignment=Qt.AlignLeft)
         return box
 
     def _view_image_full(self, path: str) -> None:

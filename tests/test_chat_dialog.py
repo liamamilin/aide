@@ -273,6 +273,56 @@ class TestChatDialogState:
         assert long_model in dialog._model_combo.toolTip()
         assert dialog._input.accessibleName() == "消息输入框"
         assert dialog._send_btn.accessibleName() == "发送消息"
+        assert dialog._new_convo_btn.accessibleName() == "开始新对话"
+        assert dialog._hide_btn.accessibleName() == "隐藏对话窗口"
+        assert dialog._agent_combo.accessibleName() == "选择 Agent"
+        assert dialog._model_combo.accessibleName() == "选择模型"
+        assert dialog._more_btn.accessibleName() == "更多操作"
+        assert dialog._action_btn.accessibleName() == "快捷动作"
+        assert dialog._attach_btn.accessibleName() == "添加图片"
+        assert dialog._model_capability_badge.accessibleName() == "模型图片能力"
+        assert dialog._model_profile_badge.accessibleName() == "模型配置"
+        assert dialog._ollama_dot.accessibleName() == "服务连接状态"
+
+    def test_multi_image_bubble_wraps_within_minimum_width(self, qtbot, dialog):
+        from PyQt5.QtGui import QColor, QPixmap
+        from PyQt5.QtWidgets import QGridLayout, QHBoxLayout
+
+        dialog.resize(dialog.minimumWidth(), dialog.height())
+        qtbot.wait(10)
+        bubble_max = max(280, min(440, int(dialog.width() * 0.78)))
+        for count in (1, 2, 3, 4):
+            paths = []
+            for index in range(count):
+                pixmap = QPixmap(300, 200)
+                pixmap.fill(QColor("blue"))
+                path = f"/tmp/aide-ui3-test-{count}-{index}.png"
+                assert pixmap.save(path)
+                paths.append(path)
+            box = dialog._build_bubble_images(paths)
+            box.show()
+            qtbot.wait(10)
+            layout = box.layout()
+            if count == 1:
+                assert isinstance(layout, QHBoxLayout)
+            else:
+                assert isinstance(layout, QGridLayout)
+            assert box.sizeHint().width() <= bubble_max
+            assert box.minimumSizeHint().width() <= bubble_max
+            box.deleteLater()
+
+    def test_preview_image_buttons_expose_accessible_names(self, qtbot, dialog):
+        from PyQt5.QtGui import QColor, QPixmap
+
+        pixmap = QPixmap(200, 200)
+        pixmap.fill(QColor("red"))
+        path = "/tmp/aide-ui3-accessible.png"
+        assert pixmap.save(path)
+        dialog.attach_image_paths([path])
+        ocr_buttons = dialog.findChildren(object, "ocr_image_btn")
+        assert ocr_buttons
+        assert all(button.accessibleName() for button in ocr_buttons)
+        dialog.clear_pending_images()
 
     def test_refresh_agents(self, qtbot, dialog):
         """refresh_agents() → combo items match new agent list."""
@@ -292,6 +342,61 @@ class TestChatDialogState:
 
 
 # ── L3: Data Flow Tests ────────────────────────────────
+
+class TestChatDialogRegeneration:
+    """Verify regen/version buttons stay inert without controller state."""
+
+    def test_finalized_stream_keeps_regen_hidden_by_default(self, dialog):
+        dialog.begin_assistant_stream()
+        dialog.append_stream_chunk("answer")
+        dialog.finalize_assistant_stream("answer", ok=True)
+        regen_buttons = dialog.findChildren(object, "regen_btn_assistant")
+        version_buttons = dialog.findChildren(object, "version_btn_assistant")
+        assert regen_buttons and all(not button.isVisible() for button in regen_buttons)
+        assert version_buttons and all(not button.isVisible() for button in version_buttons)
+
+    def test_regen_button_emits_request(self, qtbot, dialog):
+        dialog.add_assistant_message("answer")
+        dialog.set_regenerate_state(True, [])
+        with qtbot.waitSignal(dialog.regenerate_requested, timeout=1000):
+            dialog._stream_regen_btn.click()
+
+    def test_single_version_keeps_version_button_hidden(self, dialog, qtbot):
+        dialog.add_assistant_message("only")
+        dialog.set_regenerate_state(True, [{"id": 1, "answer": "only", "active": True}])
+        qtbot.wait(10)
+        assert dialog._stream_regen_btn.isVisible()
+        assert not dialog._stream_version_btn.isVisible()
+
+    def test_two_versions_show_count_label(self, dialog, qtbot):
+        dialog.add_assistant_message("second")
+        dialog.set_regenerate_state(True, [
+            {"id": 1, "answer": "first", "active": False},
+            {"id": 2, "answer": "second", "active": True},
+        ])
+        qtbot.wait(10)
+        assert dialog._stream_version_btn.isVisible()
+        assert dialog._stream_version_btn.text() == "2/2"
+
+    def test_history_assistant_without_state_has_no_regen(self, dialog):
+        dialog.add_assistant_message("history answer")
+        regen_buttons = dialog.findChildren(object, "regen_btn_assistant")
+        version_buttons = dialog.findChildren(object, "version_btn_assistant")
+        assert regen_buttons and all(not button.isVisible() for button in regen_buttons)
+        assert version_buttons and all(not button.isVisible() for button in version_buttons)
+
+    def test_show_generation_updates_newest_bubble(self, dialog):
+        dialog.add_assistant_message("first answer")
+        dialog.add_assistant_message("second answer")
+        dialog.set_regenerate_state(True, [
+            {"id": 1, "answer": "first answer", "active": False},
+            {"id": 2, "answer": "second answer", "active": True},
+        ])
+        assert dialog.show_generation(1, "first answer") is True
+        labels = dialog._msg_container.findChildren(object, "message_bubble")
+        assert [label._markdown_source for label in labels] == ["first answer", "first answer"]
+        assert dialog._stream_version_btn.text() == "1/2"
+
 
 class TestChatDialogDataFlow:
     """Verify data flows correctly through the widget with mocked dependencies."""

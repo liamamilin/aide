@@ -199,7 +199,7 @@ def test_schema_one_upgrades_to_model_profiles_with_backup(tmp_path, monkeypatch
 
     storage.init_db()
     current = storage._conn()
-    assert storage._schema_version(current) == storage.SCHEMA_VERSION == 3
+    assert storage._schema_version(current) == storage.SCHEMA_VERSION == 4
     tables = {
         row[0]
         for row in current.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -226,7 +226,7 @@ def test_schema_two_upgrades_to_actions_with_backup(tmp_path, monkeypatch):
 
     storage.init_db()
     current = storage._conn()
-    assert storage._schema_version(current) == storage.SCHEMA_VERSION == 3
+    assert storage._schema_version(current) == storage.SCHEMA_VERSION == 4
     columns = {
         row[1]
         for row in current.execute("PRAGMA table_info(actions)").fetchall()
@@ -241,4 +241,31 @@ def test_schema_two_upgrades_to_actions_with_backup(tmp_path, monkeypatch):
     assert backup.execute(
         "SELECT value FROM settings WHERE key='keep-action'"
     ).fetchone()[0] == "value"
+    backup.close()
+
+
+def test_schema_three_migrates_legacy_assistant_to_active_generation(tmp_path, monkeypatch):
+    path = tmp_path / "chat_history.db"
+    db = sqlite3.connect(path)
+    db.row_factory = sqlite3.Row
+    storage._migrate_v0_to_v1(db)
+    storage._migrate_v1_to_v2(db)
+    storage._migrate_v2_to_v3(db)
+    db.execute("INSERT INTO conversations VALUES (1, '版本测试', 'general_assistant', 10.0)")
+    db.execute("INSERT INTO messages VALUES (1, 1, 'user', '问题', 11.0, '[]')")
+    db.execute("INSERT INTO messages VALUES (2, 1, 'assistant', '旧答案', 12.0, '[]')")
+    db.execute("PRAGMA user_version=3")
+    db.commit()
+    db.close()
+    _use_database(monkeypatch, path)
+
+    storage.init_db()
+    generations = storage.list_generations(1)
+    assert len(generations) == 1
+    assert generations[0].answer == "旧答案"
+    assert generations[0].assistant_message_id == 2
+    assert generations[0].active is True
+    assert storage.get_active_generation(1).request_id == "legacy-message-2"
+    backup = sqlite3.connect(next((tmp_path / "backups").glob("*.sqlite3")))
+    assert backup.execute("PRAGMA user_version").fetchone()[0] == 3
     backup.close()

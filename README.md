@@ -16,7 +16,7 @@
 |----------|-------------|
 | **Hotkey** `⌘⌃L` | Select text in any app → press the hotkey → text is auto-filled into the dialog |
 | **Floating button** | Circular icon on the right edge of the screen; left-click to toggle the dialog, right-click for the menu |
-| **Menu bar icon** | Persistent in the macOS menu bar; left-click to toggle the dialog, right-click to switch agents quickly |
+| **Menu bar icon** | Persistent in the macOS menu bar; left-click to toggle the dialog, right-click to switch agents quickly or restore a hidden pet |
 
 ---
 

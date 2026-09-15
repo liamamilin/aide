@@ -56,13 +56,18 @@ from ai_desktop.utils.storage import (
     create_conversation,
     delete_conversation,
     delete_message,
+    get_active_generation,
     get_conversation,
+    get_generation,
     get_setting,
     init_db,
     list_conversations,
+    list_generations,
     list_input_history,
+    save_generation,
     save_message,
     save_setting,
+    set_active_generation,
 )
 
 logger = logging.getLogger(__name__)
@@ -159,6 +164,7 @@ class ChatController(QObject):
         self._messages: list[Message] = []
         self._restore_last: bool = True  # 首次打开自动恢复上次对话
         self._worker: Optional[StreamingChatWorker] = None
+        self._regenerating_user_id: int = 0
         self._stale_workers: list[StreamingChatWorker] = []
         self._response_text = ""
         self._dialog: Optional[ChatDialog] = None
@@ -200,6 +206,7 @@ class ChatController(QObject):
         # 菜单栏图标
         self._tray = MenuBarIcon(self._all_agents, self._active_agent)
         self._tray.dialog_toggle.connect(self._toggle_dialog)
+        self._tray.float_entry_toggle.connect(self._on_float_entry_toggle)
         self._tray.agent_selected.connect(self._on_tray_agent)
         self._tray.settings_clicked.connect(self._on_settings_requested)
         self._tray.about_clicked.connect(self._show_about)
@@ -285,6 +292,7 @@ class ChatController(QObject):
                 logger.warning("Failed to start screenshot hotkey listener: %s", e)
         self.float_btn.show()
         pin_to_all_spaces(self.float_btn)
+        self._tray.set_float_entry_visible(True, self.float_btn.pet_enabled)
         self._tray.show()
         logger.info("ChatController 已就绪（快捷键 %s / 截图 %s）", config.HOTKEY, config.SCREENSHOT_HOTKEY)
 
@@ -625,6 +633,8 @@ class ChatController(QObject):
             self._dialog.model_changed.connect(self._on_model_changed)
             self._dialog.service_check_requested.connect(self._refresh_model_list)
             self._dialog.action_requested.connect(self._on_action_requested)
+            self._dialog.regenerate_requested.connect(self._on_regenerate_requested)
+            self._dialog.generation_selected.connect(self._on_generation_selected)
             self._dialog.set_cached_models(cached_models, self._model)
             self._dialog.set_image_capability(
                 self._image_capability,
@@ -688,6 +698,18 @@ class ChatController(QObject):
     def _hide_float_entry(self) -> None:
         self._result_bubble.hide()
         self.float_btn.hide()
+        self._tray.set_float_entry_visible(False, self.float_btn.pet_enabled)
+
+    @_safe_slot
+    def _on_float_entry_toggle(self) -> None:
+        """通过菜单栏图标恢复或隐藏悬浮入口。"""
+        if self.float_btn.isVisible():
+            self._hide_float_entry()
+            return
+        self.float_btn.show()
+        pin_to_all_spaces(self.float_btn)
+        self._tray.set_float_entry_visible(True, self.float_btn.pet_enabled)
+        self._schedule_screen_recovery()
 
     def _save_window_state(self) -> None:
         float_state = self.float_btn.placement_state()
@@ -713,6 +735,7 @@ class ChatController(QObject):
         config.DESKTOP_PET_ENABLED = checked
         save_setting("desktop_pet_enabled", "true" if checked else "false")
         self.float_btn.set_pet_enabled(checked)
+        self._tray.set_float_entry_visible(self.float_btn.isVisible(), checked)
         self._refresh_pet_actions()
         if not checked:
             self._result_bubble.hide()
@@ -763,6 +786,9 @@ class ChatController(QObject):
             self._refresh_pet_actions()
         if "desktop_pet" in changed:
             self.float_btn.set_pet_enabled(config.DESKTOP_PET_ENABLED)
+            self._tray.set_float_entry_visible(
+                self.float_btn.isVisible(), self.float_btn.pet_enabled
+            )
             self._refresh_pet_actions()
             if not config.DESKTOP_PET_ENABLED:
                 self._result_bubble.hide()
@@ -1110,6 +1136,7 @@ class ChatController(QObject):
     @_safe_slot
     def _new_conversation(self) -> None:
         self._stop_worker(show_cancelled=False)
+        self._regenerating_user_id = 0
         self._convo_id = 0
         self._messages = []
         if self._dialog:
@@ -1128,6 +1155,11 @@ class ChatController(QObject):
         worker = self._worker
         if worker is None:
             return
+        if self._regenerating_user_id:
+            self._record_attempt_outcome(
+                ChatResult(worker.request.request_id, ResultStatus.CANCELLED)
+            )
+            self._regenerating_user_id = 0
         self._worker = None
         worker.cancel()
         self._retire_worker(worker)
@@ -1172,6 +1204,7 @@ class ChatController(QObject):
                 return
             # 停止当前 worker
             self._stop_worker(show_cancelled=False)
+            self._regenerating_user_id = 0
             # 恢复对话状态
             self._convo_id = conv.id
             self._messages = conv.messages
@@ -1186,17 +1219,9 @@ class ChatController(QObject):
                     break
             # 渲染消息
             if self._dialog:
-                self._dialog.clear_messages()
-                for m in conv.messages:
-                    if m.role == "user":
-                        self._dialog.add_user_message(
-                            m.content,
-                            images=m.images,
-                            missing_images=m.missing_images,
-                        )
-                    else:
-                        self._dialog.add_assistant_message(m.content)
+                self._render_messages()
             self._sync_action_context()
+            self._refresh_regenerate_state()
             logger.info("Loaded conversation %d (%d messages)", convo_id, len(conv.messages))
         except Exception:
             logger.exception("Failed to load conversation %d", convo_id)
@@ -1205,6 +1230,7 @@ class ChatController(QObject):
         if convo_id != self._convo_id:
             return
         self._stop_worker(show_cancelled=False)
+        self._regenerating_user_id = 0
         self._convo_id = 0
         self._messages = []
         self._response_text = ""
@@ -1326,6 +1352,272 @@ class ChatController(QObject):
         self._stop_worker()
         logger.info("Streaming interrupted by user")
 
+    def _latest_user_turn(self) -> tuple[Message | None, Message | None]:
+        """Return the latest user message and its newest assistant answer."""
+        user_message = next(
+            (message for message in reversed(self._messages) if message.role == "user"),
+            None,
+        )
+        assistant_message = None
+        if user_message is not None:
+            try:
+                index = next(
+                    i for i, message in enumerate(self._messages)
+                    if message.role == "user" and message.id == user_message.id
+                )
+            except StopIteration:
+                index = None
+            if index is not None:
+                following = [
+                    message
+                    for message in self._messages[index + 1:]
+                    if message.role == "assistant"
+                ]
+                assistant_message = following[-1] if following else None
+        return user_message, assistant_message
+
+    def _active_answer_message(self, user_message: Message) -> Message | None:
+        """Resolve the newest stored answer row for regen pairing and context."""
+        try:
+            active = get_active_generation(user_message.id)
+        except Exception:
+            logger.exception("Failed to load active answer version")
+            return None
+        if active is None or active.assistant_message_id is None:
+            _, assistant_message = self._latest_user_turn()
+            return assistant_message
+        return next(
+            (message for message in self._messages if message.id == active.assistant_message_id),
+            None,
+        )
+
+    def _has_follow_up_after(self, user_message_id: int) -> bool:
+        """Newer user turns lock older answers against switching or regen context."""
+        seen_target = False
+        for message in self._messages:
+            if message.role == "user" and message.id == user_message_id:
+                seen_target = True
+            elif seen_target and message.role == "user":
+                return True
+        return False
+
+    def _version_snapshots(self, user_message_id: int) -> list[dict]:
+        return [
+            {"id": version.id, "answer": version.answer, "active": version.active}
+            for version in list_generations(user_message_id)
+            if version.status == "succeeded" and version.answer
+        ]
+
+    def _refresh_regenerate_state(self) -> None:
+        """Sync the latest-turn regen entry without rebuilding message bubbles."""
+        if not self._dialog:
+            return
+        user_message, assistant_message = self._latest_user_turn()
+        if (
+            user_message is None
+            or assistant_message is None
+            or self._has_follow_up_after(user_message.id)
+        ):
+            self._dialog.set_regenerate_state(False, [])
+            return
+        try:
+            versions = self._version_snapshots(user_message.id)
+        except Exception:
+            logger.exception("Failed to load answer versions")
+            self._dialog.set_regenerate_state(False, [])
+            return
+        if not versions:
+            self._dialog.set_regenerate_state(False, [])
+            return
+        self._dialog.set_regenerate_state(True, versions)
+
+    @_safe_slot
+    def _on_regenerate_requested(self) -> None:
+        if self._worker is not None:
+            if self._dialog:
+                self._dialog.flash_busy()
+            return
+        user_message, assistant_message = self._latest_user_turn()
+        if user_message is None or assistant_message is None:
+            return
+        self._start_regeneration(user_message)
+
+    def _start_regeneration(self, user_message: Message) -> None:
+        """Retry the latest user turn without duplicating the stored question."""
+        images = list(user_message.images or [])
+        image_capability = self._image_capability_for_model(self._model)
+        if images and image_capability == ImageCapability.UNSUPPORTED:
+            if self._dialog:
+                self._dialog.focus_model_selector()
+            self._show_notice(
+                QMessageBox.Warning,
+                "当前模型不支持图片",
+                f"模型 {html.escape(self._model)} 已声明不支持图片输入。"
+                "请选择显示“图片 ✓”的模型后重试。",
+            )
+            return
+        if images and image_capability == ImageCapability.UNKNOWN:
+            if self._dialog and not self._dialog.confirm_unknown_image_capability(
+                self._model
+            ):
+                return
+        recent = list(self._messages)
+        cutoff = next(
+            (index for index, message in enumerate(recent) if message.id == user_message.id),
+            None,
+        )
+        if cutoff is None:
+            return
+        # F04.1: only the active answer participates in the retried context.
+        context = [message for message in recent[:cutoff] if message.role in {"user", "assistant"}]
+        context.append(user_message)
+        context = self._context_messages(context)
+        max_msgs = config.OLLAMA_MAX_ROUNDS * 2
+        if len(context) > max_msgs:
+            context = context[-max_msgs:]
+        resolved = self._resolve_model_config(None, self._active_agent)
+        if resolved.warnings:
+            self._show_notice(
+                QMessageBox.Warning,
+                "模型配置已回退",
+                "<br>".join(html.escape(warning) for warning in resolved.warnings),
+            )
+        self._response_text = ""
+        try:
+            worker = StreamingChatWorker(
+                context, self._active_agent.system_prompt, resolved.model, self,
+                conversation_id=self._convo_id, agent_id=self._active_agent.id,
+                think=resolved.think, options=resolved.options,
+            )
+        except Exception:
+            logger.exception("Failed to start regeneration")
+            if self._dialog:
+                self._dialog.flash_busy()
+            return
+        worker.thinking_event.connect(self._on_thinking_event)
+        worker.content_event.connect(self._on_stream_event)
+        worker.done.connect(self._on_stream_done)
+        worker.finished.connect(self._on_worker_finished)
+        if self._dialog:
+            self._dialog.begin_assistant_stream()
+            self._dialog.set_thinking(True)
+        self._worker = worker
+        self._regenerating_user_id = user_message.id
+        worker.start()
+        self.float_btn.set_responding(True)
+
+    def _render_messages(self) -> None:
+        """Redraw bubbles from in-memory messages without touching the draft."""
+        if not self._dialog:
+            return
+        self._dialog.clear_messages()
+        user_message, assistant_message = self._latest_user_turn()
+        versions: list[dict] = []
+        version_index = -1
+        regen_available = False
+        if user_message is not None and not self._has_follow_up_after(user_message.id):
+            try:
+                versions = self._version_snapshots(user_message.id)
+            except Exception:
+                logger.exception("Failed to load answer versions")
+                versions = []
+            regen_available = assistant_message is not None
+            if versions:
+                active_id = next(
+                    (item["id"] for item in versions if item.get("active")), None,
+                )
+                if active_id is not None and assistant_message is not None:
+                    for message in self._messages:
+                        if message.id == assistant_message.id:
+                            active_answer = next(
+                                (item["answer"] for item in versions if item["id"] == active_id),
+                                message.content,
+                            )
+                            message.content = active_answer
+                            break
+                version_index = next(
+                    (index for index, item in enumerate(versions) if item.get("active")),
+                    len(versions) - 1,
+                )
+        for message in self._messages:
+            if message.role == "user":
+                self._dialog.add_user_message(
+                    message.content,
+                    images=message.images,
+                    missing_images=message.missing_images,
+                )
+            elif message.role == "assistant":
+                is_latest = (
+                    assistant_message is not None and message.id == assistant_message.id
+                )
+                self._dialog.add_assistant_message(
+                    message.content,
+                    versions=versions if is_latest else None,
+                    version_index=version_index if is_latest else -1,
+                    regen_available=regen_available and is_latest,
+                )
+
+    @_safe_slot
+    def _on_generation_selected(self, generation_id: int) -> None:
+        user_message, assistant_message = self._latest_user_turn()
+        if user_message is None or assistant_message is None:
+            return
+        if self._worker is not None:
+            if self._dialog:
+                self._dialog.flash_busy()
+            return
+        if self._has_follow_up_after(user_message.id):
+            self._show_notice(
+                QMessageBox.Warning,
+                "无法切换版本",
+                "该回答之后已有新的追问，暂不支持切换旧答案。",
+            )
+            return
+        try:
+            candidate = get_generation(generation_id)
+        except (LookupError, ValueError) as exc:
+            self._show_notice(
+                QMessageBox.Warning, "无法切换版本", html.escape(str(exc))
+            )
+            return
+        except Exception:
+            logger.exception("Failed to switch answer version")
+            return
+        if candidate.user_message_id != user_message.id:
+            self._show_notice(
+                QMessageBox.Warning,
+                "无法切换版本",
+                "该版本不属于当前最新问题。",
+            )
+            return
+        try:
+            selected = set_active_generation(generation_id)
+        except (LookupError, ValueError) as exc:
+            self._show_notice(
+                QMessageBox.Warning, "无法切换版本", html.escape(str(exc))
+            )
+            return
+        except Exception:
+            logger.exception("Failed to switch answer version")
+            return
+        selected_message_id = selected.assistant_message_id
+        for message in self._messages:
+            if message.role == "assistant" and (
+                message.id == selected_message_id
+                or (
+                    selected_message_id is None
+                    and message.id == assistant_message.id
+                )
+            ):
+                message.content = selected.answer
+        if self._dialog and not self._dialog.show_generation(
+            selected.id, selected.answer
+        ):
+            self._render_messages()
+        else:
+            self._refresh_regenerate_state()
+        logger.info("Answer version switched to generation %d", selected.id)
+
     @_safe_slot
     def _on_action_requested(
         self,
@@ -1379,6 +1671,81 @@ class ChatController(QObject):
             retry_action_id=plan.action.id,
             retry_action_mode=mode,
             request_agent=plan.agent,
+        )
+
+    def _active_answers_by_user(self) -> dict[int, str]:
+        """Map each user message to its selected answer for request context."""
+        active_answers: dict[int, str] = {}
+        pending_user: int | None = None
+        pending_assistants: list[Message] = []
+        for message in self._messages:
+            if message.role == "user":
+                if pending_user is not None and pending_assistants:
+                    try:
+                        active = get_active_generation(pending_user)
+                    except Exception:
+                        logger.exception("Failed to load active answer version")
+                        active = None
+                    active_answers[pending_user] = (
+                        active.answer
+                        if active is not None and active.answer
+                        else pending_assistants[-1].content
+                    )
+                pending_user = message.id
+                pending_assistants = []
+            elif message.role == "assistant" and pending_user is not None:
+                pending_assistants.append(message)
+        if pending_user is not None and pending_assistants:
+            try:
+                active = get_active_generation(pending_user)
+            except Exception:
+                logger.exception("Failed to load active answer version")
+                active = None
+            active_answers[pending_user] = (
+                active.answer
+                if active is not None and active.answer
+                else pending_assistants[-1].content
+            )
+        return active_answers
+
+    def _context_messages(self, messages: list[Message]) -> list[Message]:
+        """Substitute superseded answers with the selected version per turn."""
+        active_answers = self._active_answers_by_user()
+        context: list[Message] = []
+        pending_user: int | None = None
+        pending_assistants: list[Message] = []
+        for message in messages:
+            if message.role == "user":
+                if pending_user is not None and pending_assistants:
+                    answer = active_answers.get(
+                        pending_user, pending_assistants[-1].content
+                    )
+                    context.append(self._assistant_context_message(
+                        pending_assistants[-1], answer
+                    ))
+                pending_user = message.id
+                pending_assistants = []
+                context.append(message)
+            elif message.role == "assistant" and pending_user is not None:
+                pending_assistants.append(message)
+            else:
+                context.append(message)
+        if pending_user is not None and pending_assistants:
+            answer = active_answers.get(pending_user, pending_assistants[-1].content)
+            context.append(self._assistant_context_message(pending_assistants[-1], answer))
+        return context
+
+    @staticmethod
+    def _assistant_context_message(message: Message, answer: str) -> Message:
+        if answer == message.content:
+            return message
+        return Message(
+            role=message.role,
+            content=answer,
+            id=message.id,
+            created_at=message.created_at,
+            images=list(message.images),
+            missing_images=list(message.missing_images),
         )
 
     def _on_user_message(
@@ -1463,6 +1830,7 @@ class ChatController(QObject):
             max_msgs = config.OLLAMA_MAX_ROUNDS * 2
             if len(recent) > max_msgs:
                 recent = recent[-max_msgs:]
+            recent = self._context_messages(recent)
 
             self._response_text = ""
             worker = StreamingChatWorker(
@@ -1543,6 +1911,56 @@ class ChatController(QObject):
         if self._dialog:
             self._dialog.append_stream_chunk(event.text)
 
+    def _request_config_snapshot(self, worker: StreamingChatWorker) -> dict:
+        return {
+            "agent_id": worker.request.agent_id,
+            "model": worker.request.model,
+            "think": worker.request.think,
+            "keep_alive": worker.request.keep_alive,
+            "options": dict(worker.request.options),
+        }
+
+    def _last_request_user_id(self, worker: StreamingChatWorker) -> int:
+        return next(
+            (
+                message.id
+                for message in reversed(worker.request.messages)
+                if message.role == "user" and message.id
+            ),
+            0,
+        )
+
+    def _record_attempt_outcome(self, result: ChatResult) -> None:
+        """Keep failed/cancelled retries visible without replacing the active answer."""
+        worker = self._worker
+        if worker is None or result.request_id != worker.request.request_id:
+            return
+        status = (
+            "cancelled"
+            if result.status == ResultStatus.CANCELLED
+            else "failed"
+        )
+        user_message_id = self._regenerating_user_id or self._last_request_user_id(worker)
+        if not user_message_id:
+            return
+        if any(
+            version.request_id == worker.request.request_id
+            for version in list_generations(user_message_id)
+        ):
+            return
+        try:
+            save_generation(
+                user_message_id,
+                worker.request.request_id,
+                config_snapshot=self._request_config_snapshot(worker),
+                status=status,
+                answer="",
+                assistant_message_id=None,
+                active=False,
+            )
+        except Exception:
+            logger.exception("Failed to record %s generation", status)
+
     @_safe_slot
     def _on_stream_done(self, result: ChatResult) -> None:
         worker = self._worker
@@ -1560,15 +1978,45 @@ class ChatController(QObject):
 
         if ok and self._convo_id > 0 and text:
             try:
-                assistant_msg = save_message(worker.request.conversation_id, "assistant", text)
-                self._messages.append(assistant_msg)
+                regenerating = self._regenerating_user_id or 0
+                if regenerating:
+                    assistant_msg = save_message(worker.request.conversation_id, "assistant", text)
+                    self._messages.append(assistant_msg)
+                    save_generation(
+                        regenerating,
+                        worker.request.request_id,
+                        config_snapshot=self._request_config_snapshot(worker),
+                        status="succeeded",
+                        answer=text,
+                        assistant_message_id=assistant_msg.id,
+                        active=True,
+                    )
+                else:
+                    assistant_msg = save_message(worker.request.conversation_id, "assistant", text)
+                    self._messages.append(assistant_msg)
+                    user_message_id = self._last_request_user_id(worker)
+                    if user_message_id:
+                        save_generation(
+                            user_message_id,
+                            worker.request.request_id,
+                            config_snapshot=self._request_config_snapshot(worker),
+                            status="succeeded",
+                            answer=text,
+                            assistant_message_id=assistant_msg.id,
+                            active=True,
+                        )
             except Exception:
                 logger.exception("Failed to save assistant message")
+        elif not ok:
+            self._record_attempt_outcome(result)
 
         if self._dialog:
             self._dialog.finalize_assistant_stream(
                 text, ok, error=result.error, cancelled=result.status == ResultStatus.CANCELLED,
             )
+
+        self._regenerating_user_id = 0
+        self._refresh_regenerate_state()
 
         bubble_shown = False
         if result.status != ResultStatus.CANCELLED:
