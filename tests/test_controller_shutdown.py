@@ -44,6 +44,20 @@ def test_theme_refresh_uses_one_controller_entry(controller):
     refresh_dialog.assert_called_once_with()
 
 
+def test_hidden_float_entry_can_be_restored_from_tray(controller):
+    """隐藏宠物后，菜单栏动作应能重新显示悬浮入口。"""
+    button = controller.float_btn
+    button.isVisible.return_value = True
+    controller._hide_float_entry()
+    button.hide.assert_called_once_with()
+    controller._tray.set_float_entry_visible.assert_called_with(False, button.pet_enabled)
+
+    button.isVisible.return_value = False
+    controller._on_float_entry_toggle()
+    button.show.assert_called_once_with()
+    controller._tray.set_float_entry_visible.assert_called_with(True, button.pet_enabled)
+
+
 def test_exit_waits_for_chat_abort_and_rejects_new_work(qtbot, controller, ollama_server):
     scenario = ollama_server.enqueue(before_headers=True)
     controller._on_user_message("question")

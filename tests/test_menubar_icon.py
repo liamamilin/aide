@@ -106,6 +106,20 @@ class TestMenuBarIconSignals:
         with qtbot.waitSignal(tray.dialog_toggle, timeout=1000):
             show_action.trigger()
 
+    def test_float_entry_toggle_signal_and_label(self, qtbot, tray):
+        """菜单栏始终保留悬浮入口，并随可见状态切换文案。"""
+        menu = tray.contextMenu()
+        entry_action = next(
+            action for action in menu.actions() if action.text() == "隐藏桌面宠物"
+        )
+        with qtbot.waitSignal(tray.float_entry_toggle, timeout=1000):
+            entry_action.trigger()
+
+        tray.set_float_entry_visible(False, True)
+        assert entry_action.text() == "显示桌面宠物"
+        tray.set_float_entry_visible(True, False)
+        assert entry_action.text() == "隐藏悬浮球"
+
     def test_settings_clicked_signal(self, qtbot, tray):
         """The '设置…' action → settings_clicked signal."""
         menu = tray.contextMenu()
@@ -140,3 +154,12 @@ class TestMenuBarIconSignals:
         menu = tray.contextMenu()
         agent_actions = [a for a in menu.actions() if a.isCheckable()]
         assert len(agent_actions) == 2
+
+    def test_refresh_agents_preserves_float_entry_state(self, qtbot, tray):
+        tray.set_float_entry_visible(False, True)
+        tray.refresh_agents(AGENTS[:1])
+        entry_action = next(
+            action for action in tray.contextMenu().actions()
+            if action.text() == "显示桌面宠物"
+        )
+        assert entry_action is not None

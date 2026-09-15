@@ -206,6 +206,7 @@ class ChatController(QObject):
         # 菜单栏图标
         self._tray = MenuBarIcon(self._all_agents, self._active_agent)
         self._tray.dialog_toggle.connect(self._toggle_dialog)
+        self._tray.float_entry_toggle.connect(self._on_float_entry_toggle)
         self._tray.agent_selected.connect(self._on_tray_agent)
         self._tray.settings_clicked.connect(self._on_settings_requested)
         self._tray.about_clicked.connect(self._show_about)
@@ -291,6 +292,7 @@ class ChatController(QObject):
                 logger.warning("Failed to start screenshot hotkey listener: %s", e)
         self.float_btn.show()
         pin_to_all_spaces(self.float_btn)
+        self._tray.set_float_entry_visible(True, self.float_btn.pet_enabled)
         self._tray.show()
         logger.info("ChatController 已就绪（快捷键 %s / 截图 %s）", config.HOTKEY, config.SCREENSHOT_HOTKEY)
 
@@ -696,6 +698,18 @@ class ChatController(QObject):
     def _hide_float_entry(self) -> None:
         self._result_bubble.hide()
         self.float_btn.hide()
+        self._tray.set_float_entry_visible(False, self.float_btn.pet_enabled)
+
+    @_safe_slot
+    def _on_float_entry_toggle(self) -> None:
+        """通过菜单栏图标恢复或隐藏悬浮入口。"""
+        if self.float_btn.isVisible():
+            self._hide_float_entry()
+            return
+        self.float_btn.show()
+        pin_to_all_spaces(self.float_btn)
+        self._tray.set_float_entry_visible(True, self.float_btn.pet_enabled)
+        self._schedule_screen_recovery()
 
     def _save_window_state(self) -> None:
         float_state = self.float_btn.placement_state()
@@ -721,6 +735,7 @@ class ChatController(QObject):
         config.DESKTOP_PET_ENABLED = checked
         save_setting("desktop_pet_enabled", "true" if checked else "false")
         self.float_btn.set_pet_enabled(checked)
+        self._tray.set_float_entry_visible(self.float_btn.isVisible(), checked)
         self._refresh_pet_actions()
         if not checked:
             self._result_bubble.hide()
@@ -771,6 +786,9 @@ class ChatController(QObject):
             self._refresh_pet_actions()
         if "desktop_pet" in changed:
             self.float_btn.set_pet_enabled(config.DESKTOP_PET_ENABLED)
+            self._tray.set_float_entry_visible(
+                self.float_btn.isVisible(), self.float_btn.pet_enabled
+            )
             self._refresh_pet_actions()
             if not config.DESKTOP_PET_ENABLED:
                 self._result_bubble.hide()
