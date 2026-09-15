@@ -649,3 +649,106 @@ def test_deleting_current_conversation_invalidates_request_and_allows_new_send(q
     assert [message.content for message in get_conversation(controller._convo_id).messages] == [
         "new question", "replacement",
     ]
+
+
+def test_regenerate_reuses_latest_user_message_without_duplicating(qtbot, controller, ollama_server):
+    send_and_wait(qtbot, controller, ollama_server, [{"message": {"content": "first answer"}, "done": True}])
+    user_id = next(message.id for message in controller._messages if message.role == "user")
+    assert controller._dialog._regen_available is True
+    assert controller._dialog._stream_regen_btn is not None
+    ollama_server.enqueue({"message": {"content": "second answer"}, "done": True})
+    controller._on_regenerate_requested()
+    qtbot.waitUntil(lambda: controller._worker is None and not controller._stale_workers)
+    conversation = get_conversation(controller._convo_id)
+    assert [message.content for message in conversation.messages] == [
+        "question", "first answer", "second answer",
+    ]
+    versions = storage.list_generations(user_id)
+    assert [version.answer for version in versions] == ["first answer", "second answer"]
+    assert [version.active for version in versions] == [False, True]
+    assert storage.get_active_generation(user_id).answer == "second answer"
+    assert all(version.request_id for version in versions)
+    assert len({version.request_id for version in versions}) == 2
+    assert all(version.config_snapshot.get("model") for version in versions)
+    assert "second answer" in bubble_text(controller)
+    assert controller._dialog._stream_version_btn is not None
+    assert controller._dialog._stream_version_btn.text() == "2/2"
+
+
+def test_regenerate_records_failed_retry_without_replacing_active(qtbot, controller, ollama_server):
+    send_and_wait(qtbot, controller, ollama_server, [{"message": {"content": "good answer"}, "done": True}])
+    user_id = next(message.id for message in controller._messages if message.role == "user")
+    controller._on_regenerate_requested()
+    assert controller._worker is not None
+    worker = controller._worker
+    controller._on_stop_requested()
+    qtbot.waitUntil(lambda: controller._worker is None and not controller._stale_workers)
+    versions = storage.list_generations(user_id)
+    assert [version.status for version in versions] == ["succeeded", "cancelled"]
+    assert storage.get_active_generation(user_id).answer == "good answer"
+    assert [message.content for message in get_conversation(controller._convo_id).messages] == [
+        "question", "good answer",
+    ]
+    assert "good answer" in bubble_text(controller)
+    assert worker.request.request_id != versions[0].request_id
+
+
+def test_switching_answer_version_updates_bubble_and_context(qtbot, controller, ollama_server):
+    send_and_wait(qtbot, controller, ollama_server, [{"message": {"content": "first answer"}, "done": True}])
+    user_id = next(message.id for message in controller._messages if message.role == "user")
+    ollama_server.enqueue({"message": {"content": "second answer"}, "done": True})
+    controller._on_regenerate_requested()
+    qtbot.waitUntil(lambda: controller._worker is None and not controller._stale_workers)
+    versions = storage.list_generations(user_id)
+    first = next(version for version in versions if version.answer == "first answer")
+    controller._on_generation_selected(first.id)
+    assert storage.get_active_generation(user_id).answer == "first answer"
+    selected_message = next(
+        message for message in controller._messages if message.id == first.assistant_message_id
+    )
+    assert selected_message.content == "first answer"
+    assert controller._dialog._stream_version_btn is not None
+    assert controller._dialog._stream_version_btn.text() == "1/2"
+    labels = controller._dialog._msg_container.findChildren(QLabel, "message_bubble")
+    assert labels[-1]._markdown_source == "first answer"
+    ollama_server.enqueue({"message": {"content": "follow up answer"}, "done": True})
+    controller._on_user_message("follow up")
+    qtbot.waitUntil(lambda: controller._worker is None and not controller._stale_workers, timeout=3000)
+    assert ollama_server.requests[-1]["payload"]["messages"][-2]["content"] == "first answer"
+
+
+def test_follow_up_locks_older_answer_versions(qtbot, controller, ollama_server):
+    send_and_wait(qtbot, controller, ollama_server, [{"message": {"content": "first answer"}, "done": True}])
+    first_user_id = next(message.id for message in controller._messages if message.role == "user")
+    ollama_server.enqueue({"message": {"content": "second answer"}, "done": True})
+    controller._on_regenerate_requested()
+    qtbot.waitUntil(lambda: controller._worker is None and not controller._stale_workers)
+    versions = storage.list_generations(first_user_id)
+    first = next(version for version in versions if version.answer == "first answer")
+    ollama_server.enqueue({"message": {"content": "follow up answer"}, "done": True})
+    controller._on_user_message("follow up")
+    qtbot.waitUntil(lambda: controller._worker is None and not controller._stale_workers, timeout=3000)
+    with patch.object(controller, "_show_notice") as notice:
+        controller._on_generation_selected(first.id)
+    notice.assert_called_once()
+    assert storage.get_active_generation(first_user_id).answer == "second answer"
+    follow_user_id = next(
+        message.id for message in controller._messages if message.content == "follow up"
+    )
+    assert first_user_id != follow_user_id
+    assert controller._dialog._regen_available is True
+    follow_versions = storage.list_generations(follow_user_id)
+    assert [version.answer for version in follow_versions] == ["follow up answer"]
+    with patch.object(controller, "_show_notice") as notice:
+        controller._on_generation_selected(first.id)
+    notice.assert_called_once()
+    assert storage.get_active_generation(first_user_id).answer == "second answer"
+    follow_count = len(storage.list_generations(follow_user_id))
+    ollama_server.enqueue({"message": {"content": "follow up retry"}, "done": True})
+    controller._on_regenerate_requested()
+    qtbot.waitUntil(lambda: controller._worker is None and not controller._stale_workers, timeout=3000)
+    assert [version.answer for version in storage.list_generations(follow_user_id)] == [
+        "follow up answer", "follow up retry",
+    ]
+    assert len(storage.list_generations(first_user_id)) == 2
+    assert follow_count == 1

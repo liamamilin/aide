@@ -824,6 +824,19 @@ def get_active_generation(user_message_id: int) -> Generation | None:
     return _generation_from_row(row) if row is not None else None
 
 
+def get_generation(generation_id: int) -> Generation:
+    """Return one stored answer version without changing the active row."""
+    row = _conn().execute(
+        "SELECT * FROM generations WHERE id=?",
+        (generation_id,),
+    ).fetchone()
+    if row is None:
+        raise LookupError("答案版本不存在或已被删除。")
+    if row["status"] != "succeeded" or not str(row["answer"]):
+        raise ValueError("只有成功且有内容的答案版本可以设为当前版本。")
+    return _generation_from_row(row)
+
+
 def set_active_generation(generation_id: int) -> Generation:
     """Select one successful answer version and return the selected row."""
     db = _conn()
