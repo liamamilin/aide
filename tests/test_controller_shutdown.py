@@ -196,12 +196,30 @@ def test_global_text_hotkey_stages_capture_on_gui_thread(qtbot, controller, monk
 
 def test_repeated_screenshot_trigger_keeps_one_worker(controller, monkeypatch):
     worker = MagicMock()
+    worker.isFinished.return_value = False  # still running → second call ignored
     factory = MagicMock(return_value=worker)
     monkeypatch.setattr("ai_desktop.main.ScreenshotWorker", factory)
     controller._on_screenshot_hotkey()
     controller._on_screenshot_hotkey()
     factory.assert_called_once_with(controller)
     worker.start.assert_called_once()
+    worker.deleteLater.assert_not_called()
+    controller._screenshot_worker = None
+
+
+def test_stale_screenshot_worker_is_cleaned_up(controller, monkeypatch):
+    """A finished-but-uncleaned worker should be reset so the next hotkey works."""
+    stale = MagicMock()
+    stale.isFinished.return_value = True
+    controller._screenshot_worker = stale
+    fresh = MagicMock()
+    fresh.isFinished.return_value = False
+    factory = MagicMock(return_value=fresh)
+    monkeypatch.setattr("ai_desktop.main.ScreenshotWorker", factory)
+    controller._on_screenshot_hotkey()
+    stale.deleteLater.assert_called_once()
+    factory.assert_called_once_with(controller)
+    fresh.start.assert_called_once()
     controller._screenshot_worker = None
 
 

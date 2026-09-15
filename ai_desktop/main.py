@@ -374,14 +374,25 @@ class ChatController(QObject):
 
     def _on_global_screenshot_hotkey(self) -> None:
         """Bridge a native/global hotkey callback to the controller's Qt thread."""
+        logger.debug("Screenshot global hotkey callback fired")
         self._screenshot_hotkey_triggered.emit()
 
     def _on_screenshot_hotkey(self) -> None:
         """截图热键回调：后台启动框选截图，完成后附加到对话窗口"""
         if self._stopping or self._stopped:
+            logger.debug("Screenshot hotkey ignored (stopping/stopped)")
             return
         if self._screenshot_worker is not None:
-            return
+            if self._screenshot_worker.isFinished():
+                logger.warning(
+                    "Screenshot worker finished but not cleaned up, resetting"
+                )
+                worker = self._screenshot_worker
+                self._screenshot_worker = None
+                worker.deleteLater()
+            else:
+                logger.debug("Screenshot hotkey ignored (worker busy)")
+                return
         self.float_btn.set_listening(True)
         self._screenshot_worker = ScreenshotWorker(self)
         self._screenshot_worker.completed.connect(self._on_screenshot_result)
@@ -2175,19 +2186,36 @@ def main() -> None:
 
     # 权限重检定时器：用户在系统设置中授权后自动检测到，自动启动热键
     def _hotkey_running() -> bool:
-        """检测热键是否已运行（兼容 NSEventMonitor / HotkeyListener）"""
-        h = controller.hotkey
-        if hasattr(h, "_monitor"):
-            return h._monitor is not None
-        if hasattr(h, "_listener"):
-            return h._listener is not None
+        """检测两个热键后端是否均已运行（兼容 NSEventMonitor / HotkeyListener）"""
+        for h in (controller.hotkey, controller.hotkey_img):
+            if hasattr(h, "_monitor"):
+                if h._monitor is None:
+                    return False
+            elif hasattr(h, "_listener"):
+                if h._listener is None:
+                    return False
         return True
 
     _perm_recheck = QTimer()
     _recheck_count = 0
+    _perm_recheck_slow = False  # 权限已授予后降频到 60s
+
+    def _reinstall_hotkeys() -> None:
+        """重装 NSEvent 全局监听器，防止系统事件后监听器变陈旧。"""
+        for name, hk in (("hotkey", controller.hotkey),
+                         ("hotkey_img", controller.hotkey_img)):
+            running = (hasattr(hk, "_monitor") and hk._monitor is not None) or \
+                      (hasattr(hk, "_listener") and hk._listener is not None)
+            if not running:
+                continue
+            try:
+                hk.stop()
+                hk.start()
+            except Exception as e:
+                logger.warning("重装热键 %s 失败: %s", name, e)
 
     def _recheck_permissions() -> None:
-        nonlocal _perm_requested, _recheck_count
+        nonlocal _perm_requested, _recheck_count, _perm_recheck_slow
         _recheck_count += 1
         cur = _check_permissions()
         if cur.all_granted:
@@ -2202,7 +2230,13 @@ def main() -> None:
                     controller.hotkey_img.start()
                 except Exception as e:
                     logger.warning("截图热键启动失败: %s", e)
-            _perm_recheck.stop()
+            # 权限已就绪后降频到 60s，持续重装监听器防止变陈旧
+            if not _perm_recheck_slow:
+                _perm_recheck_slow = True
+                _perm_recheck.setInterval(60000)
+                logger.info("热键重装定时器降频到 60s")
+            else:
+                _reinstall_hotkeys()
             _perm_requested = False
         else:
             # 每 5 次（~15 秒）记录一次状态，避免日志刷屏
