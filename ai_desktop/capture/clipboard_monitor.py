@@ -279,6 +279,8 @@ class SelectionCaptureTask(QObject):
         self._cancelled = False
         self._terminal = False
         self._snapshot: PasteboardSnapshot | None = None
+        self._fallback_clipboard_text = ""
+        self._fallback_change_count: int | None = None
         self._capture_change_count: int | None = None
         self._clipboard_modified = False
         self._used_fallback = False
@@ -292,9 +294,21 @@ class SelectionCaptureTask(QObject):
         try:
             self._snapshot = self._pasteboard.snapshot()
         except Exception as exc:
-            logger.warning("Cannot preserve clipboard before capture: %s", exc)
-            self._complete("")
-            return
+            # Some clients (notably WeChat) publish private promised formats that
+            # cannot be read back. Keep the readable plain text as a best-effort
+            # fallback instead of dropping the entire selection capture.
+            logger.warning(
+                "Cannot preserve all clipboard formats; continuing with plain-text fallback: %s",
+                exc,
+            )
+            self._snapshot = None
+            try:
+                self._fallback_change_count = self._pasteboard.change_count()
+                reader = getattr(self._pasteboard, "read_plain_text", None)
+                if callable(reader):
+                    self._fallback_clipboard_text = reader() or ""
+            except Exception:
+                logger.warning("Cannot read plain-text clipboard fallback", exc_info=True)
         self._begin_copy()
 
     def cancel(self) -> None:
@@ -365,7 +379,10 @@ class SelectionCaptureTask(QObject):
             return
         snapshot = self._snapshot
         current_count = self._pasteboard.change_count()
-        if snapshot is not None and current_count == snapshot.change_count:
+        baseline_count = (
+            snapshot.change_count if snapshot is not None else self._fallback_change_count
+        )
+        if baseline_count is not None and current_count == baseline_count:
             if self._used_fallback:
                 self._restore_and_complete()
             else:
@@ -429,6 +446,25 @@ class SelectionCaptureTask(QObject):
             except Exception:
                 logger.warning("Failed to restore clipboard formats", exc_info=True)
             self._restoring = False
+            self._complete(self._pending_text)
+        elif (
+            self._clipboard_modified
+            and self._snapshot is None
+            and self._fallback_clipboard_text
+            and self._capture_change_count is not None
+            and not self._restoring
+        ):
+            # A private clipboard format could not be serialized. Restore the
+            # readable text only, and only if the selection copy still owns the
+            # pasteboard; never overwrite a newer user copy.
+            self._restoring = True
+            try:
+                if self._pasteboard.change_count() == self._capture_change_count:
+                    _write_clipboard(self._fallback_clipboard_text)
+                else:
+                    logger.info("Clipboard changed after partial capture; skipping text restore")
+            finally:
+                self._restoring = False
             self._complete(self._pending_text)
         elif not self._restoring:
             self._complete(self._pending_text)
