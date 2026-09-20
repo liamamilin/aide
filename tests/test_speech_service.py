@@ -10,6 +10,23 @@ def test_empty_selection_is_rejected(qtbot):
     assert signal.args == [False, "没有读取到选中文字，请重新选择后再试。"]
 
 
+def test_chinese_selection_is_rejected_with_clear_message(qtbot):
+    service = SpeechService()
+    with qtbot.waitSignal(service.completed, timeout=1000) as signal:
+        assert service.speak("这是一个中文句子。") is False
+    assert signal.args == [
+        False,
+        "当前朗读只支持英文，请只选择英文单词或句子。",
+    ]
+
+
+def test_mixed_chinese_and_english_selection_is_rejected(qtbot):
+    service = SpeechService()
+    with qtbot.waitSignal(service.completed, timeout=1000) as signal:
+        assert service.speak("Hello，这是一句英文。") is False
+    assert signal.args[0] is False
+
+
 def test_text_is_trimmed_and_length_limited(monkeypatch, qtbot):
     service = SpeechService()
     captured = {}

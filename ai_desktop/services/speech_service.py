@@ -21,6 +21,16 @@ from PyQt5.QtCore import QObject, QThread, pyqtSignal
 logger = logging.getLogger(__name__)
 
 
+def _contains_cjk(text: str) -> bool:
+    """Return whether text contains a CJK unified ideograph."""
+    return any(
+        "\u3400" <= char <= "\u4dbf"
+        or "\u4e00" <= char <= "\u9fff"
+        or "\uf900" <= char <= "\ufaff"
+        for char in text
+    )
+
+
 class SpeechUnavailableError(RuntimeError):
     """Raised when optional speech dependencies or the audio player are absent."""
 
@@ -157,6 +167,12 @@ class SpeechService(QObject):
         text = " ".join(text.split()).strip()
         if not text:
             self.completed.emit(False, "没有读取到选中文字，请重新选择后再试。")
+            return False
+        if _contains_cjk(text):
+            self.completed.emit(
+                False,
+                "当前朗读只支持英文，请只选择英文单词或句子。",
+            )
             return False
         # Keep accidental whole-page selections from creating an enormous job.
         if len(text) > 2000:
