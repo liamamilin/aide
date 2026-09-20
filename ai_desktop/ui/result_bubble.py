@@ -32,6 +32,7 @@ class ResultBubble(QWidget):
         self._kind = "success"
         self._anchor_side = "left"
         self._pressed = False
+        self._activate_on_click = True
         self._colors = theme.current()
         self._hide_timer = QTimer(self)
         self._hide_timer.setSingleShot(True)
@@ -113,13 +114,20 @@ class ResultBubble(QWidget):
         anchor: QRect,
         *,
         timeout_ms: int = 7000,
+        activate_on_click: bool = True,
     ) -> None:
-        if kind not in {"success", "error", "action"}:
+        if kind not in {"success", "error", "action", "progress"}:
             raise ValueError(f"Unsupported result bubble kind: {kind}")
         self._kind = kind
+        self._activate_on_click = activate_on_click
+        cursor = Qt.PointingHandCursor if activate_on_click else Qt.ArrowCursor
+        self.setCursor(cursor)
+        self._content.setCursor(cursor)
         self._title.setText(title)
         self._summary.setText(summary)
-        self._status.setText({"success": "✓", "error": "!", "action": "!"}[kind])
+        self._status.setText(
+            {"success": "✓", "error": "!", "action": "!", "progress": "…"}[kind]
+        )
         self.refresh_theme()
         self.position_near(anchor)
         self.show()
@@ -178,6 +186,7 @@ class ResultBubble(QWidget):
             "success": self._colors.success,
             "error": self._colors.error,
             "action": "#F5A623" if self._colors.window == theme.LIGHT.window else "#FFB340",
+            "progress": self._colors.accent,
         }[self._kind]
         self._content.setStyleSheet("background: transparent;")
         self._status.setStyleSheet(
@@ -242,6 +251,9 @@ class ResultBubble(QWidget):
 
     def _activate(self) -> None:
         if not self.isVisible():
+            return
+        if not self._activate_on_click:
+            self.dismiss()
             return
         self._hide_timer.stop()
         self.hide()

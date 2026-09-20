@@ -64,6 +64,19 @@ class TestFloatButtonSignals:
         with qtbot.waitSignal(button.read_selection_requested, timeout=1000):
             action.trigger()
 
+    def test_speaking_menu_offers_stop_and_disables_other_tasks(self, qtbot, button):
+        button.set_speaking(True)
+        menu = _get_context_menu(button)
+        actions = menu.actions()
+        stop_action = next(item for item in actions if item.text() == "■ 停止朗读")
+        screenshot_action = next(item for item in actions if item.data() == "screenshot")
+
+        assert button.toolTip() == "正在朗读 · 右键可停止"
+        assert stop_action.isEnabled()
+        assert not screenshot_action.isEnabled()
+        with qtbot.waitSignal(button.stop_speech_requested, timeout=1000):
+            stop_action.trigger()
+
     def test_screenshot_action_emits_signal(self, qtbot, button):
         menu = _get_context_menu(button)
         action = next(item for item in menu.actions() if item.data() == "screenshot")

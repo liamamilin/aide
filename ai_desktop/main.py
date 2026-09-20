@@ -197,6 +197,7 @@ class ChatController(QObject):
         self.float_btn.pet_mode_toggled.connect(self._on_pet_mode_toggled)
         self.float_btn.quick_action_requested.connect(self._on_pet_action_requested)
         self.float_btn.read_selection_requested.connect(self._on_read_selection_requested)
+        self.float_btn.stop_speech_requested.connect(self._on_stop_speech_requested)
         self.float_btn.screenshot_requested.connect(self._on_screenshot_hotkey)
         self.float_btn.placement_changed.connect(self._schedule_window_state_save)
         self.float_btn.placement_changed.connect(self._reposition_result_bubble)
@@ -236,6 +237,7 @@ class ChatController(QObject):
         self._speech = SpeechService(self)
         self._speech.completed.connect(self._on_speech_completed)
         self._speech.progress.connect(self._on_speech_progress)
+        self._speech_feedback_active = False
         self._shutdown_workers: list[QThread] = []
         self._stopping = False
         self._stopped = False
@@ -578,7 +580,7 @@ class ChatController(QObject):
             return
         if text.strip():
             logger.info("Read-selection requested, text length=%d", len(text))
-            self.float_btn.set_listening(True)
+            self.float_btn.set_speaking(True)
             self._speech.speak(text)
             return
         if self._worker is not None or self._selection_capture is not None:
@@ -592,13 +594,66 @@ class ChatController(QObject):
     @_safe_slot
     def _on_speech_progress(self, message: str) -> None:
         logger.info("Speech: %s", message)
+        self.float_btn.set_speaking(True)
+        title = "正在朗读" if message == "正在朗读…" else "准备朗读"
+        self._show_speech_feedback("progress", title, message, timeout_ms=60000)
+
+    @_safe_slot
+    def _on_stop_speech_requested(self) -> None:
+        self._speech.stop()
+        self.float_btn.set_speaking(False)
+        if self._speech_feedback_active:
+            self._result_bubble.dismiss()
+            self._speech_feedback_active = False
 
     @_safe_slot
     def _on_speech_completed(self, success: bool, error: str) -> None:
         self.float_btn.set_listening(False)
-        if self._stopping or self._stopped or success or error == "朗读已停止。":
+        self.float_btn.set_speaking(False)
+        if self._stopping or self._stopped:
             return
-        self._show_notice(QMessageBox.Warning, "朗读选区", error)
+        if success:
+            if self._speech_feedback_active:
+                self._result_bubble.dismiss()
+                self._speech_feedback_active = False
+            self.float_btn.show_result(True)
+            return
+        if error == "朗读已停止。":
+            if self._speech_feedback_active:
+                self._result_bubble.dismiss()
+                self._speech_feedback_active = False
+            return
+        if not self._show_speech_feedback(
+            "error", "无法朗读", error, timeout_ms=7000
+        ):
+            self._tray.showMessage(
+                "朗读选区",
+                error,
+                QSystemTrayIcon.Warning,
+                5000,
+            )
+
+    def _show_speech_feedback(
+        self,
+        kind: str,
+        title: str,
+        summary: str,
+        *,
+        timeout_ms: int,
+    ) -> bool:
+        if not self.float_btn.isVisible() or not self.float_btn.pet_enabled:
+            return False
+        self._speech_feedback_active = True
+        self._result_bubble.show_result(
+            kind,
+            title,
+            summary,
+            self.float_btn.frameGeometry(),
+            timeout_ms=timeout_ms,
+            activate_on_click=False,
+        )
+        pin_to_all_spaces(self._result_bubble)
+        return True
 
     @_safe_slot
     def _on_selection_captured(self, task: SelectionCaptureTask, text: str) -> None:
@@ -2133,6 +2188,7 @@ class ChatController(QObject):
             timeout_ms = 9000
 
         summary = ResultBubble.summarize(source, fallback)
+        self._speech_feedback_active = False
         self._result_bubble.show_result(
             kind,
             title,

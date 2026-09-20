@@ -295,6 +295,7 @@ class SpeechService(QObject):
         path = Path(raw_path)
         try:
             sf.write(path, np.concatenate(chunks), 24000)
+            worker.progress.emit("正在朗读…")
             process = subprocess.Popen(
                 ["afplay", str(path)],
                 stdout=subprocess.DEVNULL,

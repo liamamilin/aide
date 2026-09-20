@@ -133,6 +133,7 @@ class FloatButton(QPushButton):
     pet_mode_toggled = pyqtSignal(bool)
     quick_action_requested = pyqtSignal(str)
     read_selection_requested = pyqtSignal()
+    stop_speech_requested = pyqtSignal()
     screenshot_requested = pyqtSignal()
     placement_changed = pyqtSignal()
 
@@ -152,6 +153,7 @@ class FloatButton(QPushButton):
         self._reduce_motion = bool(reduce_motion)
         self._pet_size = self._normalize_pet_size(pet_size)
         self._listening = False
+        self._speaking = False
         self._responding: bool = False
         self._result_state: str | None = None
         self._hovered = False
@@ -354,7 +356,7 @@ class FloatButton(QPushButton):
             self._draw_success_sparkles(painter, px)
 
         if state != "idle":
-            bubble_width = px(38 if state == "working" else 30)
+            bubble_width = px(38 if state in {"working", "speaking"} else 30)
             bubble = QRectF(
                 self.width() - bubble_width - px(3),
                 px(3),
@@ -379,6 +381,27 @@ class FloatButton(QPushButton):
                     round(center_x), round(bubble.bottom() - px(7)),
                     round(center_x + px(4)), round(bubble.bottom() - px(11)),
                 )
+            elif state == "speaking":
+                active_bar = (
+                    None if self._reduce_motion else (self._animation_phase // 2) % 3
+                )
+                center_y = bubble.center().y()
+                for index, base_height in enumerate((7, 12, 8)):
+                    height = px(
+                        base_height
+                        if active_bar is None
+                        else base_height + (4 if index == active_bar else 0)
+                    )
+                    x = bubble.left() + bubble.width() / 2 + (index - 1) * px(7)
+                    painter.setPen(
+                        QPen(QColor(20, 142, 235, 230), max(1.5, 2.0 * scale))
+                    )
+                    painter.drawLine(
+                        round(x),
+                        round(center_y - height / 2),
+                        round(x),
+                        round(center_y + height / 2),
+                    )
             elif state == "working":
                 active_dot = (
                     None if self._reduce_motion else (self._animation_phase // 2) % 3
@@ -436,6 +459,8 @@ class FloatButton(QPushButton):
             return (wave * 0.7, -abs(wave) * 0.8, -wave * 1.6, 1.005)
         if state == "working":
             return (0.0, wave * 1.8, 0.0, 1.0 + (wave + 1.0) * 0.004)
+        if state == "speaking":
+            return (0.0, wave * 0.7, 0.0, 1.0 + abs(wave) * 0.002)
         if state == "success":
             bounce = -abs(math.sin(self._animation_phase * math.pi / 8)) * 4.0
             return (0.0, bounce, 0.0, 1.0 + max(0.0, -bounce) * 0.006)
@@ -538,7 +563,7 @@ class FloatButton(QPushButton):
         painter.drawEllipse(bounds)
 
     def _draw_working_glow(self, painter: QPainter, state: str) -> None:
-        if state != "working":
+        if state not in {"working", "speaking"}:
             return
         pulse = (math.sin(self._animation_phase * math.pi / 6) + 1.0) / 2.0
         painter.setPen(Qt.NoPen)
@@ -562,6 +587,8 @@ class FloatButton(QPushButton):
     def _effective_state(self) -> str:
         if self._responding:
             return "working"
+        if self._speaking:
+            return "speaking"
         if self._listening:
             return "listening"
         if self._result_state:
@@ -572,6 +599,7 @@ class FloatButton(QPushButton):
         return {
             "idle": "AI 桌面宠物 · 点击对话，拖动放置",
             "listening": "正在读取选中内容…",
+            "speaking": "正在朗读 · 右键可停止",
             "working": "AI 正在回复…",
             "success": "回复已完成",
             "error": "这次没有完成，可点击查看",
@@ -657,6 +685,18 @@ class FloatButton(QPushButton):
         if listening and not self._listening:
             self._animation_phase = 0
         self._listening = listening
+        self.setToolTip(self._state_tooltip())
+        self.update()
+
+    def set_speaking(self, speaking: bool) -> None:
+        """设置语音生成或播放状态。"""
+        if speaking and not self._speaking:
+            self._animation_phase = 0
+        self._speaking = speaking
+        if speaking:
+            self._result_timer.stop()
+            self._result_state = None
+        self._sync_animation_timer()
         self.setToolTip(self._state_tooltip())
         self.update()
 
@@ -762,11 +802,16 @@ class FloatButton(QPushButton):
     def _create_context_menu(self) -> QMenu:
         menu = QMenu(self)
         menu.setStyleSheet(styles.menu_style())
-        busy = self._responding or self._listening
-        read_action = menu.addAction("🔊 朗读选区")
-        read_action.setEnabled(not busy)
-        read_action.setToolTip("朗读其他应用中当前选中的文字")
-        read_action.triggered.connect(self.read_selection_requested.emit)
+        busy = self._responding or self._listening or self._speaking
+        if self._speaking:
+            read_action = menu.addAction("■ 停止朗读")
+            read_action.setToolTip("停止当前语音")
+            read_action.triggered.connect(self.stop_speech_requested.emit)
+        else:
+            read_action = menu.addAction("🔊 朗读选区")
+            read_action.setEnabled(not busy)
+            read_action.setToolTip("朗读其他应用中当前选中的英文")
+            read_action.triggered.connect(self.read_selection_requested.emit)
         menu.addSeparator()
         screenshot_action = menu.addAction("截图到对话…")
         screenshot_action.setData("screenshot")
