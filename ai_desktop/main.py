@@ -40,6 +40,7 @@ from ai_desktop.llm.streaming_worker import StreamingChatWorker
 from ai_desktop.services.action_service import Action, ActionService
 from ai_desktop.services.model_profiles import ModelProfile, ModelProfileManager
 from ai_desktop.services.ocr_service import AsyncOCRService, OCRResult, OCRStatus
+from ai_desktop.services.speech_service import SpeechService
 from ai_desktop.settings_manager import SettingsManager
 from ai_desktop.ui import styles
 from ai_desktop.ui.agent_editor import AgentDef, AgentEditor
@@ -195,6 +196,7 @@ class ChatController(QObject):
         self.float_btn.auto_hide_toggled.connect(self._on_auto_hide_toggled)
         self.float_btn.pet_mode_toggled.connect(self._on_pet_mode_toggled)
         self.float_btn.quick_action_requested.connect(self._on_pet_action_requested)
+        self.float_btn.read_selection_requested.connect(self._on_read_selection_requested)
         self.float_btn.screenshot_requested.connect(self._on_screenshot_hotkey)
         self.float_btn.placement_changed.connect(self._schedule_window_state_save)
         self.float_btn.placement_changed.connect(self._reposition_result_bubble)
@@ -221,6 +223,7 @@ class ChatController(QObject):
         self._selection_delay_timer.timeout.connect(self._start_selection_capture)
         self._selection_capture: SelectionCaptureTask | None = None
         self._pending_pet_action_id: str | None = None
+        self._pending_read_selection = False
 
         # 全局快捷键：⌘⌃S → 截图并附加到对话
         self.hotkey_img = self._create_hotkey_backend()
@@ -230,6 +233,9 @@ class ChatController(QObject):
         self._ocr = AsyncOCRService(self)
         self._ocr.completed.connect(self._on_ocr_completed)
         self._ocr_image_path: str | None = None
+        self._speech = SpeechService(self)
+        self._speech.completed.connect(self._on_speech_completed)
+        self._speech.progress.connect(self._on_speech_progress)
         self._shutdown_workers: list[QThread] = []
         self._stopping = False
         self._stopped = False
@@ -319,6 +325,8 @@ class ChatController(QObject):
             notice.close()
         self._selection_delay_timer.stop()
         self._pending_pet_action_id = None
+        for worker in self._speech.shutdown():
+            self._track_shutdown_worker(worker)
         if self._selection_capture is not None:
             self._selection_capture.cancel()
         self._stop_worker(show_cancelled=False)
@@ -564,6 +572,35 @@ class ChatController(QObject):
         self._start_selection_capture()
 
     @_safe_slot
+    def _on_read_selection_requested(self, text: str = "") -> None:
+        """朗读选区入口，统一接收应用内和其他应用的选中文本。"""
+        if self._stopping or self._stopped:
+            return
+        if text.strip():
+            logger.info("Read-selection requested, text length=%d", len(text))
+            self.float_btn.set_listening(True)
+            self._speech.speak(text)
+            return
+        if self._worker is not None or self._selection_capture is not None:
+            self._show_dialog()
+            if self._dialog:
+                self._dialog.flash_busy()
+            return
+        self._pending_read_selection = True
+        self._start_selection_capture()
+
+    @_safe_slot
+    def _on_speech_progress(self, message: str) -> None:
+        logger.info("Speech: %s", message)
+
+    @_safe_slot
+    def _on_speech_completed(self, success: bool, error: str) -> None:
+        self.float_btn.set_listening(False)
+        if self._stopping or self._stopped or success or error == "朗读已停止。":
+            return
+        self._show_notice(QMessageBox.Warning, "朗读选区", error)
+
+    @_safe_slot
     def _on_selection_captured(self, task: SelectionCaptureTask, text: str) -> None:
         if task is not self._selection_capture:
             task.deleteLater()
@@ -571,9 +608,23 @@ class ChatController(QObject):
         self._selection_capture = None
         action_id = self._pending_pet_action_id
         self._pending_pet_action_id = None
+        read_selection = self._pending_read_selection
+        self._pending_read_selection = False
         self.float_btn.set_listening(False)
         task.deleteLater()
         if self._stopping or self._stopped:
+            self._finish_stop_if_ready()
+            return
+        if read_selection:
+            logger.info("Read-selection captured text length=%d", len(text))
+            if text.strip():
+                self._on_read_selection_requested(text)
+            else:
+                self._show_notice(
+                    QMessageBox.Information,
+                    "朗读选区",
+                    "没有读取到选中文字，请重新框选后再试。",
+                )
             self._finish_stop_if_ready()
             return
         if action_id:
@@ -629,6 +680,7 @@ class ChatController(QObject):
             self._dialog.geometry_changed.connect(self._schedule_window_state_save)
             self._dialog.message_sent.connect(self._on_user_message)
             self._dialog.screenshot_requested.connect(self._on_screenshot_hotkey)
+            self._dialog.read_selection_requested.connect(self._on_read_selection_requested)
             self._dialog.ocr_requested.connect(self._on_ocr_requested)
             self._dialog.ocr_cancel_requested.connect(self._on_ocr_cancel_requested)
             self._dialog.pending_images_changed.connect(

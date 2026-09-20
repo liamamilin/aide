@@ -160,6 +160,14 @@ class TestChatDialogState:
         )
         assert html_found, "Assistant message should contain rendered HTML"
 
+    def test_message_bubble_forwards_read_selection(self, qtbot, dialog):
+        dialog.add_assistant_message("hello world")
+        labels = dialog._msg_container.findChildren(object)
+        label = next(item for item in labels if hasattr(item, "read_selection_requested"))
+        with qtbot.waitSignal(dialog.read_selection_requested, timeout=1000) as signal:
+            label.read_selection_requested.emit("hello")
+        assert signal.args == ["hello"]
+
     def test_stream_lifecycle(self, qtbot, dialog):
         """begin → append_chunk → finalize → bubble shows final text."""
         dialog.begin_assistant_stream()

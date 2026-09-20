@@ -132,6 +132,7 @@ class FloatButton(QPushButton):
     auto_hide_toggled = pyqtSignal(bool)
     pet_mode_toggled = pyqtSignal(bool)
     quick_action_requested = pyqtSignal(str)
+    read_selection_requested = pyqtSignal()
     screenshot_requested = pyqtSignal()
     placement_changed = pyqtSignal()
 
@@ -762,6 +763,11 @@ class FloatButton(QPushButton):
         menu = QMenu(self)
         menu.setStyleSheet(styles.menu_style())
         busy = self._responding or self._listening
+        read_action = menu.addAction("🔊 朗读选区")
+        read_action.setEnabled(not busy)
+        read_action.setToolTip("朗读其他应用中当前选中的文字")
+        read_action.triggered.connect(self.read_selection_requested.emit)
+        menu.addSeparator()
         screenshot_action = menu.addAction("截图到对话…")
         screenshot_action.setData("screenshot")
         screenshot_action.setEnabled(not busy)

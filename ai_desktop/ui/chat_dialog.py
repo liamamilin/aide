@@ -107,6 +107,34 @@ class _ClickableImage(QLabel):
         super().mousePressEvent(event)
 
 
+class _SelectableMessageLabel(QLabel):
+    """消息文本标签，提供面向选区的朗读入口。"""
+
+    read_selection_requested = pyqtSignal(str)
+
+    def _select_all(self) -> None:
+        self.setSelection(0, len(self.text()))
+
+    def contextMenuEvent(self, event) -> None:
+        selected = self.selectedText().strip()
+        menu = QMenu(self)
+        menu.setStyleSheet(styles.menu_style())
+        copy_action = menu.addAction("Copy")
+        copy_action.setEnabled(bool(selected))
+        copy_action.triggered.connect(
+            lambda: QApplication.clipboard().setText(self.selectedText())
+        )
+        menu.addAction("Select All", self._select_all)
+        menu.addSeparator()
+        read_action = menu.addAction("🔊 朗读选区")
+        read_action.setEnabled(bool(selected))
+        read_action.setToolTip("朗读当前选中的文字")
+        read_action.triggered.connect(
+            lambda _checked=False, text=selected: self.read_selection_requested.emit(text)
+        )
+        menu.exec_(event.globalPos())
+
+
 class ChatDialog(FramelessDragMixin, QWidget):
     message_sent = pyqtSignal(str, list)     # (text, image_paths)
     screenshot_requested = pyqtSignal()
@@ -126,6 +154,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
     ocr_requested = pyqtSignal(str)
     ocr_cancel_requested = pyqtSignal()
     pending_images_changed = pyqtSignal(list)
+    read_selection_requested = pyqtSignal(str)
 
     def __init__(self, agents: list[Agent], active_agent: Agent,
                  models: list[str] | None = None, active_model: str = "",
@@ -1543,12 +1572,13 @@ class ChatDialog(FramelessDragMixin, QWidget):
         wl = QHBoxLayout(wrapper)
         wl.setContentsMargins(0, 0, 0, 0)
 
-        lbl = QLabel()
+        lbl = _SelectableMessageLabel()
         lbl.setObjectName("message_bubble")
         lbl.setWordWrap(True)
         lbl.setMaximumWidth(max(280, min(440, int(self.width() * 0.78))))
         lbl.setTextFormat(Qt.RichText if is_html else Qt.PlainText)
         lbl.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse)
+        lbl.read_selection_requested.connect(self.read_selection_requested.emit)
 
         if is_html and code_map:
             lbl.linkActivated.connect(self._on_link_activated)

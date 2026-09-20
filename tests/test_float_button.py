@@ -50,12 +50,19 @@ class TestFloatButtonSignals:
         menu = _get_context_menu(button)
         assert menu is not None
         action_texts = [a.text() for a in menu.actions()]
-        assert action_texts[:2] == ["截图到对话…", ""]
-        assert action_texts[2:6] == ["最近快捷动作", "⚡  翻译", "⚡  解释", "⚡  改写"]
+        assert action_texts[:3] == ["🔊 朗读选区", "", "截图到对话…"]
+        assert action_texts[3:7] == ["", "最近快捷动作", "⚡  翻译", "⚡  解释"]
+        assert action_texts[7] == "⚡  改写"
         assert "设置…" in action_texts
         assert "桌面宠物形态" in action_texts
         assert "隐藏桌面宠物" in action_texts
         assert "退出" in action_texts
+
+    def test_read_selection_action_emits_signal(self, qtbot, button):
+        menu = _get_context_menu(button)
+        action = next(item for item in menu.actions() if item.text() == "🔊 朗读选区")
+        with qtbot.waitSignal(button.read_selection_requested, timeout=1000):
+            action.trigger()
 
     def test_screenshot_action_emits_signal(self, qtbot, button):
         menu = _get_context_menu(button)

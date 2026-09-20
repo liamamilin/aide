@@ -1,0 +1,5 @@
+# Optional selected-text speech support (English-first Kokoro backend).
+# Kept separate from requirements.txt because the local model runtime is large.
+kokoro>=0.9.4,<1.0.0
+soundfile>=0.12.1,<1.0.0
+misaki[en]>=0.9.0,<1.0.0
