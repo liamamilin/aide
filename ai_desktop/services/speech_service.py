@@ -183,6 +183,27 @@ class SpeechService(QObject):
                     "未安装朗读依赖，请执行：python3 -m pip install -r requirements-tts.txt"
                 ) from exc
             try:
+                import importlib.util
+
+                import spacy
+
+                if importlib.util.find_spec("en_core_web_sm") is None:
+                    raise SpeechUnavailableError("朗读英文模型未打包，请重新构建应用。")
+                # PyInstaller may include the model package but omit wheel
+                # metadata in an older bundle. Prevent Misaki from calling
+                # spacy.cli.download(), which raises SystemExit in a GUI app.
+                if not spacy.util.is_package("en_core_web_sm"):
+                    is_package = spacy.util.is_package
+
+                    def _is_package(name):
+                        return name == "en_core_web_sm" or is_package(name)
+
+                    spacy.util.is_package = _is_package
+            except SpeechUnavailableError:
+                raise
+            except Exception:
+                logger.debug("Unable to prepare the bundled spaCy model", exc_info=True)
+            try:
                 import torch
 
                 # Keep first-use synthesis predictable on laptops and avoid

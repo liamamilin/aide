@@ -2,6 +2,7 @@
 """PyInstaller spec for AI 桌面助手 — macOS .app bundle"""
 import os
 import runpy
+from importlib.metadata import distribution
 
 from PyInstaller.utils.hooks import (
     collect_data_files,
@@ -11,6 +12,22 @@ from PyInstaller.utils.hooks import (
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(SPEC)), ".."))
 VERSION = runpy.run_path(os.path.join(ROOT, "ai_desktop", "version.py"))["__version__"]
+
+
+def _distribution_files(name):
+    """Copy wheel metadata needed by runtime package discovery."""
+    try:
+        info = distribution(name)._path
+    except Exception:
+        return []
+    return [
+        (str(path), info.name)
+        for path in info.iterdir()
+        if path.is_file()
+    ]
+
+
+EN_CORE_WEB_SM_METADATA = _distribution_files("en-core-web-sm")
 
 a = Analysis(
     [os.path.join(ROOT, "ai_desktop", "main.py")],
@@ -29,6 +46,9 @@ a = Analysis(
         *collect_data_files("espeakng_loader"),
         # spaCy's English tokenizer/model is loaded lazily by Kokoro/Misaki.
         *collect_data_files("en_core_web_sm"),
+        # spaCy determines whether a model is installed through its wheel
+        # metadata; frozen apps do not include dist-info automatically.
+        *EN_CORE_WEB_SM_METADATA,
     ],
     binaries=[
         *collect_dynamic_libs("espeakng_loader"),
