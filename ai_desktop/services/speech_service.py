@@ -50,19 +50,30 @@ class SpeechWorker(QThread):
         return self._cancelled.is_set() or self.isInterruptionRequested()
 
     def run(self) -> None:
+        success = False
+        message = ""
         try:
             self.service._synthesize_and_play(self.text, self)
-        except Exception as exc:
             if self.cancelled:
-                self.completed.emit(False, "朗读已停止。")
+                message = "朗读已停止。"
+            else:
+                success = True
+        except BaseException as exc:
+            # A Python exception escaping QThread.run() is treated by PyQt as
+            # an unhandled thread exception and may call Py_Exit.  This is
+            # especially dangerous while Torch is releasing tensors.  Keep
+            # the exception entirely inside the worker and report it through
+            # the normal Qt signal path instead.
+            if self.cancelled:
+                message = "朗读已停止。"
             else:
                 logger.warning("Speech request failed: %s", exc, exc_info=True)
-                self.completed.emit(False, str(exc) or "朗读失败。")
-        else:
-            if self.cancelled:
-                self.completed.emit(False, "朗读已停止。")
-            else:
-                self.completed.emit(True, "")
+                message = str(exc) or "朗读失败。"
+        try:
+            self.completed.emit(success, message)
+        except BaseException:
+            # Completion slots must never escape the native QThread boundary.
+            logger.exception("Speech completion callback failed")
 
 
 class SpeechService(QObject):
@@ -78,6 +89,7 @@ class SpeechService(QObject):
         super().__init__(parent)
         self._worker: SpeechWorker | None = None
         self._retired: list[SpeechWorker] = []
+        self._pending_text: str | None = None
 
     @property
     def active(self) -> bool:
@@ -92,16 +104,28 @@ class SpeechService(QObject):
         # Keep accidental whole-page selections from creating an enormous job.
         if len(text) > 2000:
             text = text[:2000].rstrip() + "…"
-        self.stop()
+        # Do not overlap Torch/Kokoro workers.  A second request cancels the
+        # current one and is started only after its QThread has fully exited;
+        # starting a replacement immediately can leave two native Torch
+        # runtimes tearing down concurrently and crash the frozen app.
+        if self._worker is not None or any(item.isRunning() for item in self._retired):
+            self._pending_text = text
+            if self._worker is not None:
+                self._worker.cancel()
+            return True
+        self._start_worker(text)
+        return True
+
+    def _start_worker(self, text: str) -> None:
         worker = SpeechWorker(self, text, self)
         self._worker = worker
         worker.completed.connect(self.completed.emit)
         worker.progress.connect(self.progress.emit)
         worker.finished.connect(self._on_finished)
         worker.start()
-        return True
 
     def stop(self) -> SpeechWorker | None:
+        self._pending_text = None
         worker = self._worker
         if worker is None:
             return None
@@ -124,6 +148,14 @@ class SpeechService(QObject):
         elif worker is self._worker:
             self._worker = None
         worker.deleteLater()
+        if (
+            self._pending_text
+            and self._worker is None
+            and not any(item.isRunning() for item in self._retired)
+        ):
+            text = self._pending_text
+            self._pending_text = None
+            self._start_worker(text)
 
     @classmethod
     def _get_pipeline(cls, progress):
@@ -134,6 +166,17 @@ class SpeechService(QObject):
                 return cls._pipeline
             progress("正在加载英语朗读模型，首次使用需要一点时间…")
             try:
+                # Limit native parallelism before importing Torch/OpenMP.  The
+                # frozen macOS app otherwise creates a large worker fan-out,
+                # making cancellation and interpreter teardown fragile.
+                for key in (
+                    "OMP_NUM_THREADS",
+                    "OPENBLAS_NUM_THREADS",
+                    "MKL_NUM_THREADS",
+                    "VECLIB_MAXIMUM_THREADS",
+                    "NUMEXPR_NUM_THREADS",
+                ):
+                    os.environ.setdefault(key, "1")
                 from kokoro import KPipeline
             except ImportError as exc:
                 raise SpeechUnavailableError(
@@ -144,7 +187,7 @@ class SpeechService(QObject):
 
                 # Keep first-use synthesis predictable on laptops and avoid
                 # creating a large BLAS thread fan-out inside the GUI app.
-                torch.set_num_threads(min(4, os.cpu_count() or 1))
+                torch.set_num_threads(1)
                 torch.set_num_interop_threads(1)
             except Exception:
                 logger.debug("Unable to tune Torch thread counts", exc_info=True)

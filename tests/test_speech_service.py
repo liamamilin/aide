@@ -37,3 +37,52 @@ def test_worker_uses_large_native_stack_for_torch():
     worker = SpeechWorker(SpeechService(), "hello")
     assert worker.stackSize() >= 16 * 1024 * 1024
     worker.deleteLater()
+
+
+def test_second_request_cancels_without_overlapping_workers(monkeypatch):
+    service = SpeechService()
+    workers = []
+
+    class FakeWorker:
+        def __init__(self, _service, text, _parent):
+            self.text = text
+            self.cancelled = False
+            self.completed = _Signal()
+            self.progress = _Signal()
+            self.finished = _Signal()
+            workers.append(self)
+
+        def start(self):
+            pass
+
+        def cancel(self):
+            self.cancelled = True
+
+        def isRunning(self):
+            return not self.cancelled
+
+    class _Signal:
+        def connect(self, _slot):
+            pass
+
+    monkeypatch.setattr("ai_desktop.services.speech_service.SpeechWorker", FakeWorker)
+    assert service.speak("first") is True
+    assert service.speak("second") is True
+    assert len(workers) == 1
+    assert workers[0].cancelled is True
+    assert service._pending_text == "second"
+
+
+def test_worker_contains_base_exception_without_leaking_from_qthread():
+    service = SpeechService()
+    worker = SpeechWorker(service, "hello")
+    messages = []
+    worker.completed.connect(lambda success, message: messages.append((success, message)))
+
+    def fail(_text, _worker):
+        raise KeyboardInterrupt("synthetic worker failure")
+
+    service._synthesize_and_play = fail
+    worker.run()
+    assert messages == [(False, "synthetic worker failure")]
+    worker.deleteLater()
