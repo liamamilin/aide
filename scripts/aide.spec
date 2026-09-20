@@ -44,6 +44,10 @@ a = Analysis(
         # espeakng_loader supplies the pronunciation engine used by Misaki.
         # Its espeak-ng-data directory is required at runtime by the frozen app.
         *collect_data_files("espeakng_loader"),
+        # Misaki loads its English pronunciation dictionaries with
+        # importlib.resources at runtime; PyInstaller does not infer them from
+        # the lazy Kokoro import.
+        *collect_data_files("misaki"),
         # spaCy's English tokenizer/model is loaded lazily by Kokoro/Misaki.
         *collect_data_files("en_core_web_sm"),
         # spaCy determines whether a model is installed through its wheel
@@ -71,6 +75,7 @@ a = Analysis(
         'Vision',
         'PyObjCTools',
         'espeakng_loader',
+        'misaki',
         'en_core_web_sm',
         *collect_submodules("en_core_web_sm"),
     ],

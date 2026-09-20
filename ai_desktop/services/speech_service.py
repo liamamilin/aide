@@ -25,6 +25,63 @@ class SpeechUnavailableError(RuntimeError):
     """Raised when optional speech dependencies or the audio player are absent."""
 
 
+def _prepare_bundled_english_model() -> None:
+    """Make the bundled spaCy English model discoverable to Misaki."""
+    try:
+        import importlib.util
+
+        import spacy
+
+        if importlib.util.find_spec("en_core_web_sm") is None:
+            raise SpeechUnavailableError("朗读英文模型未打包，请重新构建应用。")
+        # PyInstaller may include the model package but omit wheel metadata in
+        # an older bundle. Prevent Misaki from calling spacy.cli.download(),
+        # which raises SystemExit in a GUI app.
+        if not spacy.util.is_package("en_core_web_sm"):
+            is_package = spacy.util.is_package
+
+            def _is_package(name):
+                return name == "en_core_web_sm" or is_package(name)
+
+            spacy.util.is_package = _is_package
+    except SpeechUnavailableError:
+        raise
+    except Exception:
+        logger.debug("Unable to prepare the bundled spaCy model", exc_info=True)
+
+
+def probe_speech_runtime() -> dict[str, str]:
+    """Initialize packaged English G2P without loading or playing the TTS model."""
+    _limit_native_parallelism()
+    try:
+        from kokoro import KPipeline
+    except ImportError as exc:
+        raise SpeechUnavailableError("朗读运行时未打包。") from exc
+    _prepare_bundled_english_model()
+    # model=False avoids loading the 82M speech model. Constructing English
+    # G2P still reads all packaged Misaki, spaCy, language-tags and espeak data.
+    pipeline = KPipeline(
+        lang_code="a",
+        repo_id="hexgrad/Kokoro-82M",
+        model=False,
+    )
+    if pipeline.g2p is None:
+        raise SpeechUnavailableError("英文朗读运行时初始化失败。")
+    return {"engine": "kokoro", "language": "en-us", "status": "ready"}
+
+
+def _limit_native_parallelism() -> None:
+    """Keep Torch/OpenMP initialization predictable in the frozen app."""
+    for key in (
+        "OMP_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    ):
+        os.environ.setdefault(key, "1")
+
+
 class SpeechWorker(QThread):
     """Generate one utterance and play it without blocking Qt's GUI thread."""
 
@@ -169,40 +226,13 @@ class SpeechService(QObject):
                 # Limit native parallelism before importing Torch/OpenMP.  The
                 # frozen macOS app otherwise creates a large worker fan-out,
                 # making cancellation and interpreter teardown fragile.
-                for key in (
-                    "OMP_NUM_THREADS",
-                    "OPENBLAS_NUM_THREADS",
-                    "MKL_NUM_THREADS",
-                    "VECLIB_MAXIMUM_THREADS",
-                    "NUMEXPR_NUM_THREADS",
-                ):
-                    os.environ.setdefault(key, "1")
+                _limit_native_parallelism()
                 from kokoro import KPipeline
             except ImportError as exc:
                 raise SpeechUnavailableError(
                     "未安装朗读依赖，请执行：python3 -m pip install -r requirements-tts.txt"
                 ) from exc
-            try:
-                import importlib.util
-
-                import spacy
-
-                if importlib.util.find_spec("en_core_web_sm") is None:
-                    raise SpeechUnavailableError("朗读英文模型未打包，请重新构建应用。")
-                # PyInstaller may include the model package but omit wheel
-                # metadata in an older bundle. Prevent Misaki from calling
-                # spacy.cli.download(), which raises SystemExit in a GUI app.
-                if not spacy.util.is_package("en_core_web_sm"):
-                    is_package = spacy.util.is_package
-
-                    def _is_package(name):
-                        return name == "en_core_web_sm" or is_package(name)
-
-                    spacy.util.is_package = _is_package
-            except SpeechUnavailableError:
-                raise
-            except Exception:
-                logger.debug("Unable to prepare the bundled spaCy model", exc_info=True)
+            _prepare_bundled_english_model()
             try:
                 import torch
 

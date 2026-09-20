@@ -2191,6 +2191,11 @@ def main() -> None:
 
         print(json.dumps(asdict(probe_ocr_runtime()), ensure_ascii=False))
         return
+    if "--speech-runtime" in sys.argv[1:]:
+        from ai_desktop.services.speech_service import probe_speech_runtime
+
+        print(json.dumps(probe_speech_runtime(), ensure_ascii=False))
+        return
 
     log_util.setup()
 
