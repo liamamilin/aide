@@ -3,6 +3,8 @@
 import os
 import runpy
 
+from PyInstaller.utils.hooks import collect_data_files
+
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(SPEC)), ".."))
 VERSION = runpy.run_path(os.path.join(ROOT, "ai_desktop", "version.py"))["__version__"]
 
@@ -16,6 +18,9 @@ a = Analysis(
         (os.path.join(ROOT, "ai_desktop", "桌面宠物.png"), "ai_desktop"),
         (os.path.join(ROOT, "ai_desktop", "pet_frames", "idle.png"), "ai_desktop/pet_frames"),
         (os.path.join(ROOT, "ai_desktop", "pet_frames", "hover.png"), "ai_desktop/pet_frames"),
+        # Kokoro/Misaki uses language-tags JSON data at runtime.  PyInstaller
+        # does not collect this package data automatically.
+        *collect_data_files("language_tags"),
     ],
     hiddenimports=[
         'PyQt5.QtNetwork',
