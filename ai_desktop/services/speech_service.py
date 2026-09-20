@@ -33,6 +33,10 @@ class SpeechWorker(QThread):
 
     def __init__(self, service: "SpeechService", text: str, parent: QObject | None = None):
         super().__init__(parent)
+        # Kokoro's Torch/NumPy path needs more native stack than Qt's small
+        # default QThread stack on macOS.  Without this, BLAS can hit the
+        # guard page during the first model load and terminate the app.
+        self.setStackSize(16 * 1024 * 1024)
         self.service = service
         self.text = text
         self._cancelled = threading.Event()
@@ -135,6 +139,15 @@ class SpeechService(QObject):
                 raise SpeechUnavailableError(
                     "未安装朗读依赖，请执行：python3 -m pip install -r requirements-tts.txt"
                 ) from exc
+            try:
+                import torch
+
+                # Keep first-use synthesis predictable on laptops and avoid
+                # creating a large BLAS thread fan-out inside the GUI app.
+                torch.set_num_threads(min(4, os.cpu_count() or 1))
+                torch.set_num_interop_threads(1)
+            except Exception:
+                logger.debug("Unable to tune Torch thread counts", exc_info=True)
             # `a` is Kokoro's American English pipeline.  Keep this explicit:
             # the first release is intentionally English-first.
             cls._pipeline = KPipeline(lang_code="a")

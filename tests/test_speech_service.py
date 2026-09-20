@@ -1,6 +1,6 @@
 """Tests for the optional, asynchronous selected-text speech service."""
 
-from ai_desktop.services.speech_service import SpeechService
+from ai_desktop.services.speech_service import SpeechService, SpeechWorker
 
 
 def test_empty_selection_is_rejected(qtbot):
@@ -31,3 +31,9 @@ def test_text_is_trimmed_and_length_limited(monkeypatch, qtbot):
     monkeypatch.setattr("ai_desktop.services.speech_service.SpeechWorker", FakeWorker)
     assert service.speak("  hello   world  ") is True
     assert captured["text"] == "hello world"
+
+
+def test_worker_uses_large_native_stack_for_torch():
+    worker = SpeechWorker(SpeechService(), "hello")
+    assert worker.stackSize() >= 16 * 1024 * 1024
+    worker.deleteLater()
