@@ -12,7 +12,7 @@ from ai_desktop.ui import styles
 from ai_desktop.utils.paths import resource_path
 
 _ICON_PATH = next(
-    (resource_path("ai_desktop", f) for f in ("图标.icns", "图标.png")
+    (resource_path("ai_desktop", f) for f in ("图标-v2.png", "图标.icns", "图标.png")
      if os.path.exists(resource_path("ai_desktop", f))),
     resource_path("ai_desktop", "图标.png"),
 )

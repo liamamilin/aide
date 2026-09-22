@@ -144,3 +144,16 @@ def test_controller_applies_pet_motion_and_size_preferences(qtbot, tmp_db, monke
         button.set_pet_size.assert_called_once_with("large")
         controller.stop()
         assert controller._stopped
+
+
+def test_controller_restores_pinned_screen_preference(tmp_db, monkeypatch):
+    from ai_desktop.utils.storage import save_setting
+
+    save_setting("float_follow_cursor_screen", "false")
+    monkeypatch.setattr(ChatController, "_create_hotkey_backend", lambda _self: MagicMock())
+    with patch("ai_desktop.main.FloatButton") as float_class, \
+            patch("ai_desktop.main.MenuBarIcon"):
+        controller = ChatController()
+        float_class.return_value.set_follow_cursor_screen.assert_called_once_with(False)
+        controller.stop()
+        assert controller._stopped

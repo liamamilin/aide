@@ -32,7 +32,7 @@ from ai_desktop.llm.service_checks import ImageCapability, ServiceState
 from ai_desktop.services.action_service import Action
 from ai_desktop.ui import markdown, styles, theme
 from ai_desktop.ui.action_panel import ActionPanel
-from ai_desktop.ui.float_button import pin_to_all_spaces
+from ai_desktop.ui.float_button import _visible_pet_bounds, pin_to_all_spaces
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 from ai_desktop.ui.ocr_preview_dialog import OCRPreviewDialog
 from ai_desktop.utils import images as image_utils
@@ -300,7 +300,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         icon_lbl = QLabel()
         icon_pixmap = _rounded_pixmap(
-            resource_path("ai_desktop", "图标.png"), 26, 6
+            resource_path("ai_desktop", "图标-v2.png"), 26, 6
         )
         if not icon_pixmap.isNull():
             icon_lbl.setPixmap(icon_pixmap)
@@ -558,8 +558,14 @@ class ChatDialog(FramelessDragMixin, QWidget):
         layout.setSpacing(8)
 
         icon = QLabel()
-        pixmap = QPixmap(resource_path("ai_desktop", "桌面宠物.png"))
+        pixmap = QPixmap(resource_path("ai_desktop", "桌面宠物-v2.png"))
         if not pixmap.isNull():
+            bounds = _visible_pet_bounds(pixmap)
+            if not bounds.isNull():
+                margin = round(min(bounds.width(), bounds.height()) * 0.035)
+                pixmap = pixmap.copy(
+                    bounds.adjusted(-margin, -margin, margin, margin).intersected(pixmap.rect())
+                )
             icon.setPixmap(
                 pixmap.scaled(74, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             )

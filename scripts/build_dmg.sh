@@ -29,7 +29,7 @@ if command -v create-dmg >/dev/null 2>&1; then
     echo "==> Using create-dmg"
     create-dmg \
         --volname "$APP_NAME" \
-        --volicon "${ROOT}/ai_desktop/图标.icns" \
+        --volicon "${ROOT}/ai_desktop/图标-v2.icns" \
         --window-pos 200 120 \
         --window-size 600 400 \
         --icon-size 100 \

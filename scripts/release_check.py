@@ -85,11 +85,13 @@ def validate_bundle(bundle: Path, version: str) -> list[str]:
 
     resources = contents / "Resources" / "ai_desktop"
     for name in (
-        "图标.icns",
-        "图标.png",
-        "桌面宠物.png",
-        "pet_frames/idle.png",
-        "pet_frames/hover.png",
+        "图标-v2.png",
+        "图标-v2.icns",
+        "桌面宠物-v2.png",
+        "pet_frames/blink-v2.png",
+        "pet_layers/master.json",
+        "pet_layers/attentive-v2.png",
+        "pet_layers/focused-v2.png",
     ):
         if not (resources / name).is_file():
             errors.append(f"missing bundled resource: ai_desktop/{name}")

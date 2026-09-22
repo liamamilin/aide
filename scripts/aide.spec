@@ -33,11 +33,13 @@ a = Analysis(
     [os.path.join(ROOT, "ai_desktop", "main.py")],
     pathex=[ROOT],
     datas=[
-        (os.path.join(ROOT, "ai_desktop", "图标.icns"), "ai_desktop"),
-        (os.path.join(ROOT, "ai_desktop", "图标.png"), "ai_desktop"),
-        (os.path.join(ROOT, "ai_desktop", "桌面宠物.png"), "ai_desktop"),
-        (os.path.join(ROOT, "ai_desktop", "pet_frames", "idle.png"), "ai_desktop/pet_frames"),
-        (os.path.join(ROOT, "ai_desktop", "pet_frames", "hover.png"), "ai_desktop/pet_frames"),
+        (os.path.join(ROOT, "ai_desktop", "图标-v2.png"), "ai_desktop"),
+        (os.path.join(ROOT, "ai_desktop", "图标-v2.icns"), "ai_desktop"),
+        (os.path.join(ROOT, "ai_desktop", "桌面宠物-v2.png"), "ai_desktop"),
+        (os.path.join(ROOT, "ai_desktop", "pet_frames", "blink-v2.png"), "ai_desktop/pet_frames"),
+        (os.path.join(ROOT, "ai_desktop", "pet_layers", "master.json"), "ai_desktop/pet_layers"),
+        (os.path.join(ROOT, "ai_desktop", "pet_layers", "attentive-v2.png"), "ai_desktop/pet_layers"),
+        (os.path.join(ROOT, "ai_desktop", "pet_layers", "focused-v2.png"), "ai_desktop/pet_layers"),
         # Kokoro/Misaki uses language-tags JSON data at runtime.  PyInstaller
         # does not collect this package data automatically.
         *collect_data_files("language_tags"),
@@ -123,7 +125,7 @@ exe = EXE(
     argv_emulation=True,
     target_arch=None,
     entitlements_file=None,
-    icon=[os.path.join(ROOT, "ai_desktop", "图标.icns")],
+    icon=[os.path.join(ROOT, "ai_desktop", "图标-v2.icns")],
 )
 coll = COLLECT(
     exe,
@@ -137,7 +139,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='AI桌面助手.app',
-    icon=os.path.join(ROOT, "ai_desktop", "图标.icns"),
+    icon=os.path.join(ROOT, "ai_desktop", "图标-v2.icns"),
     bundle_identifier='com.milin.ai-desktop-assistant',
     info_plist={
         'CFBundleShortVersionString': VERSION,

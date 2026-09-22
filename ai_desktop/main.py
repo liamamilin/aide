@@ -201,6 +201,10 @@ class ChatController(QObject):
         self.float_btn.screenshot_requested.connect(self._on_screenshot_hotkey)
         self.float_btn.placement_changed.connect(self._schedule_window_state_save)
         self.float_btn.placement_changed.connect(self._reposition_result_bubble)
+        self.float_btn.screen_follow_changed.connect(self._on_screen_follow_changed)
+        self.float_btn.set_follow_cursor_screen(
+            get_setting("float_follow_cursor_screen") != "false"
+        )
         self.float_btn.set_auto_hide_state(self._auto_hide)
         self._result_bubble.activated.connect(self._show_dialog)
         self._refresh_pet_actions()
@@ -675,11 +679,14 @@ class ChatController(QObject):
             if text.strip():
                 self._on_read_selection_requested(text)
             else:
-                self._show_notice(
-                    QMessageBox.Information,
-                    "朗读选区",
-                    "没有读取到选中文字，请重新框选后再试。",
-                )
+                message = "没有读取到选中文字，请重新框选后再试。"
+                self.float_btn.show_result(False)
+                if not self._show_speech_feedback(
+                    "error", "朗读选区", message, timeout_ms=7000
+                ):
+                    self._tray.showMessage(
+                        "朗读选区", message, QSystemTrayIcon.Warning, 5000
+                    )
             self._finish_stop_if_ready()
             return
         if action_id:
@@ -847,6 +854,10 @@ class ChatController(QObject):
         if self._dialog:
             self._dialog.set_auto_hide(checked)
         logger.info("Auto-hide %s", "enabled" if checked else "disabled")
+
+    @_safe_slot
+    def _on_screen_follow_changed(self, enabled: bool) -> None:
+        save_setting("float_follow_cursor_screen", "true" if enabled else "false")
 
     @_safe_slot
     def _on_pet_mode_toggled(self, checked: bool) -> None:

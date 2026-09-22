@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "canvas": [1209, 1301],
+  "eye_masks": [
+    {"x": 370, "y": 540, "width": 205, "height": 145, "radius": 44},
+    {"x": 645, "y": 540, "width": 205, "height": 145, "radius": 44}
+  ],
+  "expressions": {
+    "blink": "../pet_frames/blink-v2.png",
+    "attentive": "attentive-v2.png",
+    "focused": "focused-v2.png"
+  }
+}

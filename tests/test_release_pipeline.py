@@ -45,11 +45,13 @@ def test_bundle_validator_checks_version_dependencies_and_resources(tmp_path):
     resources = contents / "Resources" / "ai_desktop"
     resources.mkdir(parents=True)
     for name in (
-        "图标.icns",
-        "图标.png",
-        "桌面宠物.png",
-        "pet_frames/idle.png",
-        "pet_frames/hover.png",
+        "图标-v2.png",
+        "图标-v2.icns",
+        "桌面宠物-v2.png",
+        "pet_frames/blink-v2.png",
+        "pet_layers/master.json",
+        "pet_layers/attentive-v2.png",
+        "pet_layers/focused-v2.png",
     ):
         resource = resources / name
         resource.parent.mkdir(parents=True, exist_ok=True)
