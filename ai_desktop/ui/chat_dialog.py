@@ -315,14 +315,6 @@ class ChatDialog(FramelessDragMixin, QWidget):
         tl.addWidget(name_lbl)
         self._title_name = name_lbl
 
-        agent_lbl = QLabel(f"· {self._active_agent.name}")
-        agent_lbl.setStyleSheet(styles.TITLE_AGENT)
-        agent_lbl.setMinimumWidth(0)
-        agent_lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
-        agent_lbl.setToolTip(self._active_agent.name)
-        tl.addWidget(agent_lbl)
-        self._title_agent = agent_lbl
-
         # 服务状态放在标题栏，避免与输入操作混在一起。
         self._ollama_dot = QWidget()
         self._ollama_dot.setFixedSize(8, 8)
@@ -330,6 +322,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS)
         self._ollama_dot.setToolTip("检测中…")
         tl.addWidget(self._ollama_dot)
+        self._ollama_label = QLabel("检测中")
+        self._ollama_label.setStyleSheet(styles.STATUS_TEXT)
+        tl.addWidget(self._ollama_label)
 
         tl.addStretch()
 
@@ -353,16 +348,19 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         # ── Row 2: 当前任务配置；低频操作收入“更多” ──
         self._toolbar = QWidget()
-        self._toolbar.setFixedHeight(42)
+        self._toolbar.setFixedHeight(64)
         self._toolbar.setStyleSheet(styles.TOOLBAR)
-        tb = QHBoxLayout(self._toolbar)
-        tb.setContentsMargins(10, 6, 10, 6)
+        toolbar_layout = QVBoxLayout(self._toolbar)
+        toolbar_layout.setContentsMargins(12, 5, 12, 5)
+        toolbar_layout.setSpacing(1)
+        tb = QHBoxLayout()
         tb.setSpacing(7)
+        toolbar_layout.addLayout(tb)
 
         # Agent 切换
         self._agent_combo = QComboBox()
         self._agent_combo.setFixedHeight(26)
-        self._agent_combo.setFixedWidth(112)
+        self._agent_combo.setFixedWidth(126)
         self._agent_combo.setAccessibleName("选择 Agent")
         self._agent_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self._agent_combo.setStyleSheet(styles.COMBO_BOX)
@@ -398,14 +396,12 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._model_capability_badge.setAccessibleName("模型图片能力")
         self._model_capability_badge.setStyleSheet(styles.STATUS_TEXT)
         self._model_capability_badge.setToolTip("当前模型的图片输入能力尚未确认")
-        tb.addWidget(self._model_capability_badge)
 
         self._model_profile_badge = QLabel("全局配置")
         self._model_profile_badge.setObjectName("model_profile_badge")
         self._model_profile_badge.setAccessibleName("模型配置")
         self._model_profile_badge.setStyleSheet(styles.STATUS_TEXT)
         self._model_profile_badge.setToolTip("请求将使用全局模型设置")
-        tb.addWidget(self._model_profile_badge)
 
         more_btn = QPushButton("•••")
         more_btn.setFixedSize(30, 26)
@@ -424,6 +420,16 @@ class ChatDialog(FramelessDragMixin, QWidget):
         more_btn.setMenu(more_menu)
         self._more_btn = more_btn
         tb.addWidget(more_btn)
+
+        metadata = QHBoxLayout()
+        metadata.setSpacing(8)
+        metadata.addWidget(self._model_capability_badge)
+        divider = QLabel("·")
+        divider.setStyleSheet(styles.STATUS_TEXT)
+        metadata.addWidget(divider)
+        metadata.addWidget(self._model_profile_badge)
+        metadata.addStretch()
+        toolbar_layout.addLayout(metadata)
 
         root.addWidget(self._toolbar)
 
@@ -444,7 +450,21 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         scroll.setWidget(self._msg_container)
         self._scroll = scroll
-        self._scroll.verticalScrollBar().valueChanged.connect(self._on_scroll_changed)
+        scroll_bar = self._scroll.verticalScrollBar()
+        scroll_bar.valueChanged.connect(self._on_scroll_changed)
+        scroll_bar.rangeChanged.connect(self._on_scroll_range_changed)
+        scroll_bar.sliderMoved.connect(self._on_user_scroll_position)
+        scroll_bar.actionTriggered.connect(self._queue_user_scroll_update)
+        self._latest_btn = QPushButton("↓ 回到最新", scroll.viewport())
+        self._latest_btn.setObjectName("latest_message_button")
+        self._latest_btn.setAccessibleName("回到最新消息")
+        self._latest_btn.setToolTip("回到对话末尾")
+        self._latest_btn.setFixedHeight(30)
+        self._latest_btn.setStyleSheet(styles.LATEST_MESSAGE_BUTTON)
+        self._latest_btn.clicked.connect(self._jump_to_latest)
+        self._latest_btn.hide()
+        scroll.viewport().installEventFilter(self)
+        scroll_bar.installEventFilter(self)
         root.addWidget(scroll, stretch=1)
 
         self._action_panel = ActionPanel(self._actions, self)
@@ -473,10 +493,12 @@ class ChatDialog(FramelessDragMixin, QWidget):
         il.setSpacing(6)
 
         self._input = _ChatInputEdit()
-        self._input.setPlaceholderText("输入消息 · Enter 发送 · Shift+Enter 换行")
-        self._input.setToolTip("可直接粘贴或拖入图片")
+        self._input.setPlaceholderText("输入消息…")
+        self._input.setToolTip("Enter 发送 · Shift+Enter 换行；可粘贴或拖入图片")
         self._input.setAccessibleName("消息输入框")
         self._input.setFixedHeight(40)
+        self._input.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._input.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._input.setStyleSheet(styles.INPUT_AREA)
         self._input.installEventFilter(self)
         self._input.textChanged.connect(self._on_input_text_changed)
@@ -595,9 +617,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
         """让气泡随窗口缩放，同时保留左右对话层级。"""
         if not hasattr(self, "_msg_container"):
             return
-        width = max(280, min(440, int(self.width() * 0.78)))
         for label in self._msg_container.findChildren(QLabel, "message_bubble"):
-            label.setMaximumWidth(width)
+            fraction = 0.78 if getattr(label, "_is_user_message", False) else 0.90
+            label.setMaximumWidth(max(280, min(560, int(self.width() * fraction))))
 
     # ── Agent 切换 ─────────────────────────────────────
 
@@ -605,8 +627,6 @@ class ChatDialog(FramelessDragMixin, QWidget):
         agent_id = self._agent_combo.itemData(index)
         agent = next(ag for ag in self._agents if ag.id == agent_id)
         self._active_agent = agent
-        self._title_agent.setText(f"· {agent.name}")
-        self._title_agent.setToolTip(agent.name)
         self._agent_combo.setToolTip(agent.name)
         self.agent_changed.emit(agent)
 
@@ -614,8 +634,6 @@ class ChatDialog(FramelessDragMixin, QWidget):
         """Keep the full context names available when compact controls elide them."""
         if hasattr(self, "_agent_combo"):
             self._agent_combo.setToolTip(self._active_agent.name)
-        if hasattr(self, "_title_agent"):
-            self._title_agent.setToolTip(self._active_agent.name)
         if hasattr(self, "_model_combo"):
             model = self._active_model or self._model_combo.currentText()
             self._model_combo.setToolTip(model or "选择模型")
@@ -689,7 +707,6 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     def set_active_agent(self, agent: Agent) -> None:
         self._active_agent = agent
-        self._title_agent.setText(f"· {agent.name}")
         idx = next(i for i, ag in enumerate(self._agents) if ag.id == agent.id)
         self._agent_combo.blockSignals(True)
         self._agent_combo.setCurrentIndex(idx)
@@ -1151,18 +1168,24 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if state == ServiceState.ONLINE:
             self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_OK)
             self._ollama_dot.setToolTip("Ollama 已连接，模型列表已更新")
+            self._ollama_label.setText("已连接")
         elif state == ServiceState.EMPTY:
             self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_WARN)
             self._ollama_dot.setToolTip("Ollama 已连接，但没有可用模型")
+            self._ollama_label.setText("无模型")
         elif state == ServiceState.INVALID:
             self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_WARN)
             self._ollama_dot.setToolTip("Ollama 响应格式错误")
+            self._ollama_label.setText("服务异常")
         elif state == ServiceState.OFFLINE:
             self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_ERR)
             self._ollama_dot.setToolTip("Ollama 未连接；模型列表可能来自缓存")
+            self._ollama_label.setText("未连接")
         else:
             self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS)
             self._ollama_dot.setToolTip("正在检测 Ollama…")
+            self._ollama_label.setText("检测中")
+        self._ollama_label.setToolTip(self._ollama_dot.toolTip())
 
     def set_image_capability(
         self,
@@ -1230,7 +1253,10 @@ class ChatDialog(FramelessDragMixin, QWidget):
         )
         btn = bubble.findChild(QPushButton, "copy_btn_assistant")
         if btn:
-            btn.clicked.connect(lambda checked, t=text: self._copy_to_clipboard(t))
+            btn.clicked.connect(
+                lambda checked=False, button=btn, t=text:
+                self._copy_assistant_message(button, t)
+            )
         regen = bubble.findChild(QPushButton, "regen_btn_assistant")
         if regen is not None:
             try:
@@ -1340,6 +1366,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         btn = bubble.findChild(QPushButton, "copy_btn_assistant")
         if btn:
             self._stream_copy_btn = btn
+            btn.setVisible(False)
         regen = bubble.findChild(QPushButton, "regen_btn_assistant")
         if regen is not None:
             regen.clicked.connect(self.regenerate_requested.emit)
@@ -1416,7 +1443,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
             except TypeError:
                 pass
             self._stream_copy_btn.clicked.connect(
-                lambda checked, t=copy_text: self._copy_to_clipboard(t)
+                lambda checked=False, button=self._stream_copy_btn, t=copy_text:
+                self._copy_assistant_message(button, t)
             )
             self._stream_copy_btn.setVisible(True)
 
@@ -1438,6 +1466,19 @@ class ChatDialog(FramelessDragMixin, QWidget):
         try:
             QApplication.clipboard().setText(text)
         except Exception:
+            pass
+
+    def _copy_assistant_message(self, button: QPushButton, text: str) -> None:
+        self._copy_to_clipboard(text)
+        button.setText("已复制")
+        QTimer.singleShot(1600, lambda: self._reset_copy_button(button))
+
+    @staticmethod
+    def _reset_copy_button(button: QPushButton) -> None:
+        try:
+            button.setText("复制")
+        except RuntimeError:
+            # The message may have been cleared during the feedback.
             pass
 
     def set_regenerate_state(self, available: bool, versions: list | None = None) -> None:
@@ -1546,6 +1587,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     def clear_messages(self) -> None:
         self._stream_timer.stop()
+        self._scroll_timer.stop()
+        self._user_scrolled_up = False
+        self._latest_btn.hide()
         self._stream_bubble = None
         self._stream_copy_btn = None
         self._stream_regen_btn = None
@@ -1581,7 +1625,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
         lbl = _SelectableMessageLabel()
         lbl.setObjectName("message_bubble")
         lbl.setWordWrap(True)
-        lbl.setMaximumWidth(max(280, min(440, int(self.width() * 0.78))))
+        fraction = 0.78 if is_user else 0.90
+        lbl.setMaximumWidth(max(280, min(560, int(self.width() * fraction))))
+        lbl._is_user_message = is_user
         lbl.setTextFormat(Qt.RichText if is_html else Qt.PlainText)
         lbl.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse)
         lbl.read_selection_requested.connect(self.read_selection_requested.emit)
@@ -1611,8 +1657,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
             bl.setContentsMargins(4, 0, 8, 0)
             bl.addStretch()
 
-            edit_btn = QPushButton("✏️")
-            edit_btn.setFixedSize(18, 18)
+            edit_btn = QPushButton("编辑")
+            edit_btn.setFixedSize(42, 22)
             edit_btn.setToolTip("编辑消息")
             edit_btn.setFocusPolicy(Qt.NoFocus)
             edit_btn.setObjectName("edit_btn_user")
@@ -1629,30 +1675,29 @@ class ChatDialog(FramelessDragMixin, QWidget):
             wrapper.installEventFilter(self)
         else:
             lbl.setStyleSheet(styles.ASSISTANT_BUBBLE)
-            # 气泡主体 + 复制按钮（hover 显示）
+            # 将回答操作直接放在内容下方，复制始终可见。
             v_layout = QVBoxLayout()
             v_layout.setContentsMargins(0, 0, 0, 0)
             v_layout.setSpacing(2)
             v_layout.addWidget(lbl)
 
             btn_bar = QWidget()
-            btn_bar.setFixedHeight(22)
+            btn_bar.setFixedHeight(26)
             bl = QHBoxLayout(btn_bar)
-            bl.setContentsMargins(4, 0, 8, 0)
-            bl.addStretch()
+            bl.setContentsMargins(8, 0, 0, 0)
+            bl.setSpacing(4)
 
-            copy_btn = QPushButton("📋")
-            copy_btn.setFixedSize(18, 18)
+            copy_btn = QPushButton("复制")
+            copy_btn.setFixedSize(42, 24)
             copy_btn.setToolTip("复制回复")
             copy_btn.setFocusPolicy(Qt.NoFocus)
             copy_btn.setObjectName("copy_btn_assistant")
             copy_btn.setCursor(Qt.PointingHandCursor)
-            copy_btn.setVisible(False)
             copy_btn.setStyleSheet(styles.COPY_BUTTON)
             bl.addWidget(copy_btn)
 
-            regen_btn = QPushButton("🔁")
-            regen_btn.setFixedSize(18, 18)
+            regen_btn = QPushButton("重新生成")
+            regen_btn.setFixedSize(70, 24)
             regen_btn.setToolTip("重新生成")
             regen_btn.setAccessibleName("重新生成回答")
             regen_btn.setFocusPolicy(Qt.NoFocus)
@@ -1663,7 +1708,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
             bl.addWidget(regen_btn)
 
             version_btn = QPushButton("")
-            version_btn.setFixedSize(44, 18)
+            version_btn.setFixedSize(44, 24)
             version_btn.setToolTip("查看答案版本")
             version_btn.setAccessibleName("查看答案版本")
             version_btn.setFocusPolicy(Qt.NoFocus)
@@ -1672,6 +1717,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
             version_btn.setVisible(False)
             version_btn.setStyleSheet(styles.COPY_BUTTON)
             bl.addWidget(version_btn)
+            bl.addStretch()
 
             v_layout.addWidget(btn_bar)
             wl.addLayout(v_layout)
@@ -1760,19 +1806,20 @@ class ChatDialog(FramelessDragMixin, QWidget):
     # ── hover 显示复制按钮 ─────────────────────────────
 
     def eventFilter(self, obj, event):
+        if obj is self._scroll.viewport() and event.type() == QEvent.Resize:
+            self._position_latest_button()
+        if (obj is self._scroll.viewport() or obj is self._scroll.verticalScrollBar()) \
+                and event.type() == QEvent.Wheel:
+            self._queue_user_scroll_update()
         if event.type() == QEvent.Enter:
-            for btn in obj.findChildren(QPushButton, "copy_btn_assistant"):
-                btn.setVisible(True)
             for btn in obj.findChildren(QPushButton, "edit_btn_user"):
                 btn.setVisible(True)
         elif event.type() == QEvent.Leave:
-            for btn in obj.findChildren(QPushButton, "copy_btn_assistant"):
-                btn.setVisible(False)
             for btn in obj.findChildren(QPushButton, "edit_btn_user"):
                 btn.setVisible(False)
 
         # ── 输入框快捷键 ──
-        if obj is self._input and event.type() == QEvent.KeyPress:
+        if obj is getattr(self, "_input", None) and event.type() == QEvent.KeyPress:
             if event.key() == Qt.Key_Escape:
                 if self._input.toPlainText().strip():
                     self._input.clear()
@@ -1871,10 +1918,41 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     def _on_scroll_changed(self, value: int) -> None:
         sb = self._scroll.verticalScrollBar()
-        if sb and value < sb.maximum() - 10:
-            self._user_scrolled_up = True
-        else:
-            self._user_scrolled_up = False
+        if not sb or sb.maximum() - value <= 24:
+            self._set_user_scrolled_up(False)
+
+    def _on_scroll_range_changed(self, _minimum: int, _maximum: int) -> None:
+        if not self._user_scrolled_up:
+            self._scroll_to_bottom()
+
+    def _queue_user_scroll_update(self, *_args) -> None:
+        QTimer.singleShot(0, self._update_user_scroll_state)
+
+    def _update_user_scroll_state(self) -> None:
+        self._on_user_scroll_position(self._scroll.verticalScrollBar().value())
+
+    def _on_user_scroll_position(self, value: int) -> None:
+        sb = self._scroll.verticalScrollBar()
+        self._set_user_scrolled_up(bool(sb and sb.maximum() - value > 24))
+
+    def _set_user_scrolled_up(self, scrolled_up: bool) -> None:
+        self._user_scrolled_up = scrolled_up
+        self._latest_btn.setVisible(scrolled_up)
+        if scrolled_up:
+            self._position_latest_button()
+            self._latest_btn.raise_()
+
+    def _position_latest_button(self) -> None:
+        viewport = self._scroll.viewport()
+        self._latest_btn.move(
+            viewport.width() - self._latest_btn.width() - 12,
+            viewport.height() - self._latest_btn.height() - 12,
+        )
+
+    def _jump_to_latest(self) -> None:
+        self._user_scrolled_up = False
+        self._latest_btn.hide()
+        self._scroll_to_bottom()
 
     # ── 定位 ───────────────────────────────────────────
 

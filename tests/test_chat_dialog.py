@@ -251,7 +251,7 @@ class TestChatDialogState:
         dialog.set_active_agent(new_agent)
         assert dialog._agent_combo.currentData() == new_agent.id
         assert dialog._title_name.text() == "AI 桌面助手"
-        assert dialog._title_agent.text() == f"· {new_agent.name}"
+        assert dialog._agent_combo.toolTip() == new_agent.name
 
     def test_first_message_hides_empty_state(self, dialog):
         assert not dialog._empty_state.isHidden()
@@ -263,6 +263,40 @@ class TestChatDialogState:
         qtbot.wait(10)
         right_edge = dialog._more_btn.mapTo(dialog, dialog._more_btn.rect().bottomRight()).x()
         assert right_edge <= dialog.width()
+
+    def test_long_answer_can_return_to_latest_after_reading_earlier_text(self, qtbot, dialog):
+        dialog.resize(400, 460)
+        dialog.add_assistant_message("Long answer. " * 250)
+        qtbot.waitUntil(lambda: dialog._scroll.verticalScrollBar().maximum() > 100)
+        bar = dialog._scroll.verticalScrollBar()
+        qtbot.waitUntil(lambda: bar.value() == bar.maximum())
+        bar.setValue(0)
+        dialog._on_user_scroll_position(0)
+        qtbot.waitUntil(lambda: dialog._latest_btn.isVisible())
+        assert dialog._user_scrolled_up
+        assert dialog._latest_btn.accessibleName() == "回到最新消息"
+        assert dialog._latest_btn.geometry().right() < dialog._scroll.viewport().width()
+        dialog._latest_btn.click()
+        qtbot.waitUntil(lambda: bar.value() == bar.maximum())
+        assert not dialog._latest_btn.isVisible()
+
+    def test_compact_header_and_composer_have_clear_status(self, dialog):
+        dialog.set_service_status(ServiceState.ONLINE)
+        assert dialog._ollama_label.text() == "已连接"
+        assert dialog._input.placeholderText() == "输入消息…"
+        assert dialog._input.verticalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
+
+    def test_completed_answer_actions_are_visible_and_copy_confirms(self, qtbot, dialog):
+        from PyQt5.QtWidgets import QApplication
+
+        dialog.add_assistant_message("A useful answer")
+        qtbot.wait(10)
+        copy = dialog.findChildren(object, "copy_btn_assistant")[-1]
+        assert copy.isVisible()
+        assert copy.text() == "复制"
+        copy.click()
+        assert QApplication.clipboard().text() == "A useful answer"
+        assert copy.text() == "已复制"
 
     def test_long_context_names_keep_tooltips_and_accessible_controls(self, dialog):
         long_agent = Agent(
@@ -276,7 +310,6 @@ class TestChatDialogState:
         long_model = "qwen3.5:9b-mlx-very-long-local-profile"
         dialog.refresh_models([long_model])
 
-        assert dialog._title_agent.toolTip() == long_agent.name
         assert dialog._agent_combo.toolTip() == long_agent.name
         assert long_model in dialog._model_combo.toolTip()
         assert dialog._input.accessibleName() == "消息输入框"

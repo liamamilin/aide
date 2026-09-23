@@ -104,6 +104,13 @@ a = Analysis(
         'matplotlib',
         'scipy',
         'PIL',
+        # Transformers discovers these optional analytics/ONNX backends in
+        # the developer environment.  Kokoro's English pipeline uses Torch,
+        # spaCy and NumPy, not these large integrations.
+        'pyarrow',
+        'pandas',
+        'sklearn',
+        'onnxruntime',
     ],
     noarchive=False,
     optimize=0,
