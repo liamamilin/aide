@@ -45,11 +45,13 @@ def test_bundle_validator_checks_version_dependencies_and_resources(tmp_path):
     resources = contents / "Resources" / "ai_desktop"
     resources.mkdir(parents=True)
     for name in (
-        "图标.icns",
-        "图标.png",
-        "桌面宠物.png",
-        "pet_frames/idle.png",
-        "pet_frames/hover.png",
+        "图标-v2.png",
+        "图标-v2.icns",
+        "桌面宠物-v2.png",
+        "pet_frames/blink-v2.png",
+        "pet_layers/master.json",
+        "pet_layers/attentive-v2.png",
+        "pet_layers/focused-v2.png",
     ):
         resource = resources / name
         resource.parent.mkdir(parents=True, exist_ok=True)
@@ -69,6 +71,17 @@ def test_bundle_validator_checks_version_dependencies_and_resources(tmp_path):
     (frameworks / "PyQt5" / "Qt5" / "lib" / "QtNetwork.framework").mkdir(
         parents=True
     )
+    for name in (
+        "language_tags/data/json/index.json",
+        "misaki/data/us_gold.json",
+        "misaki/data/us_silver.json",
+        "en_core_web_sm/meta.json",
+        "en_core_web_sm-3.8.0.dist-info/METADATA",
+    ):
+        resource = frameworks / name
+        resource.parent.mkdir(parents=True, exist_ok=True)
+        resource.touch()
+    (frameworks / "espeakng_loader" / "espeak-ng-data").mkdir(parents=True)
     info = {
         "CFBundleExecutable": "AI桌面助手",
         "CFBundleShortVersionString": __version__,
@@ -83,6 +96,26 @@ def test_bundle_validator_checks_version_dependencies_and_resources(tmp_path):
         f"CFBundleShortVersionString={__version__!r}, expected '99.0.0'",
         f"CFBundleVersion={__version__!r}, expected '99.0.0'",
     ]
+
+
+def test_bundle_validator_reports_missing_misaki_dictionary(tmp_path):
+    bundle = tmp_path / "AI桌面助手.app"
+    contents = bundle / "Contents"
+    (contents / "MacOS").mkdir(parents=True)
+    (contents / "MacOS" / "AI桌面助手").touch()
+    with (contents / "Info.plist").open("wb") as handle:
+        plistlib.dump(
+            {
+                "CFBundleExecutable": "AI桌面助手",
+                "CFBundleShortVersionString": __version__,
+                "CFBundleVersion": __version__,
+            },
+            handle,
+        )
+
+    errors = release_check.validate_bundle(bundle, __version__)
+
+    assert "missing bundled speech resource: misaki/data/us_gold.json" in errors
 
 
 def test_smoke_paths_can_be_isolated_from_user_data(monkeypatch, tmp_path):
@@ -105,6 +138,7 @@ def test_ci_and_local_build_use_one_definition():
     assert "pyinstaller --windowed" not in workflow.lower()
     assert "scripts/aide.spec" in build_script
     assert "Contents/MacOS/AI桌面助手" in smoke_script
+    assert "--speech-runtime" in smoke_script
     assert "PRAGMA user_version" in smoke_script
     assert "SCHEMA_VERSION" in smoke_script
     assert "pgrep" not in smoke_script

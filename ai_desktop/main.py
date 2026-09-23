@@ -40,6 +40,7 @@ from ai_desktop.llm.streaming_worker import StreamingChatWorker
 from ai_desktop.services.action_service import Action, ActionService
 from ai_desktop.services.model_profiles import ModelProfile, ModelProfileManager
 from ai_desktop.services.ocr_service import AsyncOCRService, OCRResult, OCRStatus
+from ai_desktop.services.speech_service import SpeechService
 from ai_desktop.settings_manager import SettingsManager
 from ai_desktop.ui import styles
 from ai_desktop.ui.agent_editor import AgentDef, AgentEditor
@@ -195,9 +196,15 @@ class ChatController(QObject):
         self.float_btn.auto_hide_toggled.connect(self._on_auto_hide_toggled)
         self.float_btn.pet_mode_toggled.connect(self._on_pet_mode_toggled)
         self.float_btn.quick_action_requested.connect(self._on_pet_action_requested)
+        self.float_btn.read_selection_requested.connect(self._on_read_selection_requested)
+        self.float_btn.stop_speech_requested.connect(self._on_stop_speech_requested)
         self.float_btn.screenshot_requested.connect(self._on_screenshot_hotkey)
         self.float_btn.placement_changed.connect(self._schedule_window_state_save)
         self.float_btn.placement_changed.connect(self._reposition_result_bubble)
+        self.float_btn.screen_follow_changed.connect(self._on_screen_follow_changed)
+        self.float_btn.set_follow_cursor_screen(
+            get_setting("float_follow_cursor_screen") != "false"
+        )
         self.float_btn.set_auto_hide_state(self._auto_hide)
         self._result_bubble.activated.connect(self._show_dialog)
         self._refresh_pet_actions()
@@ -221,6 +228,7 @@ class ChatController(QObject):
         self._selection_delay_timer.timeout.connect(self._start_selection_capture)
         self._selection_capture: SelectionCaptureTask | None = None
         self._pending_pet_action_id: str | None = None
+        self._pending_read_selection = False
 
         # 全局快捷键：⌘⌃S → 截图并附加到对话
         self.hotkey_img = self._create_hotkey_backend()
@@ -230,6 +238,10 @@ class ChatController(QObject):
         self._ocr = AsyncOCRService(self)
         self._ocr.completed.connect(self._on_ocr_completed)
         self._ocr_image_path: str | None = None
+        self._speech = SpeechService(self)
+        self._speech.completed.connect(self._on_speech_completed)
+        self._speech.progress.connect(self._on_speech_progress)
+        self._speech_feedback_active = False
         self._shutdown_workers: list[QThread] = []
         self._stopping = False
         self._stopped = False
@@ -319,6 +331,8 @@ class ChatController(QObject):
             notice.close()
         self._selection_delay_timer.stop()
         self._pending_pet_action_id = None
+        for worker in self._speech.shutdown():
+            self._track_shutdown_worker(worker)
         if self._selection_capture is not None:
             self._selection_capture.cancel()
         self._stop_worker(show_cancelled=False)
@@ -374,14 +388,25 @@ class ChatController(QObject):
 
     def _on_global_screenshot_hotkey(self) -> None:
         """Bridge a native/global hotkey callback to the controller's Qt thread."""
+        logger.debug("Screenshot global hotkey callback fired")
         self._screenshot_hotkey_triggered.emit()
 
     def _on_screenshot_hotkey(self) -> None:
         """截图热键回调：后台启动框选截图，完成后附加到对话窗口"""
         if self._stopping or self._stopped:
+            logger.debug("Screenshot hotkey ignored (stopping/stopped)")
             return
         if self._screenshot_worker is not None:
-            return
+            if self._screenshot_worker.isFinished():
+                logger.warning(
+                    "Screenshot worker finished but not cleaned up, resetting"
+                )
+                worker = self._screenshot_worker
+                self._screenshot_worker = None
+                worker.deleteLater()
+            else:
+                logger.debug("Screenshot hotkey ignored (worker busy)")
+                return
         self.float_btn.set_listening(True)
         self._screenshot_worker = ScreenshotWorker(self)
         self._screenshot_worker.completed.connect(self._on_screenshot_result)
@@ -553,6 +578,88 @@ class ChatController(QObject):
         self._start_selection_capture()
 
     @_safe_slot
+    def _on_read_selection_requested(self, text: str = "") -> None:
+        """朗读选区入口，统一接收应用内和其他应用的选中文本。"""
+        if self._stopping or self._stopped:
+            return
+        if text.strip():
+            logger.info("Read-selection requested, text length=%d", len(text))
+            self.float_btn.set_speaking(True)
+            self._speech.speak(text)
+            return
+        if self._worker is not None or self._selection_capture is not None:
+            self._show_dialog()
+            if self._dialog:
+                self._dialog.flash_busy()
+            return
+        self._pending_read_selection = True
+        self._start_selection_capture()
+
+    @_safe_slot
+    def _on_speech_progress(self, message: str) -> None:
+        logger.info("Speech: %s", message)
+        self.float_btn.set_speaking(True)
+        title = "正在朗读" if message == "正在朗读…" else "准备朗读"
+        self._show_speech_feedback("progress", title, message, timeout_ms=60000)
+
+    @_safe_slot
+    def _on_stop_speech_requested(self) -> None:
+        self._speech.stop()
+        self.float_btn.set_speaking(False)
+        if self._speech_feedback_active:
+            self._result_bubble.dismiss()
+            self._speech_feedback_active = False
+
+    @_safe_slot
+    def _on_speech_completed(self, success: bool, error: str) -> None:
+        self.float_btn.set_listening(False)
+        self.float_btn.set_speaking(False)
+        if self._stopping or self._stopped:
+            return
+        if success:
+            if self._speech_feedback_active:
+                self._result_bubble.dismiss()
+                self._speech_feedback_active = False
+            self.float_btn.show_result(True)
+            return
+        if error == "朗读已停止。":
+            if self._speech_feedback_active:
+                self._result_bubble.dismiss()
+                self._speech_feedback_active = False
+            return
+        if not self._show_speech_feedback(
+            "error", "无法朗读", error, timeout_ms=7000
+        ):
+            self._tray.showMessage(
+                "朗读选区",
+                error,
+                QSystemTrayIcon.Warning,
+                5000,
+            )
+
+    def _show_speech_feedback(
+        self,
+        kind: str,
+        title: str,
+        summary: str,
+        *,
+        timeout_ms: int,
+    ) -> bool:
+        if not self.float_btn.isVisible() or not self.float_btn.pet_enabled:
+            return False
+        self._speech_feedback_active = True
+        self._result_bubble.show_result(
+            kind,
+            title,
+            summary,
+            self.float_btn.frameGeometry(),
+            timeout_ms=timeout_ms,
+            activate_on_click=False,
+        )
+        pin_to_all_spaces(self._result_bubble)
+        return True
+
+    @_safe_slot
     def _on_selection_captured(self, task: SelectionCaptureTask, text: str) -> None:
         if task is not self._selection_capture:
             task.deleteLater()
@@ -560,9 +667,26 @@ class ChatController(QObject):
         self._selection_capture = None
         action_id = self._pending_pet_action_id
         self._pending_pet_action_id = None
+        read_selection = self._pending_read_selection
+        self._pending_read_selection = False
         self.float_btn.set_listening(False)
         task.deleteLater()
         if self._stopping or self._stopped:
+            self._finish_stop_if_ready()
+            return
+        if read_selection:
+            logger.info("Read-selection captured text length=%d", len(text))
+            if text.strip():
+                self._on_read_selection_requested(text)
+            else:
+                message = "没有读取到选中文字，请重新框选后再试。"
+                self.float_btn.show_result(False)
+                if not self._show_speech_feedback(
+                    "error", "朗读选区", message, timeout_ms=7000
+                ):
+                    self._tray.showMessage(
+                        "朗读选区", message, QSystemTrayIcon.Warning, 5000
+                    )
             self._finish_stop_if_ready()
             return
         if action_id:
@@ -618,6 +742,7 @@ class ChatController(QObject):
             self._dialog.geometry_changed.connect(self._schedule_window_state_save)
             self._dialog.message_sent.connect(self._on_user_message)
             self._dialog.screenshot_requested.connect(self._on_screenshot_hotkey)
+            self._dialog.read_selection_requested.connect(self._on_read_selection_requested)
             self._dialog.ocr_requested.connect(self._on_ocr_requested)
             self._dialog.ocr_cancel_requested.connect(self._on_ocr_cancel_requested)
             self._dialog.pending_images_changed.connect(
@@ -729,6 +854,10 @@ class ChatController(QObject):
         if self._dialog:
             self._dialog.set_auto_hide(checked)
         logger.info("Auto-hide %s", "enabled" if checked else "disabled")
+
+    @_safe_slot
+    def _on_screen_follow_changed(self, enabled: bool) -> None:
+        save_setting("float_follow_cursor_screen", "true" if enabled else "false")
 
     @_safe_slot
     def _on_pet_mode_toggled(self, checked: bool) -> None:
@@ -2070,6 +2199,7 @@ class ChatController(QObject):
             timeout_ms = 9000
 
         summary = ResultBubble.summarize(source, fallback)
+        self._speech_feedback_active = False
         self._result_bubble.show_result(
             kind,
             title,
@@ -2128,6 +2258,11 @@ def main() -> None:
 
         print(json.dumps(asdict(probe_ocr_runtime()), ensure_ascii=False))
         return
+    if "--speech-runtime" in sys.argv[1:]:
+        from ai_desktop.services.speech_service import probe_speech_runtime
+
+        print(json.dumps(probe_speech_runtime(), ensure_ascii=False))
+        return
 
     log_util.setup()
 
@@ -2175,23 +2310,48 @@ def main() -> None:
 
     # 权限重检定时器：用户在系统设置中授权后自动检测到，自动启动热键
     def _hotkey_running() -> bool:
-        """检测热键是否已运行（兼容 NSEventMonitor / HotkeyListener）"""
-        h = controller.hotkey
-        if hasattr(h, "_monitor"):
-            return h._monitor is not None
-        if hasattr(h, "_listener"):
-            return h._listener is not None
+        """检测两个热键后端是否均已运行（兼容 NSEventMonitor / HotkeyListener）"""
+        for h in (controller.hotkey, controller.hotkey_img):
+            if hasattr(h, "_monitor"):
+                if h._monitor is None and getattr(h, "_local_monitor", None) is None:
+                    return False
+            elif hasattr(h, "_listener"):
+                if h._listener is None:
+                    return False
         return True
+
+    def _global_hotkey_missing() -> bool:
+        """权限已恢复时，检查 NSEvent 全局监听是否仍需补装。"""
+        return any(
+            hasattr(h, "_monitor") and h._monitor is None
+            for h in (controller.hotkey, controller.hotkey_img)
+        )
 
     _perm_recheck = QTimer()
     _recheck_count = 0
+    _perm_recheck_slow = False  # 权限已授予后降频到 60s
+
+    def _reinstall_hotkeys() -> None:
+        """重装 NSEvent 全局监听器，防止系统事件后监听器变陈旧。"""
+        for name, hk in (("hotkey", controller.hotkey),
+                         ("hotkey_img", controller.hotkey_img)):
+            running = (hasattr(hk, "_monitor") and hk._monitor is not None) or \
+                      (hasattr(hk, "_local_monitor") and hk._local_monitor is not None) or \
+                      (hasattr(hk, "_listener") and hk._listener is not None)
+            if not running:
+                continue
+            try:
+                hk.stop()
+                hk.start()
+            except Exception as e:
+                logger.warning("重装热键 %s 失败: %s", name, e)
 
     def _recheck_permissions() -> None:
-        nonlocal _perm_requested, _recheck_count
+        nonlocal _perm_requested, _recheck_count, _perm_recheck_slow
         _recheck_count += 1
         cur = _check_permissions()
         if cur.all_granted:
-            if not _hotkey_running():
+            if not _hotkey_running() or _global_hotkey_missing():
                 # 权限刚授予，热键尚未启动 → 启动热键
                 logger.info("权限已授予，启动热键监听")
                 try:
@@ -2202,7 +2362,13 @@ def main() -> None:
                     controller.hotkey_img.start()
                 except Exception as e:
                     logger.warning("截图热键启动失败: %s", e)
-            _perm_recheck.stop()
+            # 权限已就绪后降频到 60s，持续重装监听器防止变陈旧
+            if not _perm_recheck_slow:
+                _perm_recheck_slow = True
+                _perm_recheck.setInterval(60000)
+                logger.info("热键重装定时器降频到 60s")
+            else:
+                _reinstall_hotkeys()
             _perm_requested = False
         else:
             # 每 5 次（~15 秒）记录一次状态，避免日志刷屏

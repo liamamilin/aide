@@ -30,7 +30,9 @@ class _Renderer:
         self.code_map: dict[str, str] = {}
 
     def render(self) -> str:
-        for line in self.lines:
+        index = 0
+        while index < len(self.lines):
+            line = self.lines[index]
             if line.strip().startswith("```"):
                 if not self.in_code_block:
                     self._flush_para()
@@ -38,23 +40,45 @@ class _Renderer:
                 else:
                     self._flush_code()
                     self.in_code_block = False
+                index += 1
                 continue
 
             if self.in_code_block:
                 self.code_lines.append(line)
+                index += 1
                 continue
+
+            if index + 1 < len(self.lines):
+                headings = _table_cells(line)
+                separators = _table_cells(self.lines[index + 1])
+                if (len(headings) >= 2 and len(headings) == len(separators)
+                        and all(re.fullmatch(r":?-{3,}:?", cell.strip())
+                                for cell in separators)):
+                    self._flush_para()
+                    index += 2
+                    rows = []
+                    while index < len(self.lines):
+                        cells = _table_cells(self.lines[index])
+                        if not self.lines[index].strip() or len(cells) != len(headings):
+                            break
+                        rows.append(cells)
+                        index += 1
+                    self.result.append(_render_table(headings, rows, self.c))
+                    continue
 
             if not line.strip():
                 self._flush_para()
-                self.result.append("<br>")
+                index += 1
                 continue
 
             if _is_single(line):
                 self._flush_para()
                 self.result.append(_render_single(line, self.c))
+                index += 1
                 continue
 
             self.para_buf.append(line)
+            index += 1
 
         self._flush_para()
         self._flush_code()
@@ -91,6 +115,32 @@ class _Renderer:
         )
         self.code_lines = []
         self.code_idx += 1
+
+
+def _table_cells(line: str) -> list[str]:
+    """Split a Markdown table row while retaining escaped literal pipes."""
+    value = line.strip().strip("|")
+    if "|" not in value:
+        return []
+    return [cell.strip().replace(r"\|", "|")
+            for cell in re.split(r"(?<!\\)\|", value)]
+
+
+def _render_table(headings: list[str], rows: list[list[str]], c: MarkdownColors) -> str:
+    """Stack comparisons vertically so they remain readable in a narrow chat."""
+    blocks = []
+    for row in rows:
+        details = "".join(
+            f'<br><span style="color:{c.bullet};">{_fmt(heading, c)}</span>'
+            f' · {_fmt(value, c)}'
+            for heading, value in zip(headings[1:], row[1:])
+        )
+        blocks.append(
+            '<p style="margin:8px 0;line-height:1.5;">'
+            f'<b style="color:{c.heading};">{_fmt(row[0], c)}</b>'
+            f'{details}</p>'
+        )
+    return "".join(blocks)
 
 
 # ── 单行结构 ──

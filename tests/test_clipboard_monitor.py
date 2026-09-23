@@ -88,6 +88,9 @@ class FakePasteboard:
             return self.counts.pop(0)
         return self.counts[0]
 
+    def read_plain_text(self):
+        return "original"
+
     def restore(self, snapshot, expected_change_count):
         self.restores.append((snapshot, expected_change_count))
         return True
@@ -152,17 +155,23 @@ def test_async_capture_does_not_overwrite_new_user_copy(qtbot):
     assert task.pasteboard.restores == []
 
 
-def test_async_capture_stops_before_copy_when_format_cannot_be_saved(qtbot):
+def test_async_capture_uses_plain_text_fallback_for_unreadable_format(qtbot):
     pasteboard = FakePasteboard(
+        counts=(2, 3, 3),
         snapshot_error=clipboard_monitor.UnsupportedClipboardFormatError("promised data"),
     )
-    copy_action = patch.object(clipboard_monitor, "_try_cmd_c_via_pynput")
-    with copy_action as copy:
+    with patch.object(clipboard_monitor, "_write_clipboard") as write_clipboard:
         task = clipboard_monitor.SelectionCaptureTask(pasteboard=pasteboard)
+        task.responses = [(True, "selected text", "")]
+
+        def start_command(program, arguments, *, timeout_ms, callback, input_text=None):
+            QTimer.singleShot(0, lambda: callback(True, "selected text", ""))
+
+        task._start_command = start_command
         with qtbot.waitSignal(task.completed, timeout=1000) as signal:
             task.start()
-    assert signal.args == [""]
-    copy.assert_not_called()
+    assert signal.args == ["selected text"]
+    write_clipboard.assert_called_once_with("original")
 
 
 def test_qprocess_command_does_not_block_qt_event_loop(qtbot):

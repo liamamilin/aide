@@ -9,6 +9,7 @@ PYTHON_BIN="${PYTHON:-python3}"
 TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/aide-smoke.XXXXXX")"
 OUTPUT="${TEMP_ROOT}/process.log"
 OCR_OUTPUT="${TEMP_ROOT}/ocr-runtime.json"
+SPEECH_OUTPUT="${TEMP_ROOT}/speech-runtime.json"
 PID=""
 
 cleanup() {
@@ -34,6 +35,9 @@ echo "    Source/bundle version: ${VERSION}/${BUNDLE_VERSION}"
 echo "==> Checking packaged Apple Vision OCR runtime"
 "$EXECUTABLE" --ocr-runtime >"$OCR_OUTPUT" 2>&1
 "$PYTHON_BIN" -c 'import json, sys; value = json.load(open(sys.argv[1])); assert value["engine"] == "apple-vision"; assert value["languages"]' "$OCR_OUTPUT"
+echo "==> Checking packaged English speech runtime"
+"$EXECUTABLE" --speech-runtime >"$SPEECH_OUTPUT" 2>&1
+"$PYTHON_BIN" -c 'import json, sys; value = json.load(open(sys.argv[1])); assert value == {"engine": "kokoro", "language": "en-us", "status": "ready"}' "$SPEECH_OUTPUT"
 echo "==> Launching packaged executable with isolated data and logs"
 
 AIDE_SMOKE_TEST=1 \

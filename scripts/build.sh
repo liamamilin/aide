@@ -76,10 +76,13 @@ fi
 echo "==> [5/6] 签名并验证 .app..."
 if [ "$SIGN_IDENTITY" = "-" ]; then
     echo "    使用 ad-hoc 签名；该候选包未经过 Developer ID 签名或公证"
+    codesign --force --deep --sign "$SIGN_IDENTITY" "$APP"
 else
-    echo "    使用稳定签名身份：${SIGN_IDENTITY}"
+    echo "    使用稳定签名身份：${SIGN_IDENTITY}（Hardened Runtime + entitlements）"
+    codesign --force --deep --options runtime \
+        --entitlements "${ROOT}/scripts/entitlements.plist" \
+        --sign "$SIGN_IDENTITY" "$APP"
 fi
-codesign --force --deep --sign "$SIGN_IDENTITY" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 "$PYTHON_BIN" scripts/release_check.py --bundle "$APP" --version "$VERSION"
 

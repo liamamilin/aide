@@ -1,6 +1,6 @@
 """Controller shutdown waits for every task without blocking the UI thread."""
 import threading
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal
@@ -56,6 +56,47 @@ def test_hidden_float_entry_can_be_restored_from_tray(controller):
     controller._on_float_entry_toggle()
     button.show.assert_called_once_with()
     controller._tray.set_float_entry_visible.assert_called_with(True, button.pet_enabled)
+
+
+def test_screen_follow_preference_is_saved(controller):
+    with patch("ai_desktop.main.save_setting") as save:
+        controller._on_screen_follow_changed(False)
+        controller._on_screen_follow_changed(True)
+    assert save.call_args_list[-2:] == [
+        call("float_follow_cursor_screen", "false"),
+        call("float_follow_cursor_screen", "true"),
+    ]
+
+
+def test_empty_read_selection_uses_nonblocking_pet_feedback(controller):
+    task = MagicMock()
+    controller._selection_capture = task
+    controller._pending_read_selection = True
+    with patch.object(controller, "_show_speech_feedback", return_value=True) as feedback, \
+            patch.object(controller, "_show_notice") as notice:
+        controller._on_selection_captured(task, "")
+
+    assert controller._selection_capture is None
+    assert not controller._pending_read_selection
+    controller.float_btn.show_result.assert_called_with(False)
+    feedback.assert_called_once_with(
+        "error", "朗读选区", "没有读取到选中文字，请重新框选后再试。",
+        timeout_ms=7000,
+    )
+    notice.assert_not_called()
+    controller._tray.showMessage.assert_not_called()
+
+
+def test_empty_read_selection_falls_back_to_tray_when_pet_hidden(controller):
+    task = MagicMock()
+    controller._selection_capture = task
+    controller._pending_read_selection = True
+    with patch.object(controller, "_show_speech_feedback", return_value=False), \
+            patch.object(controller, "_show_notice") as notice:
+        controller._on_selection_captured(task, "")
+
+    controller._tray.showMessage.assert_called_once()
+    notice.assert_not_called()
 
 
 def test_exit_waits_for_chat_abort_and_rejects_new_work(qtbot, controller, ollama_server):
@@ -196,12 +237,30 @@ def test_global_text_hotkey_stages_capture_on_gui_thread(qtbot, controller, monk
 
 def test_repeated_screenshot_trigger_keeps_one_worker(controller, monkeypatch):
     worker = MagicMock()
+    worker.isFinished.return_value = False  # still running → second call ignored
     factory = MagicMock(return_value=worker)
     monkeypatch.setattr("ai_desktop.main.ScreenshotWorker", factory)
     controller._on_screenshot_hotkey()
     controller._on_screenshot_hotkey()
     factory.assert_called_once_with(controller)
     worker.start.assert_called_once()
+    worker.deleteLater.assert_not_called()
+    controller._screenshot_worker = None
+
+
+def test_stale_screenshot_worker_is_cleaned_up(controller, monkeypatch):
+    """A finished-but-uncleaned worker should be reset so the next hotkey works."""
+    stale = MagicMock()
+    stale.isFinished.return_value = True
+    controller._screenshot_worker = stale
+    fresh = MagicMock()
+    fresh.isFinished.return_value = False
+    factory = MagicMock(return_value=fresh)
+    monkeypatch.setattr("ai_desktop.main.ScreenshotWorker", factory)
+    controller._on_screenshot_hotkey()
+    stale.deleteLater.assert_called_once()
+    factory.assert_called_once_with(controller)
+    fresh.start.assert_called_once()
     controller._screenshot_worker = None
 
 

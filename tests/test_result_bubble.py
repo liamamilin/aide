@@ -58,6 +58,24 @@ def test_result_bubble_timeout_and_summary_bound(qtbot, bubble):
     qtbot.waitUntil(lambda: not bubble.isVisible(), timeout=100)
 
 
+def test_progress_bubble_dismisses_without_opening_chat(qtbot, bubble):
+    activated = []
+    bubble.activated.connect(lambda: activated.append(True))
+    with patch.object(ResultBubble, "_screen_geometry", return_value=QRect(0, 0, 1000, 700)):
+        bubble.show_result(
+            "progress",
+            "准备朗读",
+            "正在加载英语朗读模型…",
+            QRect(700, 300, 116, 122),
+            activate_on_click=False,
+        )
+
+    with qtbot.waitSignal(bubble.dismissed, timeout=1000):
+        qtbot.mouseClick(bubble._content, Qt.LeftButton, pos=QPoint(120, 45))
+    assert activated == []
+    assert not bubble.isVisible()
+
+
 def test_result_bubble_rejects_unknown_kind(bubble):
     with pytest.raises(ValueError):
         bubble.show_result("unknown", "", "", QRect())

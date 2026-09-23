@@ -6,7 +6,7 @@
 """
 from PyQt5.QtWidgets import QApplication
 
-from ai_desktop.ui.theme import ColorSet, current
+from ai_desktop.ui.theme import ColorSet, current, is_dark_mode
 
 _generated: dict[str, str] | None = None
 
@@ -139,6 +139,13 @@ def _generate() -> dict[str, str]:
         f"QScrollBar:vertical {{ width: 6px; }}"
         f"QScrollBar::handle:vertical {{ background: {c.border}; border-radius: 3px; }}"
     )
+    s["LATEST_MESSAGE_BUTTON"] = (
+        f"QPushButton {{ background: {c.surface}; color: {c.text}; "
+        f"border: 1px solid {c.border}; border-radius: 15px; "
+        f"padding: 4px 12px; font-size: 11px; font-weight: 600; }}"
+        f"QPushButton:hover {{ background: {c.button_hover}; border-color: {c.accent}; }}"
+        f"QPushButton:pressed {{ background: {c.button}; }}"
+    )
 
     # ── 消息列表容器 ──
     s["MESSAGE_LIST"] = f"background: {c.window};"
@@ -205,8 +212,9 @@ def _generate() -> dict[str, str]:
 
     # ── 助手消息气泡 ──
     s["ASSISTANT_BUBBLE"] = (
-        f"QLabel {{ background: {c.button}; color: {c.text}; border: none; border-radius: 12px;"
-        f"padding: 9px 12px; font-size: 13px; }}"
+        f"QLabel {{ background: {'#27292d' if is_dark_mode() else '#ffffff'}; "
+        f"color: {c.text}; border: 1px solid {'#42454b' if is_dark_mode() else '#d9dde4'};"
+        f"border-radius: 12px; padding: 12px 14px; font-size: 13px; }}"
     )
 
     # ── 编辑按钮（用户消息 hover）──
@@ -215,10 +223,11 @@ def _generate() -> dict[str, str]:
         "QPushButton:hover { color: white; background: rgba(255,255,255,0.15); border-radius: 3px; }"
     )
 
-    # ── 复制按钮（助手消息 hover）──
+    # ── 助手消息操作 ──
     s["COPY_BUTTON"] = (
-        f"QPushButton {{ background: transparent; border: none; font-size: 11px; color: {c.text_secondary}; }}"
-        f"QPushButton:hover {{ color: {c.text}; background: {c.button}; border-radius: 3px; }}"
+        f"QPushButton {{ background: transparent; border: none; border-radius: 5px; "
+        f"font-size: 11px; color: {c.text_secondary}; }}"
+        f"QPushButton:hover {{ color: {c.text}; background: {c.surface}; }}"
     )
 
     # ── 历史行 hover ──
@@ -283,8 +292,6 @@ def _generate() -> dict[str, str]:
     # ── 标题栏图标/名称 ──
     s["TITLE_ICON"] = "background: transparent;"
     s["TITLE_NAME"] = f"font-weight: 700; font-size: 13px; background: none; color: {c.text};"
-    s["TITLE_AGENT"] = f"font-size: 11px; background: none; color: {c.text_secondary};"
-
     s["STATUS_TEXT"] = (
         f"background: transparent; color: {c.text_secondary}; border: none; "
         f"padding: 2px 0; font-size: 10px;"

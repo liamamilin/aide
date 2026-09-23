@@ -46,6 +46,28 @@ def test_markdown_code_map():
     assert cm["copy://codeblock_0"] == "code"
 
 
+def test_narrow_chat_renders_comparison_table_as_stacked_rows():
+    source = (
+        "| 维度 | MVP 版本 | 完整产品 |\n"
+        "| :--- | --- | ---: |\n"
+        "| 产品管理 | 手动录入 | 多仓库、SKU 批量导入 |\n"
+        "| 支付 | 暂不支持 | 微信 / 支付宝 |\n\n"
+        "请提供具体上下文。"
+    )
+    body, _ = to_html(source)
+    assert "| ---" not in body
+    assert body.index("产品管理") < body.index("支付") < body.index("请提供")
+    assert "MVP 版本" in body and "完整产品" in body
+    assert "多仓库、SKU 批量导入" in body
+
+
+def test_table_cells_escape_html_and_preserve_literal_pipe():
+    body, _ = to_html("| 功能 | 内容 |\n| --- | --- |\n| <script> | A \\| B |")
+    assert "&lt;script&gt;" in body
+    assert "<script>" not in body
+    assert "A | B" in body
+
+
 if __name__ == "__main__":
     test_normalize()
     test_markdown()

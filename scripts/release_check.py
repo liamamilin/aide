@@ -85,11 +85,13 @@ def validate_bundle(bundle: Path, version: str) -> list[str]:
 
     resources = contents / "Resources" / "ai_desktop"
     for name in (
-        "图标.icns",
-        "图标.png",
-        "桌面宠物.png",
-        "pet_frames/idle.png",
-        "pet_frames/hover.png",
+        "图标-v2.png",
+        "图标-v2.icns",
+        "桌面宠物-v2.png",
+        "pet_frames/blink-v2.png",
+        "pet_layers/master.json",
+        "pet_layers/attentive-v2.png",
+        "pet_layers/focused-v2.png",
     ):
         if not (resources / name).is_file():
             errors.append(f"missing bundled resource: ai_desktop/{name}")
@@ -103,6 +105,19 @@ def validate_bundle(bundle: Path, version: str) -> list[str]:
     qt_network = frameworks / "PyQt5" / "Qt5" / "lib" / "QtNetwork.framework"
     if not qt_network.exists():
         errors.append("missing bundled QtNetwork.framework")
+    for relative_path in (
+        "language_tags/data/json/index.json",
+        "misaki/data/us_gold.json",
+        "misaki/data/us_silver.json",
+        "en_core_web_sm/meta.json",
+    ):
+        if not (frameworks / relative_path).is_file():
+            errors.append(f"missing bundled speech resource: {relative_path}")
+    if not (frameworks / "espeakng_loader" / "espeak-ng-data").is_dir():
+        errors.append("missing bundled speech resource: espeakng_loader/espeak-ng-data")
+    model_metadata = list(frameworks.glob("en_core_web_sm-*.dist-info/METADATA"))
+    if not any(path.is_file() for path in model_metadata):
+        errors.append("missing bundled speech resource: en_core_web_sm dist-info")
     for module in (
         "AppKit", "Foundation", "CoreFoundation", "CoreML", "HIServices",
         "objc", "Quartz", "Vision",
