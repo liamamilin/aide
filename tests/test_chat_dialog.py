@@ -315,6 +315,7 @@ class TestChatDialogState:
         assert dialog._input.accessibleName() == "消息输入框"
         assert dialog._send_btn.accessibleName() == "发送消息"
         assert dialog._new_convo_btn.accessibleName() == "开始新对话"
+        assert dialog._expand_btn.accessibleName() == "放大到当前屏幕"
         assert dialog._hide_btn.accessibleName() == "隐藏对话窗口"
         assert dialog._agent_combo.accessibleName() == "选择 Agent"
         assert dialog._model_combo.accessibleName() == "选择模型"
@@ -324,6 +325,7 @@ class TestChatDialogState:
         assert dialog._model_capability_badge.accessibleName() == "模型图片能力"
         assert dialog._model_profile_badge.accessibleName() == "模型配置"
         assert dialog._ollama_dot.accessibleName() == "服务连接状态"
+        assert dialog._size_grip.accessibleName() == "调整窗口大小"
 
     def test_multi_image_bubble_wraps_within_minimum_width(self, qtbot, dialog):
         from PyQt5.QtGui import QColor, QPixmap

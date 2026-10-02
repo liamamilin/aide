@@ -5,7 +5,7 @@ import html
 import logging
 from pathlib import Path
 
-from PyQt5.QtCore import QEvent, QPoint, QRectF, QSize, Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QCursor, QKeyEvent, QPainter, QPainterPath, QPixmap, QRegion, QTextCursor
 from PyQt5.QtWidgets import (
     QApplication,
@@ -175,6 +175,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._active_model = active_model
         self._image_capability = ImageCapability.UNKNOWN
         self._placement_initialized = False
+        self._expanded_to_screen = False
+        self._normal_geometry: QRect | None = None
         self._user_scrolled_up: bool = False
         self._pending_images: list[str] = []     # 发送前暂存的图片（应用数据目录路径）
         self._ocr_preview_dialog: OCRPreviewDialog | None = None
@@ -235,6 +237,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self.setStyleSheet(styles.CHAT_DIALOG_ROOT)
 
     def _apply_rounded_mask(self):
+        if self._expanded_to_screen:
+            self.clearMask()
+            return
         path = QPainterPath()
         path.addRoundedRect(QRectF(0, 0, self.width(), self.height()), 10, 10)
         self.setMask(QRegion(path.toFillPolygon().toPolygon()))
@@ -242,7 +247,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._apply_rounded_mask()
-        self._update_bubble_widths()
+        self._update_responsive_layout()
         self.geometry_changed.emit()
 
     def moveEvent(self, event) -> None:
@@ -258,7 +263,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
         return screen.name() if screen is not None else ""
 
     def geometry_state(self) -> str:
-        return serialize_window_state(self.geometry(), self._screen_name(), include_size=True)
+        rect = self._normal_geometry if self._expanded_to_screen and self._normal_geometry else self.geometry()
+        return serialize_window_state(rect, self._screen_name(), include_size=True)
 
     def _apply_fitted_state(self, state: WindowState) -> bool:
         fitted = fit_window_state(
@@ -272,6 +278,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
         rect, screen = fitted
         self.setMinimumSize(min(400, screen.geometry.width()), min(460, screen.geometry.height()))
         self.setGeometry(rect)
+        self._expanded_to_screen = False
+        self._normal_geometry = None
+        self._update_window_mode_controls()
         self._placement_initialized = True
         return True
 
@@ -283,7 +292,115 @@ class ChatDialog(FramelessDragMixin, QWidget):
         state = WindowState(
             self.x(), self.y(), self.width(), self.height(), self._screen_name()
         )
+        if self._expanded_to_screen:
+            fitted = fit_window_state(
+                state,
+                self._screen_areas(),
+                fallback_size=self.size(),
+                minimum_size=QSize(400, 460),
+            )
+            if fitted is not None:
+                rect, screen = fitted
+                self.setMinimumSize(
+                    min(400, screen.geometry.width()),
+                    min(460, screen.geometry.height()),
+                )
+                self.setGeometry(rect)
+            return
         self._apply_fitted_state(state)
+
+    def _current_screen_geometry(self) -> QRect:
+        areas = self._screen_areas()
+        center = self.geometry().center()
+        match = next((area for area in areas if area.geometry.contains(center)), None)
+        if match is not None:
+            return QRect(match.geometry)
+        if areas:
+            return QRect(areas[0].geometry)
+        screen = QApplication.primaryScreen()
+        return QRect(screen.availableGeometry()) if screen is not None else QRect(0, 0, 1440, 900)
+
+    @staticmethod
+    def _default_size_for_area(area: QRect) -> QSize:
+        return QSize(
+            max(400, min(int(area.width() * 0.30), 520)),
+            max(500, min(int(area.height() * 0.60), 800)),
+        )
+
+    def toggle_expanded_window(self) -> None:
+        if self._expanded_to_screen:
+            self._restore_normal_window()
+            return
+        self._normal_geometry = QRect(self.geometry())
+        self._expanded_to_screen = True
+        self.setGeometry(self._current_screen_geometry())
+        self._update_window_mode_controls()
+
+    def _restore_normal_window(self) -> None:
+        target = QRect(self._normal_geometry) if self._normal_geometry else QRect(self.geometry())
+        self._expanded_to_screen = False
+        self._normal_geometry = None
+        state = WindowState(
+            target.x(), target.y(), target.width(), target.height(), self._screen_name()
+        )
+        self._apply_fitted_state(state)
+        self._update_window_mode_controls()
+
+    def scale_window(self, factor: float) -> None:
+        if factor <= 0:
+            return
+        if self._expanded_to_screen:
+            self._restore_normal_window()
+        area = self._current_screen_geometry()
+        current = self.geometry()
+        width = min(area.width(), max(self.minimumWidth(), round(current.width() * factor)))
+        height = min(area.height(), max(self.minimumHeight(), round(current.height() * factor)))
+        center = current.center()
+        state = WindowState(
+            center.x() - width // 2,
+            center.y() - height // 2,
+            width,
+            height,
+            self._screen_name(),
+        )
+        self._apply_fitted_state(state)
+
+    def reset_window_size(self) -> None:
+        base = self._normal_geometry if self._expanded_to_screen and self._normal_geometry else self.geometry()
+        self._expanded_to_screen = False
+        self._normal_geometry = None
+        area = self._current_screen_geometry()
+        size = self._default_size_for_area(area)
+        state = WindowState(base.x(), base.y(), size.width(), size.height(), self._screen_name())
+        self._apply_fitted_state(state)
+
+    def _update_window_mode_controls(self) -> None:
+        if not hasattr(self, "_expand_btn"):
+            return
+        if self._expanded_to_screen:
+            self._expand_btn.setText("❐")
+            self._expand_btn.setAccessibleName("恢复窗口")
+            self._expand_btn.setToolTip("恢复之前的窗口大小")
+        else:
+            self._expand_btn.setText("□")
+            self._expand_btn.setAccessibleName("放大到当前屏幕")
+            self._expand_btn.setToolTip("放大到当前屏幕")
+        if hasattr(self, "_expand_window_action"):
+            self._expand_window_action.setText(
+                "恢复之前大小" if self._expanded_to_screen else "放大到当前屏幕"
+            )
+        if hasattr(self, "_size_grip"):
+            self._size_grip.setEnabled(not self._expanded_to_screen)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton and event.pos().y() <= self._title_bar_height:
+            self.toggle_expanded_window()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def _in_drag_area(self, pos: QPoint) -> bool:
+        return not self._expanded_to_screen and super()._in_drag_area(pos)
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -335,6 +452,15 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._new_convo_btn.clicked.connect(self.new_convo_requested.emit)
         tl.addWidget(self._new_convo_btn)
 
+        expand_btn = QPushButton("□")
+        expand_btn.setFixedSize(24, 24)
+        expand_btn.setAccessibleName("放大到当前屏幕")
+        expand_btn.setToolTip("放大到当前屏幕")
+        expand_btn.setStyleSheet(styles.ICON_BUTTON)
+        expand_btn.clicked.connect(self.toggle_expanded_window)
+        self._expand_btn = expand_btn
+        tl.addWidget(expand_btn)
+
         hide_btn = QPushButton("−")
         hide_btn.setFixedSize(24, 24)
         hide_btn.setAccessibleName("隐藏对话窗口")
@@ -351,6 +477,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._toolbar.setFixedHeight(64)
         self._toolbar.setStyleSheet(styles.TOOLBAR)
         toolbar_layout = QVBoxLayout(self._toolbar)
+        self._toolbar_layout = toolbar_layout
         toolbar_layout.setContentsMargins(12, 5, 12, 5)
         toolbar_layout.setSpacing(1)
         tb = QHBoxLayout()
@@ -414,9 +541,21 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._export_action = more_menu.addAction("导出当前对话")
         more_menu.addSeparator()
         self._manage_agents_action = more_menu.addAction("管理 Agent…")
+        more_menu.addSeparator()
+        window_menu = more_menu.addMenu("窗口大小")
+        window_menu.setStyleSheet(styles.menu_style())
+        self._expand_window_action = window_menu.addAction("放大到当前屏幕")
+        self._grow_window_action = window_menu.addAction("放大一级")
+        self._shrink_window_action = window_menu.addAction("缩小一级")
+        window_menu.addSeparator()
+        self._reset_window_action = window_menu.addAction("恢复默认大小")
         self._history_action.triggered.connect(self.history_requested.emit)
         self._export_action.triggered.connect(self.export_requested.emit)
         self._manage_agents_action.triggered.connect(self.manage_agents_requested.emit)
+        self._expand_window_action.triggered.connect(self.toggle_expanded_window)
+        self._grow_window_action.triggered.connect(lambda: self.scale_window(1.15))
+        self._shrink_window_action.triggered.connect(lambda: self.scale_window(1 / 1.15))
+        self._reset_window_action.triggered.connect(self.reset_window_size)
         more_btn.setMenu(more_menu)
         self._more_btn = more_btn
         tb.addWidget(more_btn)
@@ -483,6 +622,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         # ── 输入区域 ──
         input_row = QHBoxLayout()
+        self._input_row_layout = input_row
         input_row.setContentsMargins(8, 4, 8, 8)
         input_row.setSpacing(0)
 
@@ -546,7 +686,10 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         grip = QSizeGrip(self)
         grip.setFixedSize(14, 14)
-        grip.setStyleSheet("QSizeGrip { image: none; }")
+        grip.setAccessibleName("调整窗口大小")
+        grip.setToolTip("拖动调整窗口大小")
+        grip.setStyleSheet(styles.SIZE_GRIP)
+        self._size_grip = grip
         input_row.addWidget(grip, alignment=Qt.AlignBottom | Qt.AlignRight)
 
         root.addLayout(input_row)
@@ -557,6 +700,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._hide_btn.setAccessibleName("隐藏对话窗口")
         focus_chain = (
             self._new_convo_btn,
+            self._expand_btn,
             self._hide_btn,
             self._agent_combo,
             self._model_combo,
@@ -569,6 +713,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         for current, following in zip(focus_chain, focus_chain[1:]):
             self.setTabOrder(current, following)
         self._refresh_context_tooltips()
+        self._update_responsive_layout()
 
     def _build_empty_state(self) -> QWidget:
         """构建首屏引导，让用户在空对话中立即看懂三个核心入口。"""
@@ -613,13 +758,32 @@ class ChatDialog(FramelessDragMixin, QWidget):
         layout.addWidget(shortcuts)
         return panel
 
+    def _update_responsive_layout(self) -> None:
+        """Keep wide windows readable while preserving the compact 400px layout."""
+        if not hasattr(self, "_msg_layout"):
+            return
+        outer = max(0, (self.width() - 900) // 2)
+        self._msg_layout.setContentsMargins(outer + 16, 12, outer + 16, 10)
+        if hasattr(self, "_toolbar_layout"):
+            self._toolbar_layout.setContentsMargins(outer + 12, 5, outer + 12, 5)
+        if hasattr(self, "_input_row_layout"):
+            self._input_row_layout.setContentsMargins(outer + 8, 4, outer + 8, 8)
+        self._update_bubble_widths()
+        if hasattr(self, "_latest_btn"):
+            self._position_latest_button()
+
     def _update_bubble_widths(self) -> None:
         """让气泡随窗口缩放，同时保留左右对话层级。"""
         if not hasattr(self, "_msg_container"):
             return
+        content_width = min(900, self.width())
         for label in self._msg_container.findChildren(QLabel, "message_bubble"):
-            fraction = 0.78 if getattr(label, "_is_user_message", False) else 0.90
-            label.setMaximumWidth(max(280, min(560, int(self.width() * fraction))))
+            is_user = getattr(label, "_is_user_message", False)
+            fraction = 0.78 if is_user else 0.90
+            maximum = 620 if is_user else 760
+            label.setMaximumWidth(
+                max(280, min(maximum, int(content_width * fraction)))
+            )
 
     # ── Agent 切换 ─────────────────────────────────────
 
@@ -1642,7 +1806,10 @@ class ChatDialog(FramelessDragMixin, QWidget):
         lbl.setObjectName("message_bubble")
         lbl.setWordWrap(True)
         fraction = 0.78 if is_user else 0.90
-        lbl.setMaximumWidth(max(280, min(560, int(self.width() * fraction))))
+        maximum = 620 if is_user else 760
+        lbl.setMaximumWidth(
+            max(280, min(maximum, int(min(900, self.width()) * fraction)))
+        )
         lbl._is_user_message = is_user
         lbl.setTextFormat(Qt.RichText if is_html else Qt.PlainText)
         lbl.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse)
@@ -1960,8 +2127,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     def _position_latest_button(self) -> None:
         viewport = self._scroll.viewport()
+        right_inset = max(12, (viewport.width() - 900) // 2 + 12)
         self._latest_btn.move(
-            viewport.width() - self._latest_btn.width() - 12,
+            viewport.width() - self._latest_btn.width() - right_inset,
             viewport.height() - self._latest_btn.height() - 12,
         )
 

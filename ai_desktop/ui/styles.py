@@ -154,6 +154,10 @@ def _generate() -> dict[str, str]:
     s["INPUT_BAR"] = (
         f"background: {c.surface}; border: 1px solid {c.border}; border-radius: 12px;"
     )
+    s["SIZE_GRIP"] = (
+        f"QSizeGrip {{ background: transparent; border-right: 2px solid {c.text_secondary}; "
+        f"border-bottom: 2px solid {c.text_secondary}; }}"
+    )
 
     # ── 对话框基础样式 ──
     s["DIALOG_BASE"] = (
