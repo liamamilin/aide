@@ -367,7 +367,6 @@ class TestChatDialogState:
 
     def test_refresh_agents(self, qtbot, dialog):
         """refresh_agents() → combo items match new agent list."""
-        # Must include the currently active agent (general_assistant) or refresh fails
         new_agents = [
             Agent(id="code_expert", name="代码专家", icon="💻", system_prompt="..."),
             Agent(id="general_assistant", name="通用助手", icon="🤖", system_prompt="..."),
@@ -375,6 +374,27 @@ class TestChatDialogState:
         ]
         dialog.refresh_agents(new_agents)
         assert dialog._agent_combo.count() == 3
+
+    def test_refresh_agents_recovers_when_active_custom_agent_was_deleted(
+        self, qtbot, dialog,
+    ):
+        custom = Agent(
+            id="custom_deleted",
+            name="即将删除",
+            icon="🧪",
+            system_prompt="temporary",
+        )
+        dialog.refresh_agents([*AGENTS, custom], custom)
+        assert dialog.active_agent.id == custom.id
+
+        fallback = AGENTS[0]
+        dialog.refresh_agents(AGENTS, fallback)
+
+        assert dialog.active_agent.id == fallback.id
+        assert dialog._agent_combo.currentData() == fallback.id
+        assert not dialog._agent_combo.signalsBlocked()
+        with qtbot.waitSignal(dialog.agent_changed, timeout=1000):
+            dialog._agent_combo.setCurrentIndex(1)
 
     def test_set_input_text(self, qtbot, dialog):
         """set_input_text() → input field has text and is selected."""

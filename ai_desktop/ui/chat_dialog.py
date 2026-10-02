@@ -647,6 +647,11 @@ class ChatDialog(FramelessDragMixin, QWidget):
     def active_model(self) -> str:
         return self._active_model
 
+    @property
+    def active_agent(self) -> Agent:
+        """Return the Agent currently shown in the selector."""
+        return self._active_agent
+
     def set_cached_models(self, models: list[str], active_model: str) -> None:
         """Replace entries for a service address without claiming they are current."""
         cached = list(dict.fromkeys(models))
@@ -724,16 +729,27 @@ class ChatDialog(FramelessDragMixin, QWidget):
             tooltip += "\n" + "\n".join(f"⚠ {warning}" for warning in warnings)
         self._model_profile_badge.setToolTip(tooltip)
 
-    def refresh_agents(self, agents: list[Agent]) -> None:
-        """刷新 Agent 下拉列表（自定义 Agent 变更后调用）"""
+    def refresh_agents(
+        self,
+        agents: list[Agent],
+        active_agent: Agent | None = None,
+    ) -> None:
+        """Refresh the selector and recover cleanly when its Agent was deleted."""
+        if not agents:
+            return
+        target_id = (active_agent or self._active_agent).id
+        target = next((agent for agent in agents if agent.id == target_id), agents[0])
         self._agents = agents
+        self._active_agent = target
         self._agent_combo.blockSignals(True)
-        self._agent_combo.clear()
-        for ag in agents:
-            self._agent_combo.addItem(f"{ag.icon} {ag.name}", ag.id)
-        idx = next(i for i, ag in enumerate(agents) if ag.id == self._active_agent.id)
-        self._agent_combo.setCurrentIndex(idx)
-        self._agent_combo.blockSignals(False)
+        try:
+            self._agent_combo.clear()
+            for ag in agents:
+                self._agent_combo.addItem(f"{ag.icon} {ag.name}", ag.id)
+            idx = next(i for i, ag in enumerate(agents) if ag.id == target.id)
+            self._agent_combo.setCurrentIndex(idx)
+        finally:
+            self._agent_combo.blockSignals(False)
         self._refresh_context_tooltips()
 
     def set_auto_hide(self, enabled: bool) -> None:

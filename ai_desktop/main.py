@@ -961,6 +961,23 @@ class ChatController(QObject):
         self._update_model_profile_summary()
         logger.info("Agent switched: %s", self._active_agent.name)
 
+    def _sync_active_agent_from_dialog(self) -> Agent:
+        """Use the visible Agent as the authority at a user request boundary."""
+        if self._dialog is None:
+            return self._active_agent
+        visible_agent = self._dialog.active_agent
+        if visible_agent.id == self._active_agent.id:
+            return self._active_agent
+        logger.warning(
+            "Agent state mismatch (controller=%s, dialog=%s); using visible selection",
+            self._active_agent.id,
+            visible_agent.id,
+        )
+        self._active_agent = self._agent_mgr.switch(visible_agent)
+        self._tray.set_active_agent(self._active_agent)
+        self._update_model_profile_summary()
+        return self._active_agent
+
     @_safe_slot
     def _on_tray_agent(self, agent: Agent) -> None:
         """菜单栏切换 Agent"""
@@ -1265,6 +1282,7 @@ class ChatController(QObject):
     @_safe_slot
     def _new_conversation(self) -> None:
         self._stop_worker(show_cancelled=False)
+        self._sync_active_agent_from_dialog()
         self._regenerating_user_id = 0
         self._convo_id = 0
         self._messages = []
@@ -1422,7 +1440,7 @@ class ChatController(QObject):
         self._custom_agents = self._agent_mgr.custom_agents
         self._active_agent = self._agent_mgr.active_agent
         if self._dialog:
-            self._dialog.refresh_agents(self._all_agents)
+            self._dialog.refresh_agents(self._all_agents, self._active_agent)
         self._tray.refresh_agents(self._all_agents)
         self._tray.set_active_agent(self._active_agent)
         self._update_model_profile_summary()
@@ -1467,8 +1485,7 @@ class ChatController(QObject):
         self._custom_agents = self._agent_mgr.custom_agents
         self._active_agent = self._agent_mgr.active_agent
         if self._dialog:
-            self._dialog.refresh_agents(self._all_agents)
-            self._dialog.set_active_agent(self._active_agent)
+            self._dialog.refresh_agents(self._all_agents, self._active_agent)
         self._tray.refresh_agents(self._all_agents)
         self._tray.set_active_agent(self._active_agent)
         self._update_model_profile_summary()
@@ -1897,7 +1914,7 @@ class ChatController(QObject):
                 self._dialog.flash_busy()
             return
         self._result_bubble.hide()
-        request_agent = request_agent or self._active_agent
+        request_agent = request_agent or self._sync_active_agent_from_dialog()
         resolved = self._resolve_model_config(action_profile_id, request_agent)
         image_capability = self._image_capability_for_model(resolved.model)
         if (
@@ -1946,7 +1963,7 @@ class ChatController(QObject):
         worker = None
         try:
             if self._convo_id == 0:
-                conv = create_conversation(self._active_agent.id)
+                conv = create_conversation(request_agent.id)
                 self._convo_id = conv.id
                 created_conversation = True
                 self._sync_action_context()
@@ -1960,6 +1977,14 @@ class ChatController(QObject):
             if len(recent) > max_msgs:
                 recent = recent[-max_msgs:]
             recent = self._context_messages(recent)
+
+            logger.info(
+                "Starting request conversation=%d agent=%s context_messages=%d roles=%s",
+                self._convo_id,
+                request_agent.id,
+                len(recent),
+                ",".join(message.role for message in recent),
+            )
 
             self._response_text = ""
             worker = StreamingChatWorker(
