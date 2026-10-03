@@ -47,11 +47,19 @@ def test_bundle_validator_checks_version_dependencies_and_resources(tmp_path):
     for name in (
         "图标-v2.png",
         "图标-v2.icns",
+        "assets/tabler/message-2.svg",
+        "assets/tabler/LICENSE",
+        "assets/tabler/README.md",
         "桌面宠物-v2.png",
         "pet_frames/blink-v2.png",
         "pet_layers/master.json",
         "pet_layers/attentive-v2.png",
         "pet_layers/focused-v2.png",
+        "pets/owl-v2/pet.json",
+        "pets/owl-v2/spritesheet.png",
+        "pets/petdex-profiles/astra.json",
+        "pets/petdex-profiles/boba.json",
+        "pets/petdex-profiles/shinchan.json",
     ):
         resource = resources / name
         resource.parent.mkdir(parents=True, exist_ok=True)
@@ -77,6 +85,10 @@ def test_bundle_validator_checks_version_dependencies_and_resources(tmp_path):
         "misaki/data/us_silver.json",
         "en_core_web_sm/meta.json",
         "en_core_web_sm-3.8.0.dist-info/METADATA",
+        "pyqt_fluent_widgets-1.11.3.dist-info/METADATA",
+        "pyqt_fluent_widgets-1.11.3.dist-info/LICENSE",
+        "pyqt5_frameless_window-0.8.2.dist-info/METADATA",
+        "pyqt5_frameless_window-0.8.2.dist-info/LICENSE",
     ):
         resource = frameworks / name
         resource.parent.mkdir(parents=True, exist_ok=True)
@@ -145,3 +157,14 @@ def test_ci_and_local_build_use_one_definition():
     assert "AIDE_DATA_DIR" in upgrade_smoke_script
     assert "PRAGMA user_version" in upgrade_smoke_script
     assert "backups" in upgrade_smoke_script
+
+
+def test_ui_dependency_import_does_not_pollute_diagnostic_stdout(tmp_path):
+    import json
+    import os
+    import subprocess
+    import sys
+    env = dict(os.environ, AIDE_DATA_DIR=str(tmp_path))
+    code = "from ai_desktop.ui import fluent; import json; print(json.dumps({'status': 'ready'}))"
+    result = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True)
+    assert json.loads(result.stdout) == {"status": "ready"}

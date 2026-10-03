@@ -1,0 +1,283 @@
+{
+  "schema_version": 1,
+  "name": "astra",
+  "spritesheet": {
+    "file": "spritesheet.webp",
+    "frame_width": 192,
+    "frame_height": 208,
+    "columns": 8,
+    "frame_count": 72
+  },
+  "anchor": {
+    "x": 0.5,
+    "y": 0.95
+  },
+  "defaults": {
+    "state": "idle",
+    "fps": 8
+  },
+  "states": {
+    "idle": {
+      "base": "rest",
+      "ambient": [
+        "idle_blink",
+        "idle_double_blink",
+        "idle_slow_blink",
+        "idle_glance",
+        "idle_curious"
+      ]
+    },
+    "hover": {
+      "base": "rest",
+      "reactions": [
+        "hover_wing_greeting",
+        "hover_friendly_blink",
+        "hover_curious_reply",
+        "hover_quiet_attention",
+        "hover_double_reply"
+      ]
+    },
+    "working": {
+      "base": "focus"
+    },
+    "listening": {
+      "base": "listen"
+    },
+    "speaking": {
+      "base": "speak"
+    },
+    "success": {
+      "base": "success"
+    },
+    "error": {
+      "base": "error"
+    }
+  },
+  "animations": {
+    "rest": {
+      "frames": [
+        48
+      ],
+      "durations_ms": [
+        1000
+      ],
+      "fps": 8,
+      "loop": true
+    },
+    "focus": {
+      "frames": [
+        65
+      ],
+      "durations_ms": [
+        1000
+      ],
+      "fps": 8,
+      "loop": true
+    },
+    "listen": {
+      "frames": [
+        48
+      ],
+      "durations_ms": [
+        1000
+      ],
+      "fps": 8,
+      "loop": true
+    },
+    "idle_blink": {
+      "frames": [
+        48,
+        50,
+        48
+      ],
+      "durations_ms": [
+        200,
+        100,
+        240
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "idle_double_blink": {
+      "frames": [
+        48,
+        50,
+        48,
+        50,
+        48
+      ],
+      "durations_ms": [
+        180,
+        90,
+        180,
+        90,
+        260
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "idle_slow_blink": {
+      "frames": [
+        48,
+        50,
+        48
+      ],
+      "durations_ms": [
+        260,
+        180,
+        300
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "idle_glance": {
+      "frames": [
+        48,
+        49,
+        48
+      ],
+      "durations_ms": [
+        240,
+        520,
+        300
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "idle_curious": {
+      "frames": [
+        48,
+        51,
+        48
+      ],
+      "durations_ms": [
+        260,
+        520,
+        300
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "hover_wing_greeting": {
+      "frames": [
+        48,
+        52,
+        48
+      ],
+      "durations_ms": [
+        160,
+        420,
+        280
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "hover_friendly_blink": {
+      "frames": [
+        48,
+        50,
+        48
+      ],
+      "durations_ms": [
+        180,
+        140,
+        300
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "hover_curious_reply": {
+      "frames": [
+        48,
+        51,
+        48
+      ],
+      "durations_ms": [
+        160,
+        620,
+        320
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "hover_quiet_attention": {
+      "frames": [
+        48,
+        49,
+        48
+      ],
+      "durations_ms": [
+        180,
+        540,
+        320
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "hover_double_reply": {
+      "frames": [
+        48,
+        50,
+        48,
+        50,
+        48
+      ],
+      "durations_ms": [
+        180,
+        100,
+        160,
+        100,
+        300
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "success": {
+      "frames": [
+        48,
+        50,
+        48
+      ],
+      "durations_ms": [
+        180,
+        300,
+        280
+      ],
+      "fps": 8,
+      "loop": false,
+      "next_state": "idle"
+    },
+    "error": {
+      "frames": [
+        48,
+        40,
+        48
+      ],
+      "durations_ms": [
+        180,
+        420,
+        280
+      ],
+      "fps": 8,
+      "loop": false,
+      "next_state": "idle"
+    },
+    "speak": {
+      "frames": [
+        48
+      ],
+      "durations_ms": [
+        1000
+      ],
+      "fps": 8,
+      "loop": true
+    }
+  },
+  "atlas_sha256": "cf18bed5e493b75ab88c78e20ed7c7a87b85b93d6730eb2701e0806c6207c388",
+  "rendering": {
+    "pixel_art": false,
+    "scale": 0.88,
+    "baseline": 0.9,
+    "remove_magenta_matte": true
+  }
+}

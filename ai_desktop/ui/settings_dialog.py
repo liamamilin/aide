@@ -1,26 +1,63 @@
 """
 设置面板
 """
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import (
-    QCheckBox,
-    QComboBox,
-    QDialog,
-    QDoubleSpinBox,
-    QFormLayout,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QMessageBox,
-    QPushButton,
-    QScrollArea,
-    QSpinBox,
-    QVBoxLayout,
-    QWidget,
-)
+import json
+import os
+from pathlib import Path
 
-from ai_desktop.ui import styles
+from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtWidgets import QFormLayout, QHBoxLayout, QVBoxLayout, QWidget
+
+from ai_desktop.ui.fluent import BodyLabel as QLabel
+from ai_desktop.ui.fluent import CheckBox as QCheckBox
+from ai_desktop.ui.fluent import ComboBox as QComboBox
+from ai_desktop.ui.fluent import DoubleSpinBox as QDoubleSpinBox
+from ai_desktop.ui.fluent import FluentDialog as QDialog
+from ai_desktop.ui.fluent import LineEdit as QLineEdit
+from ai_desktop.ui.fluent import MessageBox as QMessageBox
+from ai_desktop.ui.fluent import (
+    PrimaryPushButton,
+    dialog_title,
+)
+from ai_desktop.ui.fluent import PushButton as QPushButton
+from ai_desktop.ui.fluent import ScrollArea as QScrollArea
+from ai_desktop.ui.fluent import SpinBox as QSpinBox
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
+from ai_desktop.utils.paths import resource_path
+
+
+def _discover_pets() -> list[tuple[str, str, str]]:
+    """Return list of (display_label, source, name) for all available pets."""
+    pets: list[tuple[str, str, str]] = []
+
+    built_in_dir = resource_path("ai_desktop", "pets")
+    if os.path.isdir(built_in_dir):
+        for entry in sorted(os.listdir(built_in_dir)):
+            manifest = os.path.join(built_in_dir, entry, "pet.json")
+            if os.path.isfile(manifest):
+                label = _pet_display_name(manifest, entry)
+                pets.append((f"{label} (内置)", "built-in", entry))
+
+    petdex_dir = Path.home() / ".petdex" / "pets"
+    if petdex_dir.is_dir():
+        for entry in sorted(petdex_dir.iterdir()):
+            if not entry.is_dir():
+                continue
+            manifest = entry / "pet.json"
+            if manifest.is_file():
+                label = _pet_display_name(str(manifest), entry.name)
+                pets.append((f"{label} (Petdex)", "petdex", entry.name))
+
+    return pets
+
+
+def _pet_display_name(manifest_path: str, fallback: str) -> str:
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("displayName") or data.get("name") or fallback
+    except (OSError, json.JSONDecodeError, KeyError):
+        return fallback
 
 
 class SettingsDialog(FramelessDragMixin, QDialog):
@@ -33,6 +70,7 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         ("desktop_pet", "使用桌面宠物悬浮入口", bool, True),
         ("pet_reduce_motion", "减少宠物动画", bool, False),
         ("pet_size", "桌面宠物尺寸", str, "medium"),
+        ("pet_source", "桌面宠物", str, "built-in"),
         ("timeout",     "超时 (秒)",         int,   10),
         ("num_ctx",     "上下文窗口",        int,   2048),
         ("num_predict", "最大输出 token",    int,   256),
@@ -58,7 +96,6 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         )
         self.setMinimumSize(380, 440)
         self.resize(400, 460)
-        self.setStyleSheet(styles.DIALOG_BASE)
 
     def _setup_ui(self):
         root = QVBoxLayout(self)
@@ -66,32 +103,14 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         root.setSpacing(0)
 
         # ── 标题栏 ──
-        title = QWidget()
-        title.setFixedHeight(40)
-        title.setStyleSheet(styles.TITLE_BAR)
-        tl = QHBoxLayout(title)
-        tl.setContentsMargins(12, 0, 8, 0)
-
-        title_lbl = QLabel("设置")
-        title_lbl.setStyleSheet(styles.LABEL_BOLD)
-        tl.addWidget(title_lbl)
-        tl.addStretch()
-
-        close_btn = QPushButton("×")
-        close_btn.setFixedSize(24, 24)
-        close_btn.setStyleSheet(styles.CLOSE_BUTTON)
-        close_btn.clicked.connect(self.reject)
-        tl.addWidget(close_btn)
-
-        root.addWidget(title)
+        root.addWidget(dialog_title(self, '设置'))
 
         # ── 表单（可滚动）──
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(styles.SETTINGS_SCROLL)
+        scroll.setFrameShape(QScrollArea.NoFrame)
 
         content = QWidget()
-        content.setStyleSheet("background: transparent;")
         form = QFormLayout(content)
         form.setContentsMargins(16, 12, 16, 12)
         form.setSpacing(8)
@@ -112,7 +131,6 @@ class SettingsDialog(FramelessDragMixin, QDialog):
             "repeat_penalty": (0.0, 2.0),
         }
 
-        _widget_style = styles.FORM_WIDGET
 
         for key, label, typ, _ in self.FIELDS:
             if key == "pet_size":
@@ -120,7 +138,13 @@ class SettingsDialog(FramelessDragMixin, QDialog):
                 w.addItem("小", "small")
                 w.addItem("中", "medium")
                 w.addItem("大", "large")
-                w.setStyleSheet(f"QComboBox {{ {_widget_style} }}")
+                self._widgets[key] = w
+            elif key == "pet_name":
+                continue
+            elif key == "pet_source":
+                w = QComboBox()
+                for display_label, source, name in _discover_pets():
+                    w.addItem(display_label, (source, name))
                 self._widgets[key] = w
             elif typ is float:
                 w = QDoubleSpinBox()
@@ -128,24 +152,19 @@ class SettingsDialog(FramelessDragMixin, QDialog):
                 w.setRange(lo, hi)
                 w.setSingleStep(0.05)
                 w.setDecimals(2)
-                w.setStyleSheet(f"QDoubleSpinBox {{ {_widget_style} }}")
                 self._widgets[key] = w
             elif typ is int:
                 w = QSpinBox()
                 lo, hi = _int_ranges.get(key, (1, 999999))
                 w.setRange(lo, hi)
-                w.setStyleSheet(f"QSpinBox {{ {_widget_style} }}")
                 self._widgets[key] = w
             elif typ is bool:
                 w = QCheckBox()
-                w.setStyleSheet(styles.LABEL)
                 self._widgets[key] = w
             else:
                 w = QLineEdit()
-                w.setStyleSheet(styles.FORM_INPUT)
                 self._widgets[key] = w
             lbl = QLabel(label)
-            lbl.setStyleSheet(styles.LABEL)
             form.addRow(lbl, w)
 
         scroll.setWidget(content)
@@ -157,12 +176,10 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         bb.addStretch()
 
         cancel = QPushButton("取消")
-        cancel.setStyleSheet(styles.CANCEL_BUTTON)
         cancel.clicked.connect(self.reject)
         bb.addWidget(cancel)
 
-        save = QPushButton("保存")
-        save.setStyleSheet(styles.SAVE_BUTTON)
+        save = PrimaryPushButton("保存")
         save.clicked.connect(self._on_save)
         bb.addWidget(save)
 
@@ -170,11 +187,22 @@ class SettingsDialog(FramelessDragMixin, QDialog):
 
     def _load(self) -> None:
         for key, label, typ, default in self.FIELDS:
+            if key == "pet_name":
+                continue
             val = self._current.get(key, default)
             w = self._widgets[key]
             if key == "pet_size":
                 index = w.findData(str(val))
                 w.setCurrentIndex(index if index >= 0 else w.findData(default))
+            elif key == "pet_source":
+                source = str(val)
+                name = str(self._current.get("pet_name", "owl-v2"))
+                target = (source, name)
+                index = next(
+                    (i for i in range(w.count()) if w.itemData(i) == target),
+                    0,
+                )
+                w.setCurrentIndex(index)
             elif typ is float:
                 w.setValue(float(val) if val else float(default))
             elif typ is int:
@@ -187,9 +215,15 @@ class SettingsDialog(FramelessDragMixin, QDialog):
     def _on_save(self) -> None:
         data = {}
         for key, label, typ, default in self.FIELDS:
+            if key == "pet_name":
+                continue
             w = self._widgets[key]
             if key == "pet_size":
                 data[key] = w.currentData()
+            elif key == "pet_source":
+                source, name = w.currentData()
+                data["pet_source"] = source
+                data["pet_name"] = name
             elif typ is float:
                 data[key] = w.value()
             elif typ is int:

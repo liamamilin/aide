@@ -4,12 +4,15 @@ Provides:
 - qapp: session-scoped QApplication (required by pytest-qt)
 - tmp_db: function-scoped temp SQLite database with monkey-patching
 """
+import os
 import tempfile
 import threading
 from pathlib import Path
 
 import pytest
 from PyQt5.QtWidgets import QApplication
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import ai_desktop.utils.storage as storage
 

@@ -87,11 +87,19 @@ def validate_bundle(bundle: Path, version: str) -> list[str]:
     for name in (
         "图标-v2.png",
         "图标-v2.icns",
+        "assets/tabler/message-2.svg",
+        "assets/tabler/LICENSE",
+        "assets/tabler/README.md",
         "桌面宠物-v2.png",
         "pet_frames/blink-v2.png",
         "pet_layers/master.json",
         "pet_layers/attentive-v2.png",
         "pet_layers/focused-v2.png",
+        "pets/owl-v2/pet.json",
+        "pets/owl-v2/spritesheet.png",
+        "pets/petdex-profiles/astra.json",
+        "pets/petdex-profiles/boba.json",
+        "pets/petdex-profiles/shinchan.json",
     ):
         if not (resources / name).is_file():
             errors.append(f"missing bundled resource: ai_desktop/{name}")
@@ -118,6 +126,10 @@ def validate_bundle(bundle: Path, version: str) -> list[str]:
     model_metadata = list(frameworks.glob("en_core_web_sm-*.dist-info/METADATA"))
     if not any(path.is_file() for path in model_metadata):
         errors.append("missing bundled speech resource: en_core_web_sm dist-info")
+    for package in ("pyqt_fluent_widgets", "pyqt5_frameless_window"):
+        for filename in ("METADATA", "LICENSE"):
+            if not list(frameworks.glob(f"{package}-*.dist-info/{filename}")):
+                errors.append(f"missing bundled Fluent dependency resource: {package}/{filename}")
     for module in (
         "AppKit", "Foundation", "CoreFoundation", "CoreML", "HIServices",
         "objc", "Quartz", "Vision",

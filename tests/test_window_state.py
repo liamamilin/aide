@@ -89,6 +89,64 @@ def test_chat_dialog_restores_geometry_and_reopen_preserves_user_size(qtbot, age
         assert screen.geometry.contains(dialog.geometry())
 
 
+def test_chat_dialog_expands_to_screen_and_restores_previous_geometry(qtbot, agent):
+    screen = ScreenArea("Display", QRect(0, 0, 1200, 800))
+    with patch("ai_desktop.ui.chat_dialog.ChatDialog._screen_areas", return_value=[screen]), \
+            patch("ai_desktop.ui.chat_dialog.pin_to_all_spaces"):
+        dialog = ChatDialog([agent], agent, ["model"], "model")
+        qtbot.addWidget(dialog)
+        normal = QRect(140, 90, 480, 600)
+        dialog.setGeometry(normal)
+        dialog.show()
+        qtbot.wait(10)
+
+        dialog.toggle_expanded_window()
+        qtbot.wait(10)
+        assert dialog.geometry() == screen.geometry
+        assert dialog._expanded_to_screen
+        assert not dialog._size_grip.isEnabled()
+        assert dialog._expand_btn.accessibleName() == "恢复窗口"
+        assert dialog._expand_window_action.text() == "恢复之前大小"
+        assert dialog._msg_layout.getContentsMargins()[0] == 166
+        assert dialog._toolbar_layout.getContentsMargins()[0] == 166
+        assert dialog._input_row_layout.getContentsMargins()[0] == 158
+        dialog.add_assistant_message("Readable wide answer")
+        bubble = dialog._msg_container.findChildren(
+            object, "message_bubble"
+        )[-1]
+        assert bubble.maximumWidth() == 760
+        saved = parse_window_state(dialog.geometry_state(), include_size=True)
+        assert saved is not None
+        assert (saved.x, saved.y, saved.width, saved.height) == (
+            normal.x(), normal.y(), normal.width(), normal.height()
+        )
+
+        dialog.toggle_expanded_window()
+        assert dialog.geometry() == normal
+        assert not dialog._expanded_to_screen
+        assert dialog._size_grip.isEnabled()
+
+
+def test_chat_dialog_scales_and_resets_to_default_size(qtbot, agent):
+    screen = ScreenArea("Display", QRect(0, 0, 1200, 800))
+    with patch("ai_desktop.ui.chat_dialog.ChatDialog._screen_areas", return_value=[screen]), \
+            patch("ai_desktop.ui.chat_dialog.pin_to_all_spaces"):
+        dialog = ChatDialog([agent], agent, ["model"], "model")
+        qtbot.addWidget(dialog)
+        dialog.setGeometry(QRect(100, 100, 440, 580))
+
+        dialog.scale_window(1.15)
+        assert dialog.size() == QSize(506, 667)
+        assert screen.geometry.contains(dialog.geometry())
+
+        dialog.scale_window(0.01)
+        assert dialog.size() == dialog.minimumSize()
+
+        dialog.reset_window_size()
+        assert dialog.size() == QSize(400, 500)
+        assert screen.geometry.contains(dialog.geometry())
+
+
 def test_float_button_restores_and_clamps_position(qtbot):
     screen = ScreenArea("Display", QRect(0, 0, 800, 600))
     with patch("ai_desktop.ui.float_button.FloatButton._screen_areas", return_value=[screen]), \

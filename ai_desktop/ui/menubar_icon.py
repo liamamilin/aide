@@ -4,11 +4,11 @@ macOS 菜单栏图标
 import os
 
 from PyQt5.QtCore import QRectF, Qt, pyqtSignal
-from PyQt5.QtGui import QIcon, QPainter, QPainterPath, QPixmap
-from PyQt5.QtWidgets import QAction, QMenu, QSystemTrayIcon
+from PyQt5.QtGui import QCursor, QIcon, QPainter, QPainterPath, QPixmap
+from PyQt5.QtWidgets import QAction, QSystemTrayIcon
 
 from ai_desktop.config import Agent
-from ai_desktop.ui import styles
+from ai_desktop.ui.fluent import Menu as QMenu
 from ai_desktop.utils.paths import resource_path
 
 _ICON_PATH = next(
@@ -76,7 +76,6 @@ class MenuBarIcon(QSystemTrayIcon):
 
     def _build_menu(self) -> None:
         menu = QMenu()
-        menu.setStyleSheet(styles.menu_style())
 
         show_action = menu.addAction("打开对话")
         show_action.triggered.connect(self.dialog_toggle.emit)
@@ -108,7 +107,11 @@ class MenuBarIcon(QSystemTrayIcon):
         exit_action = menu.addAction("退出")
         exit_action.triggered.connect(self.exit_clicked.emit)
 
-        self.setContextMenu(menu)
+        old_menu = getattr(self, "_fluent_menu", None)
+        if old_menu is not None:
+            old_menu.close()
+            old_menu.deleteLater()
+        self._fluent_menu = menu
 
     def _float_entry_label(self) -> str:
         entry_name = "桌面宠物" if self._float_entry_pet_enabled else "悬浮球"
@@ -135,11 +138,15 @@ class MenuBarIcon(QSystemTrayIcon):
 
     def refresh_theme(self) -> None:
         """Refresh the persistent tray menu after the system palette changes."""
-        menu = self.contextMenu()
-        if menu is not None:
-            menu.setStyleSheet(styles.menu_style())
+        # qfluentwidgets updates registered menu styles on theme changes.
+        return
+
+    def contextMenu(self):
+        return self._fluent_menu
 
     def _on_activated(self, reason: int) -> None:
         # macOS 左键点击 = QSystemTrayIcon.Trigger
         if reason == QSystemTrayIcon.Trigger:
             self.dialog_toggle.emit()
+        elif reason == QSystemTrayIcon.Context:
+            self._fluent_menu.exec_(QCursor.pos())

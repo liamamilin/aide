@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from PyQt5.QtCore import QObject, Qt, QThread, QTimer, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
+from PyQt5.QtWidgets import QApplication, QSystemTrayIcon
 
 from ai_desktop import __version__, config
 from ai_desktop.agent_manager import AgentManager
@@ -46,6 +46,8 @@ from ai_desktop.ui import styles
 from ai_desktop.ui.agent_editor import AgentDef, AgentEditor
 from ai_desktop.ui.chat_dialog import ChatDialog
 from ai_desktop.ui.float_button import FloatButton, pin_to_all_spaces
+from ai_desktop.ui.fluent import InfoBar, initialize, show_notice
+from ai_desktop.ui.fluent import MessageBox as QMessageBox
 from ai_desktop.ui.history_dialog import HistoryDialog
 from ai_desktop.ui.menubar_icon import MenuBarIcon
 from ai_desktop.ui.result_bubble import ResultBubble
@@ -264,7 +266,7 @@ class ChatController(QObject):
         )
         self._capability_check: tuple[int, str, str, str] | None = None
         self._startup_service_check: tuple[int, str] | None = None
-        self._notices: list[QMessageBox] = []
+        self._notices: list[InfoBar] = []
 
     @_safe_slot
     def refresh_theme(self, _palette=None) -> None:
@@ -278,16 +280,10 @@ class ChatController(QObject):
 
     @staticmethod
     def _create_hotkey_backend():
-        """按运行模式返回全局快捷键后端（冻结→NSEvent，开发→pynput）"""
-        if getattr(sys, "frozen", False):
-            # 冻结模式（.app）：用 NSEvent 全局监听（主线程，无 dispatch 断言）
-            from ai_desktop.capture.nsevent_monitor import NSEventMonitor
-            logger.info("Using NSEventMonitor hotkey backend")
-            return NSEventMonitor()
-        # 开发模式（aide）：用 pynput（终端已有 AX 权限）
-        from ai_desktop.capture.hotkey_listener import HotkeyListener
-        logger.info("Using pynput hotkey backend")
-        return HotkeyListener()
+        """返回全局快捷键后端（始终使用 NSEvent，避免 pynput 后台线程触发主队列断言崩溃）"""
+        from ai_desktop.capture.nsevent_monitor import NSEventMonitor
+        logger.info("Using NSEventMonitor hotkey backend")
+        return NSEventMonitor()
 
     def start(self) -> None:
         if self._stopping or self._stopped:
@@ -894,6 +890,8 @@ class ChatController(QObject):
             "desktop_pet": config.DESKTOP_PET_ENABLED,
             "pet_reduce_motion": config.DESKTOP_PET_REDUCE_MOTION,
             "pet_size": config.DESKTOP_PET_SIZE,
+            "pet_source": config.PET_SOURCE,
+            "pet_name": config.PET_NAME,
         }
         dlg = SettingsDialog(current, parent=self._dialog)
         dlg.settings_applied.connect(self._on_settings_applied)
@@ -925,6 +923,8 @@ class ChatController(QObject):
             self.float_btn.set_reduce_motion(config.DESKTOP_PET_REDUCE_MOTION)
         if "pet_size" in changed:
             self.float_btn.set_pet_size(config.DESKTOP_PET_SIZE)
+        if "pet_source" in changed or "pet_name" in changed:
+            self.float_btn.reload_pet()
         if "base_url" in changed:
             self._startup_service_check = None
             self._service_checks.cancel_service()
@@ -960,6 +960,23 @@ class ChatController(QObject):
         self._tray.set_active_agent(self._active_agent)
         self._update_model_profile_summary()
         logger.info("Agent switched: %s", self._active_agent.name)
+
+    def _sync_active_agent_from_dialog(self) -> Agent:
+        """Use the visible Agent as the authority at a user request boundary."""
+        if self._dialog is None:
+            return self._active_agent
+        visible_agent = self._dialog.active_agent
+        if visible_agent.id == self._active_agent.id:
+            return self._active_agent
+        logger.warning(
+            "Agent state mismatch (controller=%s, dialog=%s); using visible selection",
+            self._active_agent.id,
+            visible_agent.id,
+        )
+        self._active_agent = self._agent_mgr.switch(visible_agent)
+        self._tray.set_active_agent(self._active_agent)
+        self._update_model_profile_summary()
+        return self._active_agent
 
     @_safe_slot
     def _on_tray_agent(self, agent: Agent) -> None:
@@ -1239,7 +1256,7 @@ class ChatController(QObject):
         if self._stopping:
             return
         parent = self._dialog if self._dialog else None
-        notice = QMessageBox(icon, title, text, QMessageBox.Ok, parent)
+        notice = show_notice(parent, icon, title, text)
         notice.setAttribute(Qt.WA_DeleteOnClose)
         self._notices.append(notice)
 
@@ -1247,8 +1264,8 @@ class ChatController(QObject):
             if notice in self._notices:
                 self._notices.remove(notice)
 
-        notice.finished.connect(release_notice)
-        notice.open()
+        notice.closedSignal.connect(release_notice)
+        notice.show()
 
     def _on_update_checked(self, update) -> None:
         if self._stopping or update is None:
@@ -1265,6 +1282,7 @@ class ChatController(QObject):
     @_safe_slot
     def _new_conversation(self) -> None:
         self._stop_worker(show_cancelled=False)
+        self._sync_active_agent_from_dialog()
         self._regenerating_user_id = 0
         self._convo_id = 0
         self._messages = []
@@ -1422,7 +1440,7 @@ class ChatController(QObject):
         self._custom_agents = self._agent_mgr.custom_agents
         self._active_agent = self._agent_mgr.active_agent
         if self._dialog:
-            self._dialog.refresh_agents(self._all_agents)
+            self._dialog.refresh_agents(self._all_agents, self._active_agent)
         self._tray.refresh_agents(self._all_agents)
         self._tray.set_active_agent(self._active_agent)
         self._update_model_profile_summary()
@@ -1467,8 +1485,7 @@ class ChatController(QObject):
         self._custom_agents = self._agent_mgr.custom_agents
         self._active_agent = self._agent_mgr.active_agent
         if self._dialog:
-            self._dialog.refresh_agents(self._all_agents)
-            self._dialog.set_active_agent(self._active_agent)
+            self._dialog.refresh_agents(self._all_agents, self._active_agent)
         self._tray.refresh_agents(self._all_agents)
         self._tray.set_active_agent(self._active_agent)
         self._update_model_profile_summary()
@@ -1897,7 +1914,7 @@ class ChatController(QObject):
                 self._dialog.flash_busy()
             return
         self._result_bubble.hide()
-        request_agent = request_agent or self._active_agent
+        request_agent = request_agent or self._sync_active_agent_from_dialog()
         resolved = self._resolve_model_config(action_profile_id, request_agent)
         image_capability = self._image_capability_for_model(resolved.model)
         if (
@@ -1946,7 +1963,7 @@ class ChatController(QObject):
         worker = None
         try:
             if self._convo_id == 0:
-                conv = create_conversation(self._active_agent.id)
+                conv = create_conversation(request_agent.id)
                 self._convo_id = conv.id
                 created_conversation = True
                 self._sync_action_context()
@@ -1960,6 +1977,14 @@ class ChatController(QObject):
             if len(recent) > max_msgs:
                 recent = recent[-max_msgs:]
             recent = self._context_messages(recent)
+
+            logger.info(
+                "Starting request conversation=%d agent=%s context_messages=%d roles=%s",
+                self._convo_id,
+                request_agent.id,
+                len(recent),
+                ",".join(message.role for message in recent),
+            )
 
             self._response_text = ""
             worker = StreamingChatWorker(
@@ -2271,6 +2296,7 @@ def main() -> None:
     crash_handler.install()
 
     app = QApplication(sys.argv)
+    initialize()
     app.setApplicationName("AI 桌面助手")
     app.setQuitOnLastWindowClosed(False)
 
@@ -2397,6 +2423,18 @@ def main() -> None:
     startup_timer.setSingleShot(True)
     startup_timer.timeout.connect(_startup_check)
     if smoke_mode:
+        # Exercise real Fluent widgets in the frozen/native process, rather
+        # than validating only the desktop sprite and import availability.
+        controller._show_dialog()
+        if controller._dialog is None:
+            raise RuntimeError("Fluent chat window did not initialize")
+        controller._dialog.set_auto_hide(False)
+        controller._dialog.add_user_message("Fluent UI smoke")
+        controller._dialog.add_assistant_message("**界面已就绪** · Fluent Light")
+        _smoke_settings = SettingsDialog({}, parent=controller._dialog)
+        _smoke_settings.show()
+        controller.shutdown_started.connect(_smoke_settings.close)
+        logger.info("Fluent chat and settings windows initialized")
         QTimer.singleShot(1500, controller.stop)
     else:
         startup_timer.start(1500)

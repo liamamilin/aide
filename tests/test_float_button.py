@@ -16,8 +16,7 @@ def button(qtbot):
         if hasattr(btn, '_track_timer'):
             btn._track_timer.stop()
         btn._animation_timer.stop()
-        btn._idle_blink_timer.stop()
-        btn._blink_open_timer.stop()
+        btn._idle_wake_timer.stop()
         return btn
 
 
@@ -52,9 +51,8 @@ class TestFloatButtonSignals:
         menu = _get_context_menu(button)
         assert menu is not None
         action_texts = [a.text() for a in menu.actions()]
-        assert action_texts[:3] == ["🔊 朗读选区", "", "截图到对话…"]
-        assert action_texts[3:7] == ["", "最近快捷动作", "⚡  翻译", "⚡  解释"]
-        assert action_texts[7] == "⚡  改写"
+        assert action_texts[:2] == ["🔊 朗读选区", "截图到对话…"]
+        assert action_texts[2:6] == ["最近快捷动作", "⚡  翻译", "⚡  解释", "⚡  改写"]
         assert "设置…" in action_texts
         assert "桌面宠物形态" in action_texts
         assert "隐藏桌面宠物" in action_texts
@@ -238,7 +236,7 @@ class TestFloatButtonState:
 
     def test_pet_and_compact_modes_keep_expected_sizes(self, button):
         assert button._pet_enabled
-        assert not button._pet_content.isNull()
+        assert button._spritesheet_available
         assert button.size().width() > 44
         assert button.size().height() > 44
         button.set_pet_enabled(False)
@@ -275,7 +273,6 @@ class TestFloatButtonState:
             assert mask.contains(QPoint(button.width() // 2, button.height() // 2))
             for phase in (0, 4):
                 button._hovered = phase > 0
-                button._hover_phase = phase
                 image = button.grab().toImage()
                 assert all(
                     image.pixelColor(x, y).alpha() <= 16 or mask.contains(QPoint(x, y))
@@ -298,7 +295,6 @@ class TestFloatButtonState:
         assert button.reduce_motion
         assert not button._animation_timer.isActive()
         assert button._animation_phase == 0
-        assert button._hover_phase == 0
         button._advance_animation()
         assert button._animation_phase == 0
 
@@ -308,19 +304,18 @@ class TestFloatButtonState:
 
     def test_hidden_pet_stops_timers_and_show_restores_tracking(self, button):
         button._animation_timer.start()
-        button._idle_blink_timer.start(500)
+        button._idle_wake_timer.start(500)
         button._track_timer.start()
         button._result_timer.start(500)
         button.hide()
         assert not button._animation_timer.isActive()
-        assert not button._idle_blink_timer.isActive()
-        assert not button._blink_open_timer.isActive()
+        assert not button._idle_wake_timer.isActive()
         assert not button._track_timer.isActive()
         assert not button._result_timer.isActive()
 
         button.show()
         assert not button._animation_timer.isActive()
-        assert button._idle_blink_timer.isActive()
+        assert button._idle_wake_timer.isActive()
         assert button._track_timer.isActive()
 
     def test_working_state_has_priority_over_capture_state(self, button):
@@ -333,103 +328,28 @@ class TestFloatButtonState:
         button.set_listening(False)
         assert button._effective_state() == "idle"
 
-    def test_semantic_states_have_distinct_motion(self, button):
-        button._animation_phase = 3
-        idle = button._motion_for_state("idle")
-        listening = button._motion_for_state("listening")
-        working = button._motion_for_state("working")
-        success = button._motion_for_state("success")
-        error = button._motion_for_state("error")
-
-        assert idle != listening
-        assert working != success
-        assert error[0] != 0
-
-        button.set_reduce_motion(True)
-        assert button._motion_for_state("working") == (0.0, 0.0, 0.0, 1.0)
-
-    def test_idle_sprite_cycle_stays_subtle(self, button):
-        phases = (3, 24, 49, 54, 78)
-        motions = []
-        for phase in phases:
-            button._animation_phase = phase
-            motions.append(button._motion_for_state("idle"))
-
-        assert all(abs(motion[2]) == 0 for motion in motions)
-        assert all(abs(motion[1]) <= 0.35 for motion in motions)
-        assert all(motion[3] <= 1.001 for motion in motions)
-
-    def test_hover_greeting_has_stable_horizontal_anchor(self, button):
-        button._hovered = True
-        phases = (0, 2, 4, 6, 8)
-        motions = []
-        for phase in phases:
-            button._hover_phase = phase
-            motions.append(button._hover_motion())
-
-        assert all(motion[0] == 0.0 and motion[2] == 0.0 for motion in motions)
-        assert all(motion[1] < 0 for motion in motions[1:4])
-        assert motions[0] == motions[4] == (0.0, 0.0, 0.0, 1.0)
-
-        button.set_reduce_motion(True)
-        assert button._hover_motion() == (0.0, 0.0, 0.0, 1.0)
-
-    def test_hover_motion_is_eased_without_pose_overshoot(self, button):
-        button._hovered = True
-        sampled = []
-        for phase in range(9):
-            button._hover_phase = phase
-            sampled.append(button._hover_motion())
-        assert all(abs(sampled[index + 1][1] - sampled[index][1]) < 0.65 for index in range(len(sampled) - 1))
-
-    def test_hover_leave_settles_without_snapping(self, button):
+    def test_hover_greeting_keeps_geometry_and_horizontal_anchor(self, button):
         from PyQt5.QtCore import QEvent
-
-        button._hovered = True
-        button._hover_phase = 4
-        previous_y = button._hover_motion()[1]
-        button.leaveEvent(QEvent(QEvent.Leave))
-        positions = [button._hover_motion()[1]]
-        for _ in range(4):
-            button._advance_animation()
-            positions.append(button._hover_motion()[1])
-
-        assert positions[0] == previous_y
-        assert positions[-1] == 0.0
-        assert all(positions[index] <= positions[index + 1] for index in range(4))
-        assert max(positions[index + 1] - positions[index] for index in range(4)) < 0.65
-        assert not button._animation_timer.isActive()
-        assert button._idle_blink_timer.isActive()
-
-    def test_hover_animation_does_not_change_task_motion(self, button):
-        button._animation_phase = 5
-        before = button._motion_for_state("working")
-        button._hovered = True
-        button._hover_phase = 18
-        after = button._motion_for_state("working")
-        assert after == before
-
-    def test_task_transition_discards_partial_hover_greeting(self, button):
-        button._hovered = True
-        button._hover_phase = 4
-        button._hover_return_phase = 1
-        button.set_responding(True)
-
-        assert button._hover_phase == 8
-        assert button._hover_return_phase == 4
-        assert button._hover_motion() == (0.0, 0.0, 0.0, 1.0)
-        button.set_responding(False)
-        assert button._pet_for_state("idle") == button._pet_attentive_content
-
-    def test_hover_while_busy_starts_from_settled_pose(self, button):
-        from PyQt5.QtCore import QEvent
-
-        button.set_responding(True)
+        original = button.geometry()
         button.enterEvent(QEvent(QEvent.Enter))
-        assert button._hover_phase == 8
-        button.set_responding(False)
-        assert button._hover_motion() == (0.0, 0.0, 0.0, 1.0)
-        assert button._pet_for_state("idle") == button._pet_attentive_content
+        for _ in range(20):
+            button._animator.tick(.04)
+            button._update_spritesheet_frame()
+            assert button.geometry() == original
+            assert button._spritesheet_draw_rect().center().x() == button.width() / 2
+
+    def test_leaving_finishes_gesture_before_return_to_idle(self, button):
+        from PyQt5.QtCore import QEvent
+        button.enterEvent(QEvent(QEvent.Enter))
+        button._animator.tick(.1)
+        before = button._animator.snapshot()
+        button.leaveEvent(QEvent(QEvent.Leave))
+        assert button._animator.snapshot() == before
+        button._animator.tick(2)
+        button._sync_animation_timer()
+        assert button._animator.current_state == "idle"
+        assert not button._animation_timer.isActive()
+        assert button._idle_wake_timer.isActive()
 
     def test_drag_has_threshold_and_does_not_open_dialog(self, button):
         from PyQt5.QtCore import QEvent, QPoint, QPointF, Qt
@@ -504,107 +424,19 @@ class TestFloatButtonState:
         )
         assert button._track_timer.isActive()
 
-    def test_idle_blink_keeps_same_canvas_and_anchor(self, button):
-        from ai_desktop.ui.float_button import _visible_pet_bounds
-
-        poses = (
-            button._pet_content,
-            button._pet_blink_content,
-            button._pet_attentive_content,
-            button._pet_focused_content,
-        )
-        assert len({(pose.width(), pose.height()) for pose in poses}) == 1
-        bounds = [
-            _visible_pet_bounds(frame)
-            for frame in poses
-        ]
-        assert all(bounds[0] == bounds[index] for index in range(1, len(bounds)))
-        assert button._pet_content.width() < button._pet_source.width()
-        assert button._pet_for_state("working") == button._pet_content
-
-        # Every expression reuses the canonical body's pixels outside the eye masks.
-        for x, y in ((605, 320), (605, 680), (340, 850), (610, 880), (480, 1070)):
-            px = x - button._pet_crop.x()
-            py = y - button._pet_crop.y()
-            color = poses[0].toImage().pixelColor(px, py)
-            assert all(pose.toImage().pixelColor(px, py) == color for pose in poses[1:])
-
-        button._idle_blinking = True
-        assert button._pet_for_state("idle") == button._pet_blink_content
-        button._idle_blinking = False
-        assert button._pet_for_state("idle") == button._pet_content
-        button._hovered = True
-        button._hover_phase = 3
-        assert button._pet_for_state("idle") == button._pet_attentive_content
-        button._hover_phase = 4
-        assert button._pet_for_state("idle") == button._pet_blink_content
-        button._hover_phase = 5
-        assert button._pet_for_state("idle") == button._pet_attentive_content
-        button._hovered = False
-        button._working_intro_phase = 1
-        assert button._pet_for_state("working") == button._pet_focused_content
-        button.set_reduce_motion(True)
-        assert button._pet_for_state("idle") == button._pet_content
-        assert button._pet_for_state("working") == button._pet_content
-
-    def test_idle_blink_waits_then_returns_to_still_frame(self, button):
-        button._blink_rng.seed(7)
-        button._sync_animation_timer()
-        first_delay = button._idle_blink_timer.remainingTime()
-        assert 3800 <= first_delay <= 7600
-        assert not button._animation_timer.isActive()
-
-        button._idle_blink_timer.stop()
-        button._begin_idle_blink()
-        assert button._pet_for_state("idle") == button._pet_blink_content
-        assert button._blink_open_timer.isActive()
-        button._blink_open_timer.stop()
-        button._end_idle_blink()
-        assert button._pet_for_state("idle") == button._pet_content
-        assert button._idle_blink_timer.isActive()
-        assert button._idle_blink_timer.remainingTime() != first_delay
-
-    def test_idle_blink_timer_opens_eyes_again(self, qtbot, button):
-        button._idle_blink_timer.start(1)
-        qtbot.waitUntil(lambda: button._idle_blinking, timeout=500)
-        assert button._pet_for_state("idle") == button._pet_blink_content
-        qtbot.waitUntil(lambda: not button._idle_blinking, timeout=500)
-        assert button._pet_for_state("idle") == button._pet_content
-        assert button._idle_blink_timer.isActive()
-
     def test_hover_and_task_pause_idle_blink(self, button):
         button._sync_animation_timer()
-        assert button._idle_blink_timer.isActive()
-        button._hovered = True
-        button._hover_phase = 0
-        button._sync_animation_timer()
-        assert not button._idle_blink_timer.isActive()
+        assert button._idle_wake_timer.isActive()
+        from PyQt5.QtCore import QEvent
+
+        button.enterEvent(QEvent(QEvent.Enter))
+        assert not button._idle_wake_timer.isActive()
         assert button._animation_timer.isActive()
         button._hovered = False
         button.set_listening(True)
-        assert not button._idle_blink_timer.isActive()
+        assert not button._idle_wake_timer.isActive()
         button.set_listening(False)
-        assert button._idle_blink_timer.isActive()
-
-    def test_hover_animation_finishes_on_stable_frame(self, button):
-        button._hovered = True
-        button._hover_phase = 99
-        button._advance_animation()
-        assert button._hover_phase == 8
-        assert button._hover_motion() == (0.0, 0.0, 0.0, 1.0)
-        assert button._pet_for_state("idle") == button._pet_attentive_content
-
-    def test_working_intro_settles_and_keeps_focused_eyes(self, button):
-        button.set_responding(True)
-        assert button._pet_for_state("working") == button._pet_content
-        button._advance_animation()
-        assert button._pet_for_state("working") == button._pet_focused_content
-        for _ in range(8):
-            button._advance_animation()
-        assert button._motion_for_state("working") == (0.0, 0.0, 0.0, 1.0)
-        button._animation_phase = 95
-        button._advance_animation()
-        assert button._motion_for_state("working") == (0.0, 0.0, 0.0, 1.0)
+        assert button._idle_wake_timer.isActive()
 
     def test_new_semantic_state_restarts_animation(self, button):
         button._animation_phase = 7
@@ -626,3 +458,125 @@ class TestFloatButtonState:
 
         button.show_result(False)
         assert button._effective_state() == "error"
+
+
+def test_real_clock_drives_idle_wake_and_blink(button):
+    # Simulate a real single-shot timer callback at its scheduled deadline.
+    button._sync_animation_timer()
+    animator = button._animator
+    deadline = animator.next_wake_seconds
+    with patch("ai_desktop.ui.float_button.time.monotonic", return_value=button._last_animation_time + deadline):
+        button._advance_animation()
+    assert animator.layer == "ambient"
+    assert button._animation_timer.isActive()
+    assert not button._idle_wake_timer.isActive()
+
+
+def test_hover_finishes_and_task_interrupts_without_resetting_progress(button):
+    from PyQt5.QtCore import QEvent
+    button.enterEvent(QEvent(QEvent.Enter))
+    assert button._animator.current_state == "hover"
+    assert button._animator.layer == "reaction"
+    button._animator.tick(2)
+    button._sync_animation_timer()
+    assert not button._animation_timer.isActive()
+    assert not button._idle_wake_timer.isActive()
+    button.set_responding(True)
+    assert button._animator.current_state == "working"
+    button.show_result(False)
+    assert button._effective_state() == "working"
+    assert button._animator.current_state == "working"
+
+
+def test_reduce_motion_keeps_semantic_pose_and_badge(button):
+    button.set_responding(True)
+    button.set_reduce_motion(True)
+    assert button._animator.current_state == "working"
+    assert button._effective_state() == "working"
+    assert not button._animation_timer.isActive()
+    assert not button._idle_wake_timer.isActive()
+
+
+def test_system_motion_change_preserves_user_preference(button):
+    button._motion_preference.changed.emit(True)
+    assert button.reduce_motion
+    assert not button._idle_wake_timer.isActive()
+    button.set_reduce_motion(True)
+    button._motion_preference.changed.emit(False)
+    assert button.reduce_motion
+    button.set_reduce_motion(False)
+    assert not button.reduce_motion
+    assert button._idle_wake_timer.isActive()
+
+
+def test_corrupt_custom_pet_falls_back_without_losing_requested_mode(button, tmp_path):
+    from ai_desktop import config
+    manifest = tmp_path / "bad.json"
+    manifest.write_text('{"schema_version": 99}', encoding="utf-8")
+    from ai_desktop.ui.float_button import _get_pet_manifest_path
+    with patch.object(config, "PET_SOURCE", "petdex"), \
+            patch("ai_desktop.ui.float_button._get_pet_manifest_path", side_effect=[
+                str(manifest), _get_pet_manifest_path("built-in", "owl-v2")]):
+        button.reload_pet()
+    assert button.pet_enabled
+    assert button._animator.current_state == "idle"
+
+
+def test_all_frames_fit_one_stable_hit_region(button):
+    from PyQt5.QtCore import QPoint
+    for size in ("small", "medium", "large"):
+        button.set_pet_size(size)
+        mask = button.mask()
+        for index in range(button._spritesheet.frame_count):
+            button._spritesheet_frame = button._spritesheet.frame(index)
+            image = button.grab().toImage()
+            assert all(image.pixelColor(x, y).alpha() <= 16 or mask.contains(QPoint(x, y))
+                       for y in range(image.height()) for x in range(image.width()))
+
+
+def test_idle_eye_poses_do_not_redraw_or_move_body(button):
+    # Every idle pose has identical pixels outside the eye region, including
+    # feather edges, laptop and feet. This catches body jitter at asset level.
+    images = [button._spritesheet.frame(index).toImage() for index in range(4)]
+    bounds = []
+    for image in images[1:]:
+        points = [(x, y) for y in range(image.height()) for x in range(image.width())
+                  if image.pixel(x, y) != images[0].pixel(x, y)]
+        assert points
+        bounds.append((min(x for x, _ in points), min(y for _, y in points),
+                       max(x for x, _ in points), max(y for _, y in points)))
+    assert all(65 < left < right < 250 and 95 < top < bottom < 180
+               for left, top, right, bottom in bounds)
+
+
+def test_rapid_pointer_reentry_does_not_restart_greeting(button):
+    from PyQt5.QtCore import QEvent
+    with patch("ai_desktop.ui.float_button.time.monotonic", return_value=100):
+        button.enterEvent(QEvent(QEvent.Enter))
+    button._animator.tick(.1)
+    before = button._animator.snapshot()
+    button.leaveEvent(QEvent(QEvent.Leave))
+    with patch("ai_desktop.ui.float_button.time.monotonic", return_value=100.1):
+        button.enterEvent(QEvent(QEvent.Enter))
+    assert button._animator.snapshot() == before
+    assert button._last_hover_reaction_time == 100
+    button._animator.tick(2)
+    assert button._animator.current_state == "hover"
+    assert button._animator.next_wake_seconds is None
+
+
+def test_context_menu_pauses_animation_and_resumes_after_close(qtbot, button):
+    from unittest.mock import Mock
+
+    from PyQt5.QtCore import QPoint
+    event = Mock()
+    event.globalPos.return_value = QPoint(100, 100)
+    button.contextMenuEvent(event)
+    menu = button._context_menu
+    assert menu.isVisible()
+    assert button._menu_open
+    assert not button._animation_timer.isActive()
+    assert not button._idle_wake_timer.isActive()
+    menu.close()
+    qtbot.waitUntil(lambda: not button._menu_open)
+    assert button._idle_wake_timer.isActive()

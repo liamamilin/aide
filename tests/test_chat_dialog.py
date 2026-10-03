@@ -315,6 +315,7 @@ class TestChatDialogState:
         assert dialog._input.accessibleName() == "消息输入框"
         assert dialog._send_btn.accessibleName() == "发送消息"
         assert dialog._new_convo_btn.accessibleName() == "开始新对话"
+        assert dialog._expand_btn.accessibleName() == "放大到当前屏幕"
         assert dialog._hide_btn.accessibleName() == "隐藏对话窗口"
         assert dialog._agent_combo.accessibleName() == "选择 Agent"
         assert dialog._model_combo.accessibleName() == "选择模型"
@@ -324,6 +325,7 @@ class TestChatDialogState:
         assert dialog._model_capability_badge.accessibleName() == "模型图片能力"
         assert dialog._model_profile_badge.accessibleName() == "模型配置"
         assert dialog._ollama_dot.accessibleName() == "服务连接状态"
+        assert dialog._size_grip.accessibleName() == "调整窗口大小"
 
     def test_multi_image_bubble_wraps_within_minimum_width(self, qtbot, dialog):
         from PyQt5.QtGui import QColor, QPixmap
@@ -367,7 +369,6 @@ class TestChatDialogState:
 
     def test_refresh_agents(self, qtbot, dialog):
         """refresh_agents() → combo items match new agent list."""
-        # Must include the currently active agent (general_assistant) or refresh fails
         new_agents = [
             Agent(id="code_expert", name="代码专家", icon="💻", system_prompt="..."),
             Agent(id="general_assistant", name="通用助手", icon="🤖", system_prompt="..."),
@@ -375,6 +376,27 @@ class TestChatDialogState:
         ]
         dialog.refresh_agents(new_agents)
         assert dialog._agent_combo.count() == 3
+
+    def test_refresh_agents_recovers_when_active_custom_agent_was_deleted(
+        self, qtbot, dialog,
+    ):
+        custom = Agent(
+            id="custom_deleted",
+            name="即将删除",
+            icon="🧪",
+            system_prompt="temporary",
+        )
+        dialog.refresh_agents([*AGENTS, custom], custom)
+        assert dialog.active_agent.id == custom.id
+
+        fallback = AGENTS[0]
+        dialog.refresh_agents(AGENTS, fallback)
+
+        assert dialog.active_agent.id == fallback.id
+        assert dialog._agent_combo.currentData() == fallback.id
+        assert not dialog._agent_combo.signalsBlocked()
+        with qtbot.waitSignal(dialog.agent_changed, timeout=1000):
+            dialog._agent_combo.setCurrentIndex(1)
 
     def test_set_input_text(self, qtbot, dialog):
         """set_input_text() → input field has text and is selected."""
@@ -689,3 +711,16 @@ class TestChatDialogInputHistory:
             dialog._on_send()
         assert dialog._input_history == ["旧消息"]
         assert dialog._hist_index == -1
+
+
+def test_fluent_version_menu_selects_generation_after_open_returns(qtbot, dialog):
+    from ai_desktop.ui.fluent import Menu
+    dialog._stream_versions = [
+        {"id": 12, "answer": "第一版"}, {"id": 19, "answer": "第二版"},
+    ]
+    dialog._show_stream_versions()
+    menu = next(m for m in dialog.findChildren(Menu) if m.isVisible())
+    with qtbot.waitSignal(dialog.generation_selected) as selected:
+        menu.actions()[1].trigger()
+    assert selected.args == [19]
+    menu.close()

@@ -5,17 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import (
-    QApplication,
-    QDialog,
-    QHBoxLayout,
-    QLabel,
-    QPlainTextEdit,
-    QPushButton,
-    QVBoxLayout,
-)
+from PyQt5.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout
 
-from ai_desktop.ui import styles
+from ai_desktop.ui.fluent import BodyLabel as QLabel
+from ai_desktop.ui.fluent import (
+    CaptionLabel,
+    PrimaryPushButton,
+    dialog_title,
+)
+from ai_desktop.ui.fluent import FluentDialog as QDialog
+from ai_desktop.ui.fluent import PlainTextEdit as QPlainTextEdit
+from ai_desktop.ui.fluent import PushButton as QPushButton
 
 
 class OCRPreviewDialog(QDialog):
@@ -27,18 +27,17 @@ class OCRPreviewDialog(QDialog):
         self._image_path = ""
         self._loading = False
         self.setWindowTitle("提取文字")
-        self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint)
+        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setModal(False)
         self.setMinimumSize(460, 320)
         self.resize(520, 420)
-        self.setStyleSheet(styles.CHAT_DIALOG_ROOT)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setContentsMargins(16, 0, 16, 16)
+        layout.addWidget(dialog_title(self, "提取文字"))
         layout.setSpacing(10)
 
-        self._source = QLabel()
-        self._source.setStyleSheet(styles.LABEL_SECONDARY)
+        self._source = CaptionLabel()
         layout.addWidget(self._source)
 
         self._status = QLabel()
@@ -47,31 +46,26 @@ class OCRPreviewDialog(QDialog):
 
         self._editor = QPlainTextEdit()
         self._editor.setPlaceholderText("识别结果将在这里显示，可直接修订。")
-        self._editor.setStyleSheet(styles.INPUT_AREA)
         layout.addWidget(self._editor, stretch=1)
 
         buttons = QHBoxLayout()
         buttons.addStretch()
         self._copy_button = QPushButton("复制文字")
-        self._copy_button.setStyleSheet(styles.SECONDARY_BUTTON)
         self._copy_button.clicked.connect(self._copy_text)
         buttons.addWidget(self._copy_button)
-        self._text_only_button = QPushButton("仅用文字")
+        self._text_only_button = PrimaryPushButton("仅用文字")
         self._text_only_button.setToolTip("插入文字，并从当前草稿移除这张原图")
-        self._text_only_button.setStyleSheet(styles.BUTTON_PRIMARY)
         self._text_only_button.clicked.connect(
             lambda: self._accept_text(keep_image=False)
         )
         buttons.addWidget(self._text_only_button)
         self._keep_image_button = QPushButton("文字 + 原图")
         self._keep_image_button.setToolTip("插入文字，同时保留这张图片附件")
-        self._keep_image_button.setStyleSheet(styles.SECONDARY_BUTTON)
         self._keep_image_button.clicked.connect(
             lambda: self._accept_text(keep_image=True)
         )
         buttons.addWidget(self._keep_image_button)
         close_button = QPushButton("关闭")
-        close_button.setStyleSheet(styles.SECONDARY_BUTTON)
         close_button.clicked.connect(self.close)
         buttons.addWidget(close_button)
         layout.addLayout(buttons)

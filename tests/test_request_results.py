@@ -79,6 +79,28 @@ def test_controller_freezes_agent_profile_into_worker_request(controller):
     worker.deleteLater()
 
 
+def test_deleting_active_custom_agent_keeps_dialog_and_controller_in_sync(controller):
+    custom_data = [{
+        "id": "temporary_agent",
+        "name": "临时 Agent",
+        "icon": "🧪",
+        "system_prompt": "temporary",
+    }]
+    controller._on_custom_agents_saved(custom_data)
+    custom = next(
+        agent for agent in controller._all_agents if agent.id == "temporary_agent"
+    )
+    controller._dialog.set_active_agent(custom)
+    controller._on_agent_changed(custom)
+
+    controller._on_custom_agents_saved([])
+
+    assert controller._active_agent.id == "code_expert"
+    assert controller._dialog.active_agent.id == "code_expert"
+    assert controller._dialog._agent_combo.currentData() == "code_expert"
+    assert not controller._dialog._agent_combo.signalsBlocked()
+
+
 def test_profile_model_without_vision_inherits_global_model_for_image(
     controller, tmp_path,
 ):
@@ -520,6 +542,46 @@ def test_new_conversation_invalidates_old_stream(qtbot, controller, ollama_serve
     assert controller._convo_id != old_convo
     assert [m.role for m in get_conversation(old_convo).messages] == ["user"]
     assert get_conversation(controller._convo_id).messages[-1].content == "new answer"
+
+
+def test_new_conversation_uses_visible_agent_and_excludes_old_context(
+    qtbot, controller, ollama_server,
+):
+    send_and_wait(
+        qtbot,
+        controller,
+        ollama_server,
+        [{"message": {"content": "old answer"}, "done": True}],
+    )
+    old_conversation = controller._convo_id
+    general = next(agent for agent in controller._all_agents if agent.id == "general_assistant")
+
+    # Reproduce the observed failure mode: the selector and controller disagree.
+    controller._dialog.set_active_agent(general)
+    assert controller._active_agent.id != controller._dialog.active_agent.id
+
+    controller._new_conversation()
+    assert controller._active_agent.id == "general_assistant"
+    assert controller._convo_id == 0
+    assert controller._messages == []
+
+    scenario = ollama_server.enqueue(
+        {"message": {"content": "clean answer"}, "done": True}
+    )
+    controller._on_user_message("fresh question")
+    qtbot.waitUntil(
+        lambda: controller._worker is None and not controller._stale_workers,
+        timeout=3000,
+    )
+
+    assert scenario.received.is_set()
+    payload_messages = ollama_server.requests[-1]["payload"]["messages"]
+    assert payload_messages == [
+        {"role": "system", "content": general.system_prompt},
+        {"role": "user", "content": "fresh question"},
+    ]
+    assert controller._convo_id != old_conversation
+    assert get_conversation(controller._convo_id).agent_id == "general_assistant"
 
 
 def test_stop_during_background_image_preparation_restores_ui_without_posting(

@@ -1,0 +1,320 @@
+{
+  "schema_version": 1,
+  "name": "owl",
+  "spritesheet": {
+    "file": "spritesheet.png",
+    "frame_width": 312,
+    "frame_height": 330,
+    "columns": 8,
+    "frame_count": 11
+  },
+  "anchor": {
+    "x": 0.5,
+    "y": 1.0
+  },
+  "defaults": {
+    "state": "idle",
+    "fps": 24
+  },
+  "states": {
+    "idle": {
+      "base": "rest",
+      "ambient": [
+        "blink",
+        "double_blink",
+        "slow_blink",
+        "observe",
+        "rest_eyes"
+      ]
+    },
+    "hover": {
+      "base": "attention",
+      "reactions": [
+        "greet",
+        "nod",
+        "curious",
+        "friendly",
+        "hello_twice"
+      ]
+    },
+    "working": {
+      "base": "focus"
+    },
+    "speaking": {
+      "base": "attention"
+    },
+    "listening": {
+      "base": "attention"
+    },
+    "success": {
+      "base": "success"
+    },
+    "error": {
+      "base": "error"
+    }
+  },
+  "animations": {
+    "rest": {
+      "frames": [
+        0
+      ],
+      "durations_ms": [
+        1000
+      ],
+      "fps": 12,
+      "loop": true
+    },
+    "attention": {
+      "frames": [
+        3
+      ],
+      "durations_ms": [
+        1000
+      ],
+      "fps": 12,
+      "loop": true
+    },
+    "focus": {
+      "frames": [
+        1
+      ],
+      "durations_ms": [
+        1000
+      ],
+      "fps": 12,
+      "loop": true
+    },
+    "blink": {
+      "frames": [
+        0,
+        1,
+        2,
+        1,
+        0
+      ],
+      "durations_ms": [
+        50,
+        35,
+        95,
+        35,
+        80
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "double_blink": {
+      "frames": [
+        0,
+        1,
+        2,
+        1,
+        0,
+        1,
+        2,
+        1,
+        0
+      ],
+      "durations_ms": [
+        50,
+        35,
+        85,
+        35,
+        160,
+        35,
+        80,
+        35,
+        80
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "slow_blink": {
+      "frames": [
+        0,
+        1,
+        2,
+        1,
+        0
+      ],
+      "durations_ms": [
+        120,
+        100,
+        180,
+        100,
+        160
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "observe": {
+      "frames": [
+        0,
+        3,
+        0
+      ],
+      "durations_ms": [
+        100,
+        620,
+        140
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "rest_eyes": {
+      "frames": [
+        0,
+        1,
+        0
+      ],
+      "durations_ms": [
+        100,
+        420,
+        140
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "greet": {
+      "frames": [
+        3,
+        1,
+        2,
+        1,
+        3
+      ],
+      "durations_ms": [
+        160,
+        40,
+        100,
+        40,
+        260
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "nod": {
+      "frames": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        3
+      ],
+      "durations_ms": [
+        120,
+        45,
+        45,
+        45,
+        70,
+        45,
+        45,
+        45,
+        240
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "curious": {
+      "frames": [
+        3,
+        1,
+        3
+      ],
+      "durations_ms": [
+        240,
+        160,
+        360
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "friendly": {
+      "frames": [
+        3,
+        1,
+        2,
+        1,
+        3
+      ],
+      "durations_ms": [
+        240,
+        100,
+        180,
+        100,
+        320
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "hello_twice": {
+      "frames": [
+        3,
+        2,
+        3,
+        2,
+        3
+      ],
+      "durations_ms": [
+        120,
+        90,
+        170,
+        90,
+        260
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "success": {
+      "frames": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        3,
+        0
+      ],
+      "durations_ms": [
+        100,
+        45,
+        45,
+        45,
+        70,
+        45,
+        45,
+        45,
+        240,
+        160
+      ],
+      "fps": 12,
+      "loop": false,
+      "next_state": "idle"
+    },
+    "error": {
+      "frames": [
+        0,
+        1,
+        2,
+        1,
+        0
+      ],
+      "durations_ms": [
+        120,
+        140,
+        200,
+        140,
+        300
+      ],
+      "fps": 12,
+      "loop": false,
+      "next_state": "idle"
+    }
+  }
+}

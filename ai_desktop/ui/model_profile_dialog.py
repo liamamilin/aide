@@ -3,24 +3,27 @@
 from dataclasses import replace
 
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import (
-    QCheckBox,
-    QComboBox,
-    QDialog,
-    QDoubleSpinBox,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QMessageBox,
-    QPushButton,
-    QScrollArea,
-    QSpinBox,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 from ai_desktop.services.model_profiles import ModelProfile, validate_profile
-from ai_desktop.ui import styles
+from ai_desktop.ui.fluent import BodyLabel as QLabel
+from ai_desktop.ui.fluent import (
+    CaptionLabel,
+    PrimaryPushButton,
+    SimpleCardWidget,
+    StrongBodyLabel,
+    TransparentPushButton,
+    dialog_title,
+)
+from ai_desktop.ui.fluent import CheckBox as QCheckBox
+from ai_desktop.ui.fluent import ComboBox as QComboBox
+from ai_desktop.ui.fluent import DoubleSpinBox as QDoubleSpinBox
+from ai_desktop.ui.fluent import FluentDialog as QDialog
+from ai_desktop.ui.fluent import LineEdit as QLineEdit
+from ai_desktop.ui.fluent import MessageBox as QMessageBox
+from ai_desktop.ui.fluent import PushButton as QPushButton
+from ai_desktop.ui.fluent import ScrollArea as QScrollArea
+from ai_desktop.ui.fluent import SpinBox as QSpinBox
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 
 
@@ -33,10 +36,9 @@ class ModelProfileDialog(FramelessDragMixin, QDialog):
         self._models = list(dict.fromkeys(models))
         self._setup_drag(40)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_TranslucentBackground, False)
         self.setMinimumSize(480, 360)
         self.resize(520, 420)
-        self.setStyleSheet(styles.DIALOG_BASE)
         self._setup_ui()
         self._refresh()
 
@@ -49,23 +51,11 @@ class ModelProfileDialog(FramelessDragMixin, QDialog):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        title = QWidget()
-        title.setFixedHeight(40)
-        title.setStyleSheet(styles.TITLE_BAR)
-        tl = QHBoxLayout(title)
-        tl.setContentsMargins(12, 0, 8, 0)
-        tl.addWidget(QLabel("模型配置"))
-        tl.addStretch()
-        close = QPushButton("×")
-        close.setFixedSize(24, 24)
-        close.setStyleSheet(styles.CLOSE_BUTTON)
-        close.clicked.connect(self.accept)
-        tl.addWidget(close)
-        root.addWidget(title)
+        root.addWidget(dialog_title(self, '模型配置'))
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(styles.SCROLL_AREA)
+        scroll.setFrameShape(QScrollArea.NoFrame)
         self._container = QWidget()
         self._layout = QVBoxLayout(self._container)
         self._layout.setContentsMargins(10, 10, 10, 10)
@@ -75,17 +65,13 @@ class ModelProfileDialog(FramelessDragMixin, QDialog):
         root.addWidget(scroll)
 
         bar = QWidget()
-        bar.setFixedHeight(48)
-        bar.setStyleSheet(styles.AGENT_LIST_BAR)
         bl = QHBoxLayout(bar)
         bl.setContentsMargins(12, 0, 12, 0)
         add = QPushButton("＋ 新增配置")
-        add.setStyleSheet(styles.ADD_AGENT_BUTTON)
         add.clicked.connect(self._on_add)
         bl.addWidget(add)
         bl.addStretch()
-        hint = QLabel("未填写的参数会继承全局设置")
-        hint.setStyleSheet(styles.LABEL_SECONDARY)
+        hint = CaptionLabel("未填写的参数会继承全局设置")
         bl.addWidget(hint)
         root.addWidget(bar)
 
@@ -97,26 +83,20 @@ class ModelProfileDialog(FramelessDragMixin, QDialog):
         if not self._profiles:
             empty = QLabel("尚未创建模型配置")
             empty.setAlignment(Qt.AlignCenter)
-            empty.setStyleSheet(styles.EMPTY_STATE)
             self._layout.insertWidget(0, empty)
             return
         for profile in self._profiles:
-            row = QWidget()
-            row.setStyleSheet(styles.TRANSPARENT)
+            row = SimpleCardWidget()
             layout = QHBoxLayout(row)
             layout.setContentsMargins(8, 5, 8, 5)
-            name = QLabel(profile.name)
-            name.setStyleSheet(styles.LABEL_BOLD)
+            name = StrongBodyLabel(profile.name)
             layout.addWidget(name)
-            summary = QLabel(self._summary(profile))
-            summary.setStyleSheet(styles.LABEL_SECONDARY)
+            summary = CaptionLabel(self._summary(profile))
             layout.addWidget(summary, stretch=1)
-            edit = QPushButton("编辑")
-            edit.setStyleSheet(styles.AGENT_EDIT_BUTTON)
+            edit = TransparentPushButton("编辑")
             edit.clicked.connect(lambda checked, item=profile: self._on_edit(item))
             layout.addWidget(edit)
-            delete = QPushButton("删除")
-            delete.setStyleSheet(styles.DELETE_BUTTON)
+            delete = TransparentPushButton("删除")
             delete.clicked.connect(lambda checked, item=profile: self._on_delete(item))
             layout.addWidget(delete)
             self._layout.insertWidget(self._layout.count() - 1, row)
@@ -178,42 +158,27 @@ class _ModelProfileEditDialog(FramelessDragMixin, QDialog):
         self._source = profile
         self._setup_drag(36)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_TranslucentBackground, False)
         self.setMinimumSize(420, 390)
         self.resize(440, 420)
-        self.setStyleSheet(styles.DIALOG_BASE)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        title_bar = QWidget()
-        title_bar.setFixedHeight(36)
-        title_bar.setStyleSheet(styles.TITLE_BAR)
-        tl = QHBoxLayout(title_bar)
-        tl.setContentsMargins(12, 0, 8, 0)
-        tl.addWidget(QLabel(title))
-        tl.addStretch()
-        close = QPushButton("×")
-        close.setFixedSize(24, 24)
-        close.setStyleSheet(styles.CLOSE_BUTTON)
-        close.clicked.connect(self.reject)
-        tl.addWidget(close)
-        root.addWidget(title_bar)
+        root.addWidget(dialog_title(self, title))
 
-        body = QWidget()
-        body.setStyleSheet(styles.DIALOG_BODY)
+        body = SimpleCardWidget()
         form = QVBoxLayout(body)
         form.setContentsMargins(16, 14, 16, 14)
         form.setSpacing(9)
 
         form.addWidget(QLabel("配置名称"))
-        self._name = QLineEdit(profile.name)
-        self._name.setStyleSheet(styles.FORM_INPUT)
+        self._name = QLineEdit()
+        self._name.setText(profile.name)
         form.addWidget(self._name)
 
         form.addWidget(QLabel("模型"))
         self._model = QComboBox()
-        self._model.setStyleSheet(styles.COMBO_BOX)
         self._model.addItem("继承全局模型", None)
         known_models = list(dict.fromkeys(models))
         if profile.model and profile.model not in known_models:
@@ -226,7 +191,6 @@ class _ModelProfileEditDialog(FramelessDragMixin, QDialog):
 
         form.addWidget(QLabel("思考模式"))
         self._think = QComboBox()
-        self._think.setStyleSheet(styles.COMBO_BOX)
         self._think.addItem("继承全局设置", None)
         self._think.addItem("开启", True)
         self._think.addItem("关闭", False)
@@ -241,7 +205,6 @@ class _ModelProfileEditDialog(FramelessDragMixin, QDialog):
         self._temperature.setSingleStep(0.1)
         self._temperature.setDecimals(2)
         self._temperature.setValue(profile.temperature if profile.temperature is not None else 0.7)
-        self._temperature.setStyleSheet(f"QDoubleSpinBox {{ {styles.FORM_WIDGET} }}")
         self._temperature.setEnabled(self._temperature_enabled.isChecked())
         self._temperature_enabled.toggled.connect(self._temperature.setEnabled)
         form.addWidget(self._temperature)
@@ -252,7 +215,6 @@ class _ModelProfileEditDialog(FramelessDragMixin, QDialog):
         self._tokens = QSpinBox()
         self._tokens.setRange(1, 999_999)
         self._tokens.setValue(profile.num_predict if profile.num_predict is not None else 20_480)
-        self._tokens.setStyleSheet(f"QSpinBox {{ {styles.FORM_WIDGET} }}")
         self._tokens.setEnabled(self._tokens_enabled.isChecked())
         self._tokens_enabled.toggled.connect(self._tokens.setEnabled)
         form.addWidget(self._tokens)
@@ -261,11 +223,9 @@ class _ModelProfileEditDialog(FramelessDragMixin, QDialog):
         buttons = QHBoxLayout()
         buttons.addStretch()
         cancel = QPushButton("取消")
-        cancel.setStyleSheet(styles.CANCEL_BUTTON)
         cancel.clicked.connect(self.reject)
         buttons.addWidget(cancel)
-        save = QPushButton("保存")
-        save.setStyleSheet(styles.SAVE_BUTTON)
+        save = PrimaryPushButton("保存")
         save.clicked.connect(self._save)
         buttons.addWidget(save)
         form.addLayout(buttons)

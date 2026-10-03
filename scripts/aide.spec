@@ -35,11 +35,15 @@ a = Analysis(
     datas=[
         (os.path.join(ROOT, "ai_desktop", "图标-v2.png"), "ai_desktop"),
         (os.path.join(ROOT, "ai_desktop", "图标-v2.icns"), "ai_desktop"),
+        (os.path.join(ROOT, "ai_desktop", "assets", "tabler", "*"), "ai_desktop/assets/tabler"),
         (os.path.join(ROOT, "ai_desktop", "桌面宠物-v2.png"), "ai_desktop"),
         (os.path.join(ROOT, "ai_desktop", "pet_frames", "blink-v2.png"), "ai_desktop/pet_frames"),
         (os.path.join(ROOT, "ai_desktop", "pet_layers", "master.json"), "ai_desktop/pet_layers"),
         (os.path.join(ROOT, "ai_desktop", "pet_layers", "attentive-v2.png"), "ai_desktop/pet_layers"),
         (os.path.join(ROOT, "ai_desktop", "pet_layers", "focused-v2.png"), "ai_desktop/pet_layers"),
+        (os.path.join(ROOT, "ai_desktop", "pets", "owl-v2", "pet.json"), "ai_desktop/pets/owl-v2"),
+        (os.path.join(ROOT, "ai_desktop", "pets", "owl-v2", "spritesheet.png"), "ai_desktop/pets/owl-v2"),
+        (os.path.join(ROOT, "ai_desktop", "pets", "petdex-profiles", "*.json"), "ai_desktop/pets/petdex-profiles"),
         # Kokoro/Misaki uses language-tags JSON data at runtime.  PyInstaller
         # does not collect this package data automatically.
         *collect_data_files("language_tags"),
@@ -55,6 +59,10 @@ a = Analysis(
         # spaCy determines whether a model is installed through its wheel
         # metadata; frozen apps do not include dist-info automatically.
         *EN_CORE_WEB_SM_METADATA,
+        *collect_data_files("qfluentwidgets"),
+        *collect_data_files("qframelesswindow"),
+        *_distribution_files("PyQt-Fluent-Widgets"),
+        *_distribution_files("PyQt5-Frameless-Window"),
     ],
     binaries=[
         *collect_dynamic_libs("espeakng_loader"),
