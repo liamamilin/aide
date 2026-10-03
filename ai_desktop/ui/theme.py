@@ -1,8 +1,7 @@
 """
-主题工具 —— 系统暗色检测 + 全量语义颜色集
+Fluent Light 下的消息内容语义颜色
 
-提供两套显式颜色（亮/暗），由 styles.py 在首次渲染时懒加载。
-与 palette() 不同，显式颜色保证两种模式下均有足够对比度。
+组件样式由 qfluentwidgets 管理；此处仅供 Markdown 内容与宠物状态使用。
 """
 from dataclasses import dataclass
 
@@ -26,14 +25,14 @@ class ColorSet:
 
 
 LIGHT = ColorSet(
-    window="#f5f5f7",
-    surface="#e8e8ed",
-    button="#d1d1d6",
-    button_hover="#c1c1c6",
-    border="#b0b0b5",
-    text="#1a1a1a",
+    window="#f0f4f9",
+    surface="#ffffff",
+    button="#ffffff",
+    button_hover="#f9f9f9",
+    border="#e5e5e5",
+    text="#000000",
     text_secondary="#666666",
-    accent="#007AFF",
+    accent="#009faa",
     accent_hover="#0066d6",
     success="#34c759",
     error="#ff3b30",
@@ -62,7 +61,7 @@ def is_dark_mode() -> bool:
 
 
 def current() -> ColorSet:
-    return DARK if is_dark_mode() else LIGHT
+    return LIGHT
 
 
 # ── Markdown 颜色（与 ColorSet 一致）───────────────────
@@ -79,13 +78,13 @@ class MarkdownColors:
 
 
 _MARKDOWN_LIGHT = MarkdownColors(
-    heading=LIGHT.accent,
+    heading=LIGHT.text,
     bullet=LIGHT.text_secondary,
     hr=LIGHT.border,
     inline_code_bg=LIGHT.surface,
     inline_code_text=LIGHT.text,
-    pre_bg="#1e1e1e",
-    pre_text="#d4d4d4",
+    pre_bg=LIGHT.window,
+    pre_text=LIGHT.text,
 )
 
 _MARKDOWN_DARK = MarkdownColors(
@@ -100,4 +99,4 @@ _MARKDOWN_DARK = MarkdownColors(
 
 
 def current_markdown() -> MarkdownColors:
-    return _MARKDOWN_DARK if is_dark_mode() else _MARKDOWN_LIGHT
+    return _MARKDOWN_LIGHT

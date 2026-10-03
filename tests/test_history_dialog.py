@@ -3,10 +3,12 @@ from unittest.mock import patch
 
 import pytest
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QInputDialog, QLabel, QMessageBox
+from PyQt5.QtWidgets import QLabel
 
 import ai_desktop.utils.storage as storage
 from ai_desktop.config import Agent
+from ai_desktop.ui.fluent import InputDialog as QInputDialog
+from ai_desktop.ui.fluent import MessageBox as QMessageBox
 
 
 @pytest.fixture()

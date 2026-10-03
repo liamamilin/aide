@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-from PyQt5.QtCore import QEvent, QPoint, QRect, QRectF, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QColor, QMouseEvent, QPainter, QPainterPath, QPen, QPolygonF
+from PyQt5.QtCore import QEvent, QRect, Qt, QTimer, pyqtSignal
+from PyQt5.QtGui import QMouseEvent
 from PyQt5.QtWidgets import (
     QApplication,
     QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QVBoxLayout,
     QWidget,
 )
 
-from ai_desktop.ui import theme
+from ai_desktop.ui.fluent import InfoBar, InfoBarIcon, InfoBarPosition, initialize
 
 
 class ResultBubble(QWidget):
@@ -24,7 +21,7 @@ class ResultBubble(QWidget):
 
     _WIDTH = 296
     _HEIGHT = 96
-    _POINTER = 10
+    _POINTER = 0
     _GAP = 8
 
     def __init__(self, parent=None) -> None:
@@ -33,7 +30,7 @@ class ResultBubble(QWidget):
         self._anchor_side = "left"
         self._pressed = False
         self._activate_on_click = True
-        self._colors = theme.current()
+        initialize()
         self._hide_timer = QTimer(self)
         self._hide_timer.setSingleShot(True)
         self._hide_timer.timeout.connect(self.dismiss)
@@ -56,44 +53,36 @@ class ResultBubble(QWidget):
         self.setAccessibleName("AI 桌面宠物结果摘要")
 
     def _setup_content(self) -> None:
-        self._content = QWidget(self)
-        self._content.setCursor(Qt.PointingHandCursor)
+        self._layout = QHBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._content = None
+        self._replace_bar("任务完成", "")
+
+    def _replace_bar(self, title, summary):
+        if self._content is not None:
+            self._layout.removeWidget(self._content)
+            self._content.hide()
+            self._content.deleteLater()
+        icon = {"success": InfoBarIcon.SUCCESS, "error": InfoBarIcon.ERROR,
+                "action": InfoBarIcon.WARNING, "progress": InfoBarIcon.INFORMATION}[self._kind]
+        self._content = InfoBar(icon, title, summary, Qt.Vertical, True, -1,
+                                InfoBarPosition.NONE, self)
         self._content.installEventFilter(self)
-
-        layout = QHBoxLayout(self._content)
-        layout.setContentsMargins(13, 9, 9, 9)
-        layout.setSpacing(9)
-
-        self._status = QLabel("✓")
-        self._status.setAlignment(Qt.AlignCenter)
-        self._status.setFixedSize(28, 28)
-        self._status.setAttribute(Qt.WA_TransparentForMouseEvents)
-        layout.addWidget(self._status, alignment=Qt.AlignTop)
-
-        text_layout = QVBoxLayout()
-        text_layout.setContentsMargins(0, 1, 0, 0)
-        text_layout.setSpacing(3)
-        self._title = QLabel("任务完成")
-        self._title.setTextFormat(Qt.PlainText)
-        self._title.setAttribute(Qt.WA_TransparentForMouseEvents)
-        self._summary = QLabel("")
-        self._summary.setTextFormat(Qt.PlainText)
+        self._title = self._content.titleLabel
+        self._summary = self._content.contentLabel
         self._summary.setWordWrap(True)
-        self._summary.setMaximumHeight(42)
-        self._summary.setAttribute(Qt.WA_TransparentForMouseEvents)
-        text_layout.addWidget(self._title)
-        text_layout.addWidget(self._summary)
-        layout.addLayout(text_layout, stretch=1)
-
-        self._close = QPushButton("×")
+        self._title.setTextFormat(Qt.PlainText)
+        self._summary.setTextFormat(Qt.PlainText)
+        for label in (self._title, self._summary):
+            label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self._close = self._content.closeButton
         self._close.setAccessibleName("关闭结果摘要")
-        self._close.setToolTip("关闭")
-        self._close.setCursor(Qt.ArrowCursor)
-        self._close.setFocusPolicy(Qt.NoFocus)
-        self._close.setFixedSize(24, 24)
+        self._close.clicked.disconnect()
         self._close.clicked.connect(self.dismiss)
-        layout.addWidget(self._close, alignment=Qt.AlignTop)
-        self._update_content_geometry()
+        self._layout.addWidget(self._content)
+        # Reserve enough width for summaries; height follows the real InfoBar.
+        self.setFixedWidth(self._WIDTH)
+        self.setFixedHeight(max(self._HEIGHT, self._content.sizeHint().height()))
 
     @property
     def result_kind(self) -> str:
@@ -122,13 +111,8 @@ class ResultBubble(QWidget):
         self._activate_on_click = activate_on_click
         cursor = Qt.PointingHandCursor if activate_on_click else Qt.ArrowCursor
         self.setCursor(cursor)
+        self._replace_bar(title, summary)
         self._content.setCursor(cursor)
-        self._title.setText(title)
-        self._summary.setText(summary)
-        self._status.setText(
-            {"success": "✓", "error": "!", "action": "!", "progress": "…"}[kind]
-        )
-        self.refresh_theme()
         self.position_near(anchor)
         self.show()
         self.raise_()
@@ -173,81 +157,11 @@ class ResultBubble(QWidget):
             self.update()
 
     def _update_content_geometry(self) -> None:
-        if self._anchor_side == "left":
-            self._content.setGeometry(0, 0, self.width() - self._POINTER, self.height())
-        else:
-            self._content.setGeometry(
-                self._POINTER, 0, self.width() - self._POINTER, self.height()
-            )
+        self._layout.activate()
 
     def refresh_theme(self) -> None:
-        self._colors = theme.current()
-        accent = {
-            "success": self._colors.success,
-            "error": self._colors.error,
-            "action": "#F5A623" if self._colors.window == theme.LIGHT.window else "#FFB340",
-            "progress": self._colors.accent,
-        }[self._kind]
-        self._content.setStyleSheet("background: transparent;")
-        self._status.setStyleSheet(
-            f"background: {accent}; color: white; border-radius: 14px; "
-            "font-size: 16px; font-weight: bold;"
-        )
-        self._title.setStyleSheet(
-            f"color: {self._colors.text}; background: transparent; "
-            "font-size: 13px; font-weight: bold;"
-        )
-        self._summary.setStyleSheet(
-            f"color: {self._colors.text_secondary}; background: transparent; "
-            "font-size: 12px;"
-        )
-        self._close.setStyleSheet(
-            "QPushButton { background: transparent; border: none; "
-            f"color: {self._colors.text_secondary}; font-size: 18px; }}"
-            f"QPushButton:hover {{ color: {self._colors.text}; "
-            f"background: {self._colors.button}; border-radius: 12px; }}"
-        )
+        initialize()
         self.update()
-
-    def paintEvent(self, event) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        pointer = self._POINTER
-        if self._anchor_side == "left":
-            body = QRectF(1, 1, self.width() - pointer - 3, self.height() - 4)
-            tip = QPoint(self.width() - 1, self.height() // 2)
-            base_x = round(body.right()) - 1
-        else:
-            body = QRectF(pointer + 2, 1, self.width() - pointer - 3, self.height() - 4)
-            tip = QPoint(1, self.height() // 2)
-            base_x = round(body.left()) + 1
-
-        shadow = QPainterPath()
-        shadow.addRoundedRect(body.translated(0, 2), 14, 14)
-        painter.fillPath(shadow, QColor(8, 18, 38, 38))
-
-        fill = QColor(self._colors.window)
-        border = QColor(self._colors.border)
-        body_path = QPainterPath()
-        body_path.addRoundedRect(body, 14, 14)
-        painter.setPen(QPen(border, 1))
-        painter.setBrush(fill)
-        painter.drawPath(body_path)
-
-        tail = QPolygonF(
-            [
-                QPoint(base_x, self.height() // 2 - 8),
-                tip,
-                QPoint(base_x, self.height() // 2 + 8),
-            ]
-        )
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(fill)
-        painter.drawPolygon(tail)
-        painter.setPen(QPen(border, 1))
-        painter.drawLine(tail[0], tail[1])
-        painter.drawLine(tail[1], tail[2])
-        painter.end()
 
     def _activate(self) -> None:
         if not self.isVisible():

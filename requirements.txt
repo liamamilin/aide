@@ -1,4 +1,6 @@
 PyQt5>=5.15.0,<6.0.0
+PyQt-Fluent-Widgets==1.11.3
+PyQt5-Frameless-Window==0.8.2
 pynput>=1.7.6,<2.0.0
 requests>=2.31.0,<3.0.0
 urllib3>=1.26.0,<3.0.0

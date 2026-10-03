@@ -3,23 +3,23 @@
 from dataclasses import replace
 
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import (
-    QCheckBox,
-    QComboBox,
-    QDialog,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QMessageBox,
-    QPushButton,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 
 from ai_desktop.services.action_service import MAX_ACTION_NAME, Action, validate_action
 from ai_desktop.services.model_profiles import ModelProfile
-from ai_desktop.ui import styles
+from ai_desktop.ui.fluent import (
+    CaptionLabel,
+    PrimaryPushButton,
+    SimpleCardWidget,
+    StrongBodyLabel,
+    dialog_title,
+)
+from ai_desktop.ui.fluent import CheckBox as QCheckBox
+from ai_desktop.ui.fluent import ComboBox as QComboBox
+from ai_desktop.ui.fluent import FluentDialog as QDialog
+from ai_desktop.ui.fluent import LineEdit as QLineEdit
+from ai_desktop.ui.fluent import MessageBox as QMessageBox
+from ai_desktop.ui.fluent import PushButton as QPushButton
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 
 
@@ -46,57 +46,38 @@ class ActionSettingsDialog(FramelessDragMixin, QDialog):
         self.setWindowFlags(
             Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
         )
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_TranslucentBackground, False)
         self.setMinimumSize(720, 330)
         self.resize(780, 360)
-        self.setStyleSheet(styles.DIALOG_BASE)
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        title = QWidget()
-        title.setFixedHeight(40)
-        title.setStyleSheet(styles.TITLE_BAR)
-        title_layout = QHBoxLayout(title)
-        title_layout.setContentsMargins(12, 0, 8, 0)
-        heading = QLabel("快捷动作设置")
-        heading.setStyleSheet(styles.LABEL_BOLD)
-        title_layout.addWidget(heading)
-        title_layout.addStretch()
-        close = QPushButton("×")
-        close.setFixedSize(24, 24)
-        close.setStyleSheet(styles.CLOSE_BUTTON)
-        close.clicked.connect(self.reject)
-        title_layout.addWidget(close)
-        root.addWidget(title)
+        root.addWidget(dialog_title(self, '快捷动作设置'))
 
-        body = QWidget()
-        body.setStyleSheet(styles.DIALOG_BODY)
+        body = SimpleCardWidget()
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(16, 12, 16, 12)
         body_layout.setSpacing(10)
-        detail = QLabel("可重命名、隐藏、调整数字快捷顺序，并为动作指定 Agent 和模型配置。")
-        detail.setStyleSheet(styles.LABEL_SECONDARY)
+        detail = CaptionLabel("可重命名、隐藏、调整数字快捷顺序，并为动作指定 Agent 和模型配置。")
         body_layout.addWidget(detail)
 
         grid = QGridLayout()
         grid.setHorizontalSpacing(8)
         grid.setVerticalSpacing(8)
         for column, text in enumerate(("动作名称", "Agent", "模型配置", "数字快捷顺序", "显示")):
-            label = QLabel(text)
-            label.setStyleSheet(styles.LABEL_BOLD)
+            label = StrongBodyLabel(text)
             grid.addWidget(label, 0, column)
 
         for row, action in enumerate(self._actions, start=1):
-            name = QLineEdit(action.name)
+            name = QLineEdit()
+            name.setText(action.name)
             name.setMaxLength(MAX_ACTION_NAME)
-            name.setStyleSheet(styles.FORM_INPUT)
             name.setObjectName(f"action_name_{action.id}")
 
             agent = QComboBox()
-            agent.setStyleSheet(styles.COMBO_BOX)
             for item in self._agents:
                 agent.addItem(f"{item.icon} {item.name}", item.id)
             if agent.findData(action.agent_id) < 0:
@@ -104,7 +85,6 @@ class ActionSettingsDialog(FramelessDragMixin, QDialog):
             agent.setCurrentIndex(max(0, agent.findData(action.agent_id)))
 
             profile = QComboBox()
-            profile.setStyleSheet(styles.COMBO_BOX)
             profile.addItem("继承 Agent / 全局", None)
             for item in self._profiles:
                 profile.addItem(item.name, item.id)
@@ -113,7 +93,6 @@ class ActionSettingsDialog(FramelessDragMixin, QDialog):
             profile.setCurrentIndex(max(0, profile.findData(action.profile_id)))
 
             pinned = QComboBox()
-            pinned.setStyleSheet(styles.COMBO_BOX)
             pinned.addItem("不绑定", None)
             for index in range(4):
                 pinned.addItem(str(index + 1), index)
@@ -121,7 +100,6 @@ class ActionSettingsDialog(FramelessDragMixin, QDialog):
 
             enabled = QCheckBox()
             enabled.setChecked(action.enabled)
-            enabled.setStyleSheet(styles.LABEL)
 
             for column, widget in enumerate((name, agent, profile, pinned, enabled)):
                 grid.addWidget(widget, row, column)
@@ -141,11 +119,9 @@ class ActionSettingsDialog(FramelessDragMixin, QDialog):
         buttons = QHBoxLayout()
         buttons.addStretch()
         cancel = QPushButton("取消")
-        cancel.setStyleSheet(styles.CANCEL_BUTTON)
         cancel.clicked.connect(self.reject)
         buttons.addWidget(cancel)
-        save = QPushButton("保存")
-        save.setStyleSheet(styles.SAVE_BUTTON)
+        save = PrimaryPushButton("保存")
         save.clicked.connect(self._on_save)
         buttons.addWidget(save)
         body_layout.addLayout(buttons)

@@ -3,9 +3,9 @@ from unittest.mock import patch
 
 import pytest
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QMessageBox
 
 from ai_desktop.config import Agent
+from ai_desktop.ui.fluent import MessageBox as QMessageBox
 
 AGENTS = [
     Agent(id="general_assistant", name="通用助手", icon="🤖", system_prompt="..."),

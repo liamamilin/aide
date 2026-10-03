@@ -22,7 +22,12 @@ setup(
     author="milin",
     python_requires=">=3.10",
     packages=find_packages(),
-    package_data={"ai_desktop": ["*.png", "*.icns"]},
+    package_data={"ai_desktop": [
+        "*.png", "*.icns", "pet_frames/*.png", "pet_layers/*.json", "pet_layers/*.png",
+        "pets/*/pet.json", "pets/*/spritesheet.png",
+        "pets/petdex-profiles/*.json",
+        "assets/tabler/*",
+    ]},
     include_package_data=True,
     install_requires=requirements,
     entry_points={

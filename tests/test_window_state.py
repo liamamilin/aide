@@ -108,7 +108,7 @@ def test_chat_dialog_expands_to_screen_and_restores_previous_geometry(qtbot, age
         assert dialog._expand_btn.accessibleName() == "恢复窗口"
         assert dialog._expand_window_action.text() == "恢复之前大小"
         assert dialog._msg_layout.getContentsMargins()[0] == 166
-        assert dialog._toolbar_layout.getContentsMargins()[0] == 162
+        assert dialog._toolbar_layout.getContentsMargins()[0] == 166
         assert dialog._input_row_layout.getContentsMargins()[0] == 158
         dialog.add_assistant_message("Readable wide answer")
         bubble = dialog._msg_container.findChildren(

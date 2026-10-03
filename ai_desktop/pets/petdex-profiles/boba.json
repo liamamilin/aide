@@ -1,0 +1,307 @@
+{
+  "schema_version": 1,
+  "name": "boba",
+  "spritesheet": {
+    "file": "spritesheet.webp",
+    "frame_width": 192,
+    "frame_height": 208,
+    "columns": 8,
+    "frame_count": 88
+  },
+  "anchor": {
+    "x": 0.5,
+    "y": 0.95
+  },
+  "defaults": {
+    "state": "idle",
+    "fps": 8
+  },
+  "states": {
+    "idle": {
+      "base": "rest",
+      "ambient": [
+        "idle_blink",
+        "idle_double_blink",
+        "idle_slow_blink",
+        "idle_small_sip",
+        "idle_tea_break"
+      ]
+    },
+    "hover": {
+      "base": "rest",
+      "reactions": [
+        "hover_paw_greeting",
+        "hover_friendly_blink",
+        "hover_tea_reply",
+        "hover_quiet_attention",
+        "hover_double_reply"
+      ]
+    },
+    "working": {
+      "base": "focus"
+    },
+    "listening": {
+      "base": "listen"
+    },
+    "speaking": {
+      "base": "speak"
+    },
+    "success": {
+      "base": "success"
+    },
+    "error": {
+      "base": "error"
+    }
+  },
+  "animations": {
+    "rest": {
+      "frames": [
+        0
+      ],
+      "durations_ms": [
+        1000
+      ],
+      "fps": 8,
+      "loop": true
+    },
+    "focus": {
+      "frames": [
+        65
+      ],
+      "durations_ms": [
+        1000
+      ],
+      "fps": 8,
+      "loop": true
+    },
+    "listen": {
+      "frames": [
+        0
+      ],
+      "durations_ms": [
+        1000
+      ],
+      "fps": 8,
+      "loop": true
+    },
+    "idle_blink": {
+      "frames": [
+        0,
+        3,
+        0
+      ],
+      "durations_ms": [
+        200,
+        100,
+        240
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "idle_double_blink": {
+      "frames": [
+        0,
+        3,
+        0,
+        3,
+        0
+      ],
+      "durations_ms": [
+        200,
+        90,
+        180,
+        90,
+        260
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "idle_slow_blink": {
+      "frames": [
+        0,
+        3,
+        0
+      ],
+      "durations_ms": [
+        260,
+        180,
+        300
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "idle_small_sip": {
+      "frames": [
+        0,
+        1,
+        2,
+        0
+      ],
+      "durations_ms": [
+        240,
+        260,
+        220,
+        300
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "idle_tea_break": {
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        0
+      ],
+      "durations_ms": [
+        260,
+        160,
+        200,
+        120,
+        160,
+        200,
+        300
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "hover_paw_greeting": {
+      "frames": [
+        0,
+        24,
+        25,
+        26,
+        25,
+        24,
+        0
+      ],
+      "durations_ms": [
+        140,
+        120,
+        160,
+        280,
+        140,
+        160,
+        260
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "hover_friendly_blink": {
+      "frames": [
+        0,
+        3,
+        0
+      ],
+      "durations_ms": [
+        180,
+        140,
+        300
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "hover_tea_reply": {
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        0
+      ],
+      "durations_ms": [
+        180,
+        180,
+        180,
+        120,
+        180,
+        300
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "hover_quiet_attention": {
+      "frames": [
+        0,
+        1,
+        0
+      ],
+      "durations_ms": [
+        200,
+        280,
+        320
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "hover_double_reply": {
+      "frames": [
+        0,
+        3,
+        0,
+        3,
+        0
+      ],
+      "durations_ms": [
+        180,
+        90,
+        180,
+        90,
+        300
+      ],
+      "fps": 8,
+      "loop": false
+    },
+    "success": {
+      "frames": [
+        0,
+        1,
+        0
+      ],
+      "durations_ms": [
+        160,
+        320,
+        300
+      ],
+      "fps": 8,
+      "loop": false,
+      "next_state": "idle"
+    },
+    "error": {
+      "frames": [
+        0,
+        40,
+        0
+      ],
+      "durations_ms": [
+        180,
+        420,
+        280
+      ],
+      "fps": 8,
+      "loop": false,
+      "next_state": "idle"
+    },
+    "speak": {
+      "frames": [
+        0
+      ],
+      "durations_ms": [
+        1000
+      ],
+      "fps": 8,
+      "loop": true
+    }
+  },
+  "atlas_sha256": "b2a723fc55ac6af867765dedc26b3841fbf178d7e1025d6011e8d96ac44f19c9",
+  "rendering": {
+    "pixel_art": true,
+    "scale": 0.88,
+    "baseline": 0.9,
+    "remove_magenta_matte": true
+  }
+}

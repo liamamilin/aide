@@ -711,3 +711,16 @@ class TestChatDialogInputHistory:
             dialog._on_send()
         assert dialog._input_history == ["旧消息"]
         assert dialog._hist_index == -1
+
+
+def test_fluent_version_menu_selects_generation_after_open_returns(qtbot, dialog):
+    from ai_desktop.ui.fluent import Menu
+    dialog._stream_versions = [
+        {"id": 12, "answer": "第一版"}, {"id": 19, "answer": "第二版"},
+    ]
+    dialog._show_stream_versions()
+    menu = next(m for m in dialog.findChildren(Menu) if m.isVisible())
+    with qtbot.waitSignal(dialog.generation_selected) as selected:
+        menu.actions()[1].trigger()
+    assert selected.args == [19]
+    menu.close()

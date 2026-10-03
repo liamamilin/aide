@@ -5,34 +5,49 @@ import html
 import logging
 from pathlib import Path
 
-from PyQt5.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QCursor, QKeyEvent, QPainter, QPainterPath, QPixmap, QRegion, QTextCursor
+from PyQt5.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer, pyqtSignal
+from PyQt5.QtGui import QCursor, QIcon, QKeyEvent, QPixmap, QTextCursor
 from PyQt5.QtWidgets import (
     QApplication,
-    QComboBox,
     QFileDialog,
     QGridLayout,
     QHBoxLayout,
-    QLabel,
-    QMenu,
-    QMessageBox,
-    QPlainTextEdit,
-    QPushButton,
-    QScrollArea,
     QSizeGrip,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
-from ai_desktop import config
 from ai_desktop.capture.text_normalizer import normalize
 from ai_desktop.config import Agent
 from ai_desktop.llm.service_checks import ImageCapability, ServiceState
 from ai_desktop.services.action_service import Action
-from ai_desktop.ui import markdown, styles, theme
+from ai_desktop.ui import markdown, theme
 from ai_desktop.ui.action_panel import ActionPanel
-from ai_desktop.ui.float_button import _visible_pet_bounds, pin_to_all_spaces
+from ai_desktop.ui.float_button import pin_to_all_spaces
+from ai_desktop.ui.fluent import BodyLabel as QLabel
+from ai_desktop.ui.fluent import (
+    CaptionLabel,
+    DotInfoBadge,
+    FluentIcon,
+    FluentWindow,
+    InfoLevel,
+    PrimaryPushButton,
+    SimpleCardWidget,
+    SubtitleLabel,
+    TransparentDropDownToolButton,
+    TransparentPushButton,
+    TransparentToolButton,
+    dialog_title,
+    editor_menu,
+)
+from ai_desktop.ui.fluent import ComboBox as QComboBox
+from ai_desktop.ui.fluent import FluentDialog as QDialog
+from ai_desktop.ui.fluent import Menu as QMenu
+from ai_desktop.ui.fluent import MessageBox as QMessageBox
+from ai_desktop.ui.fluent import PlainTextEdit as QPlainTextEdit
+from ai_desktop.ui.fluent import PushButton as QPushButton
+from ai_desktop.ui.fluent import ScrollArea as QScrollArea
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 from ai_desktop.ui.ocr_preview_dialog import OCRPreviewDialog
 from ai_desktop.utils import images as image_utils
@@ -48,31 +63,11 @@ from ai_desktop.utils.window_state import (
 logger = logging.getLogger(__name__)
 
 
-def _rounded_pixmap(path: str, size: int, radius: float) -> QPixmap:
-    """将应用图标裁成 Qt 界面里使用的圆角缩略图。"""
-    source = QPixmap(path).scaled(
-        size, size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
-    )
-    if source.isNull():
-        return source
-    result = QPixmap(size, size)
-    result.fill(Qt.transparent)
-    painter = QPainter(result)
-    painter.setRenderHint(QPainter.Antialiasing)
-    clip = QPainterPath()
-    clip.addRoundedRect(QRectF(0, 0, size, size), radius, radius)
-    painter.setClipPath(clip)
-    painter.drawPixmap(0, 0, source)
-    painter.end()
-    return result
-
-
 class _ChatInputEdit(QPlainTextEdit):
-    """输入框 —— 重写右键菜单以套用主题样式，并拦截粘贴/拖入的图片。"""
+    """输入框 —— 使用 Fluent 菜单，并拦截粘贴/拖入的图片。"""
 
     def contextMenuEvent(self, event) -> None:
-        menu = self.createStandardContextMenu()
-        menu.setStyleSheet(styles.menu_style())
+        menu = editor_menu(self)
         menu.exec_(event.globalPos())
 
     def insertFromMimeData(self, source) -> None:
@@ -118,7 +113,6 @@ class _SelectableMessageLabel(QLabel):
     def contextMenuEvent(self, event) -> None:
         selected = self.selectedText().strip()
         menu = QMenu(self)
-        menu.setStyleSheet(styles.menu_style())
         copy_action = menu.addAction("Copy")
         copy_action.setEnabled(bool(selected))
         copy_action.triggered.connect(
@@ -135,7 +129,7 @@ class _SelectableMessageLabel(QLabel):
         menu.exec_(event.globalPos())
 
 
-class ChatDialog(FramelessDragMixin, QWidget):
+class ChatDialog(FramelessDragMixin, FluentWindow):
     message_sent = pyqtSignal(str, list)     # (text, image_paths)
     screenshot_requested = pyqtSignal()
     new_convo_requested = pyqtSignal()
@@ -234,15 +228,10 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self.resize(w, h)
         self.setAcceptDrops(True)
         self._apply_rounded_mask()
-        self.setStyleSheet(styles.CHAT_DIALOG_ROOT)
 
     def _apply_rounded_mask(self):
-        if self._expanded_to_screen:
-            self.clearMask()
-            return
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(0, 0, self.width(), self.height()), 10, 10)
-        self.setMask(QRegion(path.toFillPolygon().toPolygon()))
+        # The library/native backend owns the window frame and resize hit areas.
+        self.clearMask()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -378,11 +367,11 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if not hasattr(self, "_expand_btn"):
             return
         if self._expanded_to_screen:
-            self._expand_btn.setText("❐")
+            self._expand_btn.setMaxState(True)
             self._expand_btn.setAccessibleName("恢复窗口")
             self._expand_btn.setToolTip("恢复之前的窗口大小")
         else:
-            self._expand_btn.setText("□")
+            self._expand_btn.setMaxState(False)
             self._expand_btn.setAccessibleName("放大到当前屏幕")
             self._expand_btn.setToolTip("放大到当前屏幕")
         if hasattr(self, "_expand_window_action"):
@@ -408,89 +397,45 @@ class ChatDialog(FramelessDragMixin, QWidget):
         root.setSpacing(0)
 
         # ── Row 1: 品牌、当前 Agent 与高频操作 ──
-        title = QWidget()
-        title.setFixedHeight(44)
-        title.setStyleSheet(styles.TITLE_BAR)
-        tl = QHBoxLayout(title)
-        tl.setContentsMargins(12, 0, 8, 0)
-        tl.setSpacing(7)
-
-        icon_lbl = QLabel()
-        icon_pixmap = _rounded_pixmap(
-            resource_path("ai_desktop", "图标-v2.png"), 26, 6
-        )
-        if not icon_pixmap.isNull():
-            icon_lbl.setPixmap(icon_pixmap)
-        icon_lbl.setStyleSheet(styles.TITLE_ICON)
-        icon_lbl.setFixedSize(28, 28)
-        tl.addWidget(icon_lbl)
-        self._title_icon = icon_lbl
-
-        name_lbl = QLabel("AI 桌面助手")
-        name_lbl.setStyleSheet(styles.TITLE_NAME)
-        name_lbl.setMinimumWidth(0)
-        tl.addWidget(name_lbl)
-        self._title_name = name_lbl
-
-        # 服务状态放在标题栏，避免与输入操作混在一起。
-        self._ollama_dot = QWidget()
-        self._ollama_dot.setFixedSize(8, 8)
+        title = dialog_title(self, "AI 桌面助手")
+        title.setDoubleClickEnabled(False)
+        title.setIcon(QIcon(resource_path("ai_desktop", "图标-v2.png")))
+        self._title_icon = title.iconLabel
+        self._title_name = title.titleLabel
+        self._ollama_dot = DotInfoBadge(level=InfoLevel.ATTENTION)
         self._ollama_dot.setAccessibleName("服务连接状态")
-        self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS)
-        self._ollama_dot.setToolTip("检测中…")
-        tl.addWidget(self._ollama_dot)
-        self._ollama_label = QLabel("检测中")
-        self._ollama_label.setStyleSheet(styles.STATUS_TEXT)
-        tl.addWidget(self._ollama_label)
-
-        tl.addStretch()
-
-        self._new_convo_btn = QPushButton("＋ 新对话")
-        self._new_convo_btn.setFixedHeight(28)
-        self._new_convo_btn.setToolTip("开始一个新对话")
-        self._new_convo_btn.setStyleSheet(styles.HEADER_ACTION_BUTTON)
+        self._ollama_label = CaptionLabel("检测中")
+        title.hBoxLayout.insertSpacing(2, 8)
+        title.hBoxLayout.insertWidget(3, self._ollama_dot)
+        title.hBoxLayout.insertSpacing(4, 8)
+        title.hBoxLayout.insertWidget(5, self._ollama_label)
+        self._new_convo_btn = TransparentPushButton(FluentIcon.ADD, "新对话")
         self._new_convo_btn.clicked.connect(self.new_convo_requested.emit)
-        tl.addWidget(self._new_convo_btn)
-
-        expand_btn = QPushButton("□")
-        expand_btn.setFixedSize(24, 24)
-        expand_btn.setAccessibleName("放大到当前屏幕")
-        expand_btn.setToolTip("放大到当前屏幕")
-        expand_btn.setStyleSheet(styles.ICON_BUTTON)
-        expand_btn.clicked.connect(self.toggle_expanded_window)
-        self._expand_btn = expand_btn
-        tl.addWidget(expand_btn)
-
-        hide_btn = QPushButton("−")
-        hide_btn.setFixedSize(24, 24)
-        hide_btn.setAccessibleName("隐藏对话窗口")
-        hide_btn.setToolTip("隐藏对话窗口")
-        hide_btn.setStyleSheet(styles.ICON_BUTTON)
-        hide_btn.clicked.connect(self.hide)
-        self._hide_btn = hide_btn
-        tl.addWidget(hide_btn)
-
+        title.hBoxLayout.insertWidget(7, self._new_convo_btn)
+        self._expand_btn = title.maxBtn
+        self._expand_btn.clicked.disconnect()
+        self._expand_btn.clicked.connect(self.toggle_expanded_window)
+        self._expand_btn.setAccessibleName("放大到当前屏幕")
+        self._expand_btn.setToolTip("放大到当前屏幕")
+        self._hide_btn = title.minBtn
+        self._hide_btn.clicked.disconnect()
+        self._hide_btn.clicked.connect(self.hide)
         root.addWidget(title)
 
         # ── Row 2: 当前任务配置；低频操作收入“更多” ──
         self._toolbar = QWidget()
-        self._toolbar.setFixedHeight(64)
-        self._toolbar.setStyleSheet(styles.TOOLBAR)
         toolbar_layout = QVBoxLayout(self._toolbar)
         self._toolbar_layout = toolbar_layout
-        toolbar_layout.setContentsMargins(12, 5, 12, 5)
-        toolbar_layout.setSpacing(1)
+        toolbar_layout.setContentsMargins(16, 8, 16, 8)
+        toolbar_layout.setSpacing(8)
         tb = QHBoxLayout()
-        tb.setSpacing(7)
+        tb.setSpacing(8)
         toolbar_layout.addLayout(tb)
 
         # Agent 切换
         self._agent_combo = QComboBox()
-        self._agent_combo.setFixedHeight(26)
         self._agent_combo.setFixedWidth(126)
         self._agent_combo.setAccessibleName("选择 Agent")
-        self._agent_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-        self._agent_combo.setStyleSheet(styles.COMBO_BOX)
         for ag in self._agents:
             self._agent_combo.addItem(f"{ag.icon} {ag.name}", ag.id)
         idx = next(i for i, ag in enumerate(self._agents) if ag.id == self._active_agent.id)
@@ -500,12 +445,9 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         # 模型选择
         self._model_combo = QComboBox()
-        self._model_combo.setFixedHeight(26)
         self._model_combo.setMinimumWidth(110)
         self._model_combo.setAccessibleName("选择模型")
         self._model_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._model_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-        self._model_combo.setStyleSheet(styles.MODEL_COMBO_BOX)
         self._model_combo.setToolTip("选择模型")
         if not self._models:
             self._model_combo.addItem("加载中…")
@@ -518,32 +460,26 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._model_combo.currentTextChanged.connect(self._on_model_combo)
         tb.addWidget(self._model_combo, stretch=1)
 
-        self._model_capability_badge = QLabel("图片待确认")
+        self._model_capability_badge = CaptionLabel("图片待确认")
         self._model_capability_badge.setObjectName("model_capability_badge")
         self._model_capability_badge.setAccessibleName("模型图片能力")
-        self._model_capability_badge.setStyleSheet(styles.STATUS_TEXT)
         self._model_capability_badge.setToolTip("当前模型的图片输入能力尚未确认")
 
-        self._model_profile_badge = QLabel("全局配置")
+        self._model_profile_badge = CaptionLabel("全局配置")
         self._model_profile_badge.setObjectName("model_profile_badge")
         self._model_profile_badge.setAccessibleName("模型配置")
-        self._model_profile_badge.setStyleSheet(styles.STATUS_TEXT)
         self._model_profile_badge.setToolTip("请求将使用全局模型设置")
 
-        more_btn = QPushButton("•••")
-        more_btn.setFixedSize(30, 26)
+        more_btn = TransparentDropDownToolButton(FluentIcon.MORE)
         more_btn.setAccessibleName("更多操作")
         more_btn.setToolTip("更多操作")
-        more_btn.setStyleSheet(styles.MORE_BUTTON)
         more_menu = QMenu(more_btn)
-        more_menu.setStyleSheet(styles.menu_style())
         self._history_action = more_menu.addAction("对话历史…")
         self._export_action = more_menu.addAction("导出当前对话")
         more_menu.addSeparator()
         self._manage_agents_action = more_menu.addAction("管理 Agent…")
         more_menu.addSeparator()
         window_menu = more_menu.addMenu("窗口大小")
-        window_menu.setStyleSheet(styles.menu_style())
         self._expand_window_action = window_menu.addAction("放大到当前屏幕")
         self._grow_window_action = window_menu.addAction("放大一级")
         self._shrink_window_action = window_menu.addAction("缩小一级")
@@ -563,8 +499,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         metadata = QHBoxLayout()
         metadata.setSpacing(8)
         metadata.addWidget(self._model_capability_badge)
-        divider = QLabel("·")
-        divider.setStyleSheet(styles.STATUS_TEXT)
+        divider = CaptionLabel("·")
         metadata.addWidget(divider)
         metadata.addWidget(self._model_profile_badge)
         metadata.addStretch()
@@ -575,11 +510,10 @@ class ChatDialog(FramelessDragMixin, QWidget):
         # ── 消息区域 ──
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(styles.SCROLL_AREA)
 
         self._msg_container = QWidget()
-        self._msg_container.setStyleSheet(styles.MESSAGE_LIST)
         self._msg_layout = QVBoxLayout(self._msg_container)
         self._msg_layout.setContentsMargins(16, 12, 16, 10)
         self._msg_layout.setSpacing(8)
@@ -598,8 +532,6 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._latest_btn.setObjectName("latest_message_button")
         self._latest_btn.setAccessibleName("回到最新消息")
         self._latest_btn.setToolTip("回到对话末尾")
-        self._latest_btn.setFixedHeight(30)
-        self._latest_btn.setStyleSheet(styles.LATEST_MESSAGE_BUTTON)
         self._latest_btn.clicked.connect(self._jump_to_latest)
         self._latest_btn.hide()
         scroll.viewport().installEventFilter(self)
@@ -613,7 +545,6 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         # ── 图片预览行（发送前暂存已附图片）──
         self._image_preview = QWidget()
-        self._image_preview.setStyleSheet("background: transparent;")
         self._image_preview.setVisible(False)
         self._preview_layout = QHBoxLayout(self._image_preview)
         self._preview_layout.setContentsMargins(8, 4, 8, 4)
@@ -626,11 +557,10 @@ class ChatDialog(FramelessDragMixin, QWidget):
         input_row.setContentsMargins(8, 4, 8, 8)
         input_row.setSpacing(0)
 
-        input_bar = QWidget()
-        input_bar.setStyleSheet(styles.INPUT_BAR)
+        input_bar = SimpleCardWidget()
         il = QHBoxLayout(input_bar)
-        il.setContentsMargins(8, 6, 8, 6)
-        il.setSpacing(6)
+        il.setContentsMargins(8, 8, 8, 8)
+        il.setSpacing(8)
 
         self._input = _ChatInputEdit()
         self._input.setPlaceholderText("输入消息…")
@@ -639,16 +569,13 @@ class ChatDialog(FramelessDragMixin, QWidget):
         self._input.setFixedHeight(40)
         self._input.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._input.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._input.setStyleSheet(styles.INPUT_AREA)
         self._input.installEventFilter(self)
         self._input.textChanged.connect(self._on_input_text_changed)
         self._input._on_image_attach = self._attach_pixmap
         self._input._on_image_paths = self._attach_image_paths
 
-        action_btn = QPushButton("⚡")
-        action_btn.setFixedSize(30, 40)
+        action_btn = TransparentToolButton(FluentIcon.QUICK_NOTE)
         action_btn.setAccessibleName("快捷动作")
-        action_btn.setStyleSheet(styles.ICON_BUTTON)
         action_btn.setToolTip("显示快捷动作")
         action_btn.clicked.connect(lambda: self.show_actions())
         self._action_btn = action_btn
@@ -656,14 +583,11 @@ class ChatDialog(FramelessDragMixin, QWidget):
         il.addWidget(action_btn)
 
         # 图片附件按钮（📎 菜单：选择文件 / 截图 / 粘贴剪贴板图片）
-        attach_btn = QPushButton("📎")
-        attach_btn.setFixedSize(30, 40)
+        attach_btn = TransparentDropDownToolButton(FluentIcon.PHOTO)
         attach_btn.setAccessibleName("添加图片")
-        attach_btn.setStyleSheet(styles.ICON_BUTTON)
         attach_btn.setToolTip("添加图片")
         self._attach_btn = attach_btn
         attach_menu = QMenu(attach_btn)
-        attach_menu.setStyleSheet(styles.menu_style())
         a_file = attach_menu.addAction("选择图片文件…")
         a_shot = attach_menu.addAction("截图…")
         a_paste = attach_menu.addAction("粘贴剪贴板图片")
@@ -675,10 +599,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
         il.addWidget(self._input, stretch=1)
 
-        self._send_btn = QPushButton("发送")
-        self._send_btn.setFixedSize(58, 40)
+        self._send_btn = PrimaryPushButton("发送")
         self._send_btn.setAccessibleName("发送消息")
-        self._send_btn.setStyleSheet(styles.BUTTON_PRIMARY)
         self._send_btn.clicked.connect(self._on_send)
         il.addWidget(self._send_btn)
 
@@ -688,7 +610,6 @@ class ChatDialog(FramelessDragMixin, QWidget):
         grip.setFixedSize(14, 14)
         grip.setAccessibleName("调整窗口大小")
         grip.setToolTip("拖动调整窗口大小")
-        grip.setStyleSheet(styles.SIZE_GRIP)
         self._size_grip = grip
         input_row.addWidget(grip, alignment=Qt.AlignBottom | Qt.AlignRight)
 
@@ -719,42 +640,22 @@ class ChatDialog(FramelessDragMixin, QWidget):
         """构建首屏引导，让用户在空对话中立即看懂三个核心入口。"""
         panel = QWidget()
         panel.setObjectName("chat_empty_state")
-        panel.setStyleSheet(styles.EMPTY_CHAT_PANEL)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(22, 44, 22, 24)
         layout.setSpacing(8)
 
-        icon = QLabel()
-        pixmap = QPixmap(resource_path("ai_desktop", "桌面宠物-v2.png"))
-        if not pixmap.isNull():
-            bounds = _visible_pet_bounds(pixmap)
-            if not bounds.isNull():
-                margin = round(min(bounds.width(), bounds.height()) * 0.035)
-                pixmap = pixmap.copy(
-                    bounds.adjusted(-margin, -margin, margin, margin).intersected(pixmap.rect())
-                )
-            icon.setPixmap(
-                pixmap.scaled(74, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            )
-        icon.setAlignment(Qt.AlignCenter)
-        icon.setStyleSheet("background: transparent;")
-        layout.addWidget(icon)
-
-        heading = QLabel("今天想处理什么？")
+        heading = SubtitleLabel("今天想处理什么？")
         heading.setAlignment(Qt.AlignCenter)
-        heading.setStyleSheet(styles.EMPTY_CHAT_TITLE)
         layout.addWidget(heading)
 
-        description = QLabel("直接输入问题，或从其他应用捕获文字和截图")
+        description = CaptionLabel("直接输入问题，或从其他应用捕获文字和截图")
         description.setAlignment(Qt.AlignCenter)
         description.setWordWrap(True)
-        description.setStyleSheet(styles.EMPTY_CHAT_DESCRIPTION)
         layout.addWidget(description)
 
-        shortcuts = QLabel("⌘⌃L  选中文字     ⌘⌃S  截图     ⚡  快捷动作")
+        shortcuts = CaptionLabel("⌘⌃L  选中文字     ⌘⌃S  截图     ⚡  快捷动作")
         shortcuts.setAlignment(Qt.AlignCenter)
         shortcuts.setWordWrap(True)
-        shortcuts.setStyleSheet(styles.SHORTCUT_HINT)
         layout.addWidget(shortcuts)
         return panel
 
@@ -765,7 +666,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
         outer = max(0, (self.width() - 900) // 2)
         self._msg_layout.setContentsMargins(outer + 16, 12, outer + 16, 10)
         if hasattr(self, "_toolbar_layout"):
-            self._toolbar_layout.setContentsMargins(outer + 12, 5, outer + 12, 5)
+            self._toolbar_layout.setContentsMargins(outer + 16, 8, outer + 16, 8)
         if hasattr(self, "_input_row_layout"):
             self._input_row_layout.setContentsMargins(outer + 8, 4, outer + 8, 8)
         self._update_bubble_widths()
@@ -781,9 +682,13 @@ class ChatDialog(FramelessDragMixin, QWidget):
             is_user = getattr(label, "_is_user_message", False)
             fraction = 0.78 if is_user else 0.90
             maximum = 620 if is_user else 760
-            label.setMaximumWidth(
-                max(280, min(maximum, int(content_width * fraction)))
-            )
+            width = max(248, min(maximum, int(content_width * fraction) - 32))
+            label.setMaximumWidth(width)
+            card = label.parentWidget()
+            if isinstance(card, SimpleCardWidget):
+                card.setMaximumWidth(width + 32)
+                if not is_user:
+                    card.setMinimumWidth(width + 32)
 
     # ── Agent 切换 ─────────────────────────────────────
 
@@ -1150,7 +1055,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
             return
         for idx, path in enumerate(self._pending_images):
             item = QWidget()
-            item.setFixedSize(68, 68)
+            item.setFixedSize(112, 112)
             il = QGridLayout(item)
             il.setContentsMargins(2, 2, 2, 2)
             thumb = QLabel()
@@ -1171,27 +1076,20 @@ class ChatDialog(FramelessDragMixin, QWidget):
                 thumb.setToolTip(tooltip)
             except Exception:
                 thumb.setToolTip(Path(path).name)
-            thumb.setStyleSheet("border-radius: 4px;")
             il.addWidget(thumb, 0, 0)
             ocr = QPushButton("识字")
             ocr.setObjectName("ocr_image_btn")
-            ocr.setFixedSize(44, 20)
+            ocr.adjustSize()
             ocr.setAccessibleName(f"提取图片文字 {Path(path).name}")
             ocr.setToolTip("在本机提取这张图片中的文字")
-            ocr.setStyleSheet(styles.SECONDARY_BUTTON)
             ocr.clicked.connect(
                 lambda checked=False, image_path=path: self.ocr_requested.emit(image_path)
             )
-            il.addWidget(ocr, 0, 0, alignment=Qt.AlignBottom | Qt.AlignLeft)
-            rm = QPushButton("✕")
-            rm.setFixedSize(16, 16)
+            il.addWidget(ocr, 1, 0, alignment=Qt.AlignLeft)
+            rm = TransparentToolButton(FluentIcon.CLOSE)
+            rm.adjustSize()
             rm.setAccessibleName(f"移除图片 {Path(path).name}")
             rm.setToolTip(f"移除图片 {Path(path).name}")
-            rm.setStyleSheet(
-                "QPushButton { background: rgba(0,0,0,0.6); color: white; border: none;"
-                " border-radius: 8px; font-size: 9px; }"
-                "QPushButton:hover { background: #ff3b30; }"
-            )
             rm.clicked.connect(lambda checked, i=idx: self._remove_pending_image(i))
             il.addWidget(rm, 0, 0, alignment=Qt.AlignTop | Qt.AlignRight)
             layout.addWidget(item)
@@ -1346,24 +1244,24 @@ class ChatDialog(FramelessDragMixin, QWidget):
     def set_service_status(self, state: ServiceState) -> None:
         """Render service reachability independently from cached model entries."""
         if state == ServiceState.ONLINE:
-            self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_OK)
             self._ollama_dot.setToolTip("Ollama 已连接，模型列表已更新")
+            self._ollama_dot.setLevel(InfoLevel.SUCCESS)
             self._ollama_label.setText("已连接")
         elif state == ServiceState.EMPTY:
-            self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_WARN)
             self._ollama_dot.setToolTip("Ollama 已连接，但没有可用模型")
+            self._ollama_dot.setLevel(InfoLevel.WARNING)
             self._ollama_label.setText("无模型")
         elif state == ServiceState.INVALID:
-            self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_WARN)
             self._ollama_dot.setToolTip("Ollama 响应格式错误")
+            self._ollama_dot.setLevel(InfoLevel.WARNING)
             self._ollama_label.setText("服务异常")
         elif state == ServiceState.OFFLINE:
-            self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS_ERR)
             self._ollama_dot.setToolTip("Ollama 未连接；模型列表可能来自缓存")
+            self._ollama_dot.setLevel(InfoLevel.ERROR)
             self._ollama_label.setText("未连接")
         else:
-            self._ollama_dot.setStyleSheet(styles.OLLAMA_STATUS)
             self._ollama_dot.setToolTip("正在检测 Ollama…")
+            self._ollama_dot.setLevel(InfoLevel.ATTENTION)
             self._ollama_label.setText("检测中")
         self._ollama_label.setToolTip(self._ollama_dot.toolTip())
 
@@ -1498,13 +1396,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
     @staticmethod
     def _wrap_assistant_html(body: str) -> str:
-        return (
-            '<html><body style="font-size:13px; font-family:'
-            + config.FONT_FAMILY
-            + ';">'
-            + body
-            + "</body></html>"
-        )
+        # Rich-text content inherits the Fluent BodyLabel font.
+        return "<html><body>" + body + "</body></html>"
 
     @staticmethod
     def _render_assistant_body(
@@ -1736,14 +1629,16 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if len(versions) <= 1:
             return
         menu = QMenu(self)
-        menu.setStyleSheet(styles.menu_style())
         for index, version in enumerate(versions):
             label = str(version.get("answer", ""))[:24].replace("\n", " ") or f"版本 {index + 1}"
             action = menu.addAction(f"{index + 1}. {label}")
             action.setData(int(version.get("id", 0)))
-        chosen = menu.exec_(QCursor.pos())
-        if chosen is not None and int(chosen.data() or 0):
-            self.generation_selected.emit(int(chosen.data()))
+            action.triggered.connect(
+                lambda checked=False, generation_id=int(version.get("id", 0)):
+                self.generation_selected.emit(generation_id)
+            )
+        menu.closedSignal.connect(menu.deleteLater)
+        menu.exec_(QCursor.pos())
 
     def set_thinking(self, thinking: bool) -> None:
         self._send_btn.setEnabled(True)
@@ -1754,12 +1649,10 @@ class ChatDialog(FramelessDragMixin, QWidget):
         if thinking:
             self._send_btn.setText("⏹")
             self._send_btn.setToolTip("停止生成")
-            self._send_btn.setStyleSheet(styles.STOP_BUTTON)
             self._send_btn.clicked.connect(self.stop_requested.emit)
         else:
             self._send_btn.setText("发送")
             self._send_btn.setToolTip("")
-            self._send_btn.setStyleSheet(styles.BUTTON_PRIMARY)
             self._send_btn.clicked.connect(self._on_send)
         self._input.setEnabled(not thinking)
         if not thinking:
@@ -1798,7 +1691,6 @@ class ChatDialog(FramelessDragMixin, QWidget):
         markdown_source: str | None = None,
     ) -> QWidget:
         wrapper = QWidget()
-        wrapper.setStyleSheet("background: transparent;")
         wl = QHBoxLayout(wrapper)
         wl.setContentsMargins(0, 0, 0, 0)
 
@@ -1808,8 +1700,15 @@ class ChatDialog(FramelessDragMixin, QWidget):
         fraction = 0.78 if is_user else 0.90
         maximum = 620 if is_user else 760
         lbl.setMaximumWidth(
-            max(280, min(maximum, int(min(900, self.width()) * fraction)))
+            max(248, min(maximum, int(min(900, self.width()) * fraction) - 32))
         )
+        card = SimpleCardWidget()
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(16, 16, 16, 16)
+        card_layout.addWidget(lbl)
+        card.setMaximumWidth(lbl.maximumWidth() + 32)
+        if not is_user:
+            card.setMinimumWidth(lbl.maximumWidth() + 32)
         lbl._is_user_message = is_user
         lbl.setTextFormat(Qt.RichText if is_html else Qt.PlainText)
         lbl.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse)
@@ -1823,7 +1722,6 @@ class ChatDialog(FramelessDragMixin, QWidget):
             lbl._thinking_source = ""
 
         if is_user:
-            lbl.setStyleSheet(styles.USER_BUBBLE)
             # 用户气泡 + 编辑按钮（hover 显示）
             v_layout = QVBoxLayout()
             v_layout.setContentsMargins(0, 0, 0, 0)
@@ -1832,22 +1730,19 @@ class ChatDialog(FramelessDragMixin, QWidget):
                 v_layout.addWidget(
                     self._build_bubble_images(images or [], missing_images or [])
                 )
-            v_layout.addWidget(lbl)
+            v_layout.addWidget(card)
 
             btn_bar = QWidget()
-            btn_bar.setFixedHeight(22)
             bl = QHBoxLayout(btn_bar)
             bl.setContentsMargins(4, 0, 8, 0)
             bl.addStretch()
 
-            edit_btn = QPushButton("编辑")
-            edit_btn.setFixedSize(42, 22)
+            edit_btn = TransparentPushButton("编辑")
             edit_btn.setToolTip("编辑消息")
             edit_btn.setFocusPolicy(Qt.NoFocus)
             edit_btn.setObjectName("edit_btn_user")
             edit_btn.setCursor(Qt.PointingHandCursor)
             edit_btn.setVisible(False)
-            edit_btn.setStyleSheet(styles.EDIT_BUTTON)
             edit_btn.clicked.connect(lambda checked, t=content: self.set_input_text(t))
             bl.addWidget(edit_btn)
 
@@ -1857,48 +1752,40 @@ class ChatDialog(FramelessDragMixin, QWidget):
 
             wrapper.installEventFilter(self)
         else:
-            lbl.setStyleSheet(styles.ASSISTANT_BUBBLE)
             # 将回答操作直接放在内容下方，复制始终可见。
             v_layout = QVBoxLayout()
             v_layout.setContentsMargins(0, 0, 0, 0)
             v_layout.setSpacing(2)
-            v_layout.addWidget(lbl)
+            v_layout.addWidget(card)
 
             btn_bar = QWidget()
-            btn_bar.setFixedHeight(26)
             bl = QHBoxLayout(btn_bar)
             bl.setContentsMargins(8, 0, 0, 0)
             bl.setSpacing(4)
 
-            copy_btn = QPushButton("复制")
-            copy_btn.setFixedSize(42, 24)
+            copy_btn = TransparentPushButton("复制")
             copy_btn.setToolTip("复制回复")
             copy_btn.setFocusPolicy(Qt.NoFocus)
             copy_btn.setObjectName("copy_btn_assistant")
             copy_btn.setCursor(Qt.PointingHandCursor)
-            copy_btn.setStyleSheet(styles.COPY_BUTTON)
             bl.addWidget(copy_btn)
 
-            regen_btn = QPushButton("重新生成")
-            regen_btn.setFixedSize(70, 24)
+            regen_btn = TransparentPushButton("重新生成")
             regen_btn.setToolTip("重新生成")
             regen_btn.setAccessibleName("重新生成回答")
             regen_btn.setFocusPolicy(Qt.NoFocus)
             regen_btn.setObjectName("regen_btn_assistant")
             regen_btn.setCursor(Qt.PointingHandCursor)
             regen_btn.setVisible(False)
-            regen_btn.setStyleSheet(styles.COPY_BUTTON)
             bl.addWidget(regen_btn)
 
-            version_btn = QPushButton("")
-            version_btn.setFixedSize(44, 24)
+            version_btn = TransparentPushButton("")
             version_btn.setToolTip("查看答案版本")
             version_btn.setAccessibleName("查看答案版本")
             version_btn.setFocusPolicy(Qt.NoFocus)
             version_btn.setObjectName("version_btn_assistant")
             version_btn.setCursor(Qt.PointingHandCursor)
             version_btn.setVisible(False)
-            version_btn.setStyleSheet(styles.COPY_BUTTON)
             bl.addWidget(version_btn)
             bl.addStretch()
 
@@ -1922,7 +1809,6 @@ class ChatDialog(FramelessDragMixin, QWidget):
     ) -> QWidget:
         """构建气泡内图片展示区（缩略横排，点击可放大查看）"""
         box = QWidget()
-        box.setStyleSheet("background: transparent;")
         thumbs: list[QWidget] = []
         missing = list(missing_images or [])
         compact = len(images or []) + len(missing) > 1
@@ -1936,19 +1822,12 @@ class ChatDialog(FramelessDragMixin, QWidget):
             thumb.setPixmap(
                 pix.scaled(thumb_edge, thumb_edge, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             )
-            thumb.setStyleSheet(
-                "border-radius: 6px; border: 1px solid rgba(255,255,255,0.25);"
-            )
             thumb.clicked.connect(self._view_image_full)
             thumbs.append(thumb)
         for path in missing:
             notice = QLabel(f"⚠️ 图片缺失\n{Path(path).name}")
             notice.setObjectName("missing_image_notice")
             notice.setToolTip(path)
-            notice.setStyleSheet(
-                "padding: 8px; border-radius: 6px; "
-                "border: 1px dashed rgba(255,170,0,0.75); color: #b7791f;"
-            )
             thumbs.append(notice)
         if not compact:
             bl = QHBoxLayout(box)
@@ -1967,7 +1846,6 @@ class ChatDialog(FramelessDragMixin, QWidget):
     def _view_image_full(self, path: str) -> None:
         """在新窗口预览大图（查看图片详情）"""
         try:
-            from PyQt5.QtWidgets import QDialog, QScrollArea
             dlg = QDialog(self)
             dlg.setWindowTitle("图片预览")
             dlg.setWindowFlag(Qt.WindowStaysOnTopHint)
@@ -1980,6 +1858,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
             scroll = QScrollArea()
             scroll.setWidget(label)
             lay = QVBoxLayout(dlg)
+            lay.setContentsMargins(16, 0, 16, 16)
+            lay.addWidget(dialog_title(dlg, "图片预览"))
             lay.addWidget(scroll)
             dlg.resize(min(pix.width(), 900) + 40, min(pix.height(), 900) + 40)
             dlg.exec_()
@@ -1989,6 +1869,8 @@ class ChatDialog(FramelessDragMixin, QWidget):
     # ── hover 显示复制按钮 ─────────────────────────────
 
     def eventFilter(self, obj, event):
+        if not hasattr(self, "_scroll"):
+            return super().eventFilter(obj, event)
         if obj is self._scroll.viewport() and event.type() == QEvent.Resize:
             self._position_latest_button()
         if (obj is self._scroll.viewport() or obj is self._scroll.verticalScrollBar()) \
@@ -2008,7 +1890,7 @@ class ChatDialog(FramelessDragMixin, QWidget):
                     self._input.clear()
                     return True
                 return False
-            # Enter 发送（无修饰键时），Shift+Enter 换行由 QPlainTextEdit 默认处理
+            # Enter 发送（无修饰键时），Shift+Enter 换行由 Fluent PlainTextEdit 默认处理
             if (event.key() == Qt.Key_Return
                     and event.modifiers() == Qt.NoModifier):
                 self._on_send()

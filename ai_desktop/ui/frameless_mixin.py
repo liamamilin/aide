@@ -4,33 +4,21 @@ Frameless 窗口拖拽 Mixin 和 TitleBar 组件
 消除 6 个文件中重复的拖拽和 Escape 逻辑。
 """
 from PyQt5.QtCore import QPoint, Qt, pyqtSignal
-from PyQt5.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
-
-from ai_desktop.ui import styles
+from qfluentwidgets import FluentTitleBar
 
 
-class TitleBar(QWidget):
-    """统一的无边框对话框标题栏"""
+class TitleBar(FluentTitleBar):
+    """Library title bar with the existing close signal contract."""
 
     close_clicked = pyqtSignal()
 
-    def __init__(self, title: str, height: int = 40, parent=None):
+    def __init__(self, title: str, height: int = 48, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(height)
-        self.setStyleSheet(styles.TITLE_BAR)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 0, 8, 0)
-
-        label = QLabel(title)
-        label.setStyleSheet(styles.LABEL_BOLD)
-        layout.addWidget(label)
-        layout.addStretch()
-
-        close_btn = QPushButton("×")
-        close_btn.setFixedSize(24, 24)
-        close_btn.setStyleSheet(styles.CLOSE_BUTTON)
-        close_btn.clicked.connect(self.close_clicked.emit)
-        layout.addWidget(close_btn)
+        self.setTitle(title)
+        self.minBtn.hide()
+        self.maxBtn.hide()
+        self.closeBtn.clicked.disconnect()
+        self.closeBtn.clicked.connect(self.close_clicked.emit)
 
 
 class FramelessDragMixin:
@@ -53,7 +41,7 @@ class FramelessDragMixin:
         self._title_bar_height = title_bar_height
 
     def _in_drag_area(self, pos: QPoint) -> bool:
-        return pos.y() <= self._title_bar_height
+        return not hasattr(self, "titleBar") and pos.y() <= self._title_bar_height
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton and self._in_drag_area(event.pos()):

@@ -1,20 +1,20 @@
 """Compact keyboard-accessible quick-action bar."""
 
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import (
-    QComboBox,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout
 
 from ai_desktop.services.action_service import Action
-from ai_desktop.ui import styles
+from ai_desktop.ui.fluent import (
+    CaptionLabel,
+    SimpleCardWidget,
+    StrongBodyLabel,
+    TogglePushButton,
+)
+from ai_desktop.ui.fluent import ComboBox as QComboBox
+from ai_desktop.ui.fluent import PushButton as QPushButton
 
 
-class ActionPanel(QWidget):
+class ActionPanel(SimpleCardWidget):
     action_selected = pyqtSignal(str, str, str)
     cancelled = pyqtSignal()
 
@@ -25,27 +25,23 @@ class ActionPanel(QWidget):
         self._selected_index = 0
         self._buttons: list[QPushButton] = []
         self.setFocusPolicy(Qt.StrongFocus)
-        self.setStyleSheet(styles.AGENT_LIST_BAR)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(10, 7, 10, 7)
-        root.setSpacing(6)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.setSpacing(12)
         heading = QHBoxLayout()
         heading.setSpacing(7)
-        label = QLabel("快捷动作")
-        label.setStyleSheet(styles.LABEL_BOLD)
+        label = StrongBodyLabel("快捷动作")
         label.setToolTip("先在输入框输入/粘贴文字，或在其他应用选中文字后按 ⌘⌃L")
         heading.addWidget(label)
         heading.addStretch()
         self._mode_combo = QComboBox()
-        self._mode_combo.setStyleSheet(styles.COMBO_BOX)
         self._mode_combo.setFixedWidth(106)
         self._mode_combo.addItem("新对话", "new")
         self._mode_combo.addItem("当前对话", "current")
         self._mode_combo.setToolTip("选择动作结果所属的对话")
         heading.addWidget(self._mode_combo)
         collapse = QPushButton("收起")
-        collapse.setStyleSheet(styles.SECONDARY_BUTTON)
         collapse.setToolTip("收起快捷动作面板")
         collapse.clicked.connect(self._collapse)
         heading.addWidget(collapse)
@@ -53,12 +49,10 @@ class ActionPanel(QWidget):
 
         context = QHBoxLayout()
         context.setSpacing(8)
-        self._material_hint = QLabel()
+        self._material_hint = CaptionLabel()
         self._material_hint.setWordWrap(True)
-        self._material_hint.setStyleSheet(styles.LABEL_SECONDARY)
         context.addWidget(self._material_hint, stretch=1)
-        hint = QLabel("数字键选择 · Enter 执行")
-        hint.setStyleSheet(styles.LABEL_SECONDARY)
+        hint = CaptionLabel("数字键选择 · Enter 执行")
         hint.setToolTip("也可用 ←→ 切换，Esc 收起")
         context.addWidget(hint)
         root.addLayout(context)
@@ -76,8 +70,7 @@ class ActionPanel(QWidget):
                 item.widget().deleteLater()
         self._buttons = []
         for index, action in enumerate(self._actions):
-            button = QPushButton(f"{index + 1}  {action.name}")
-            button.setStyleSheet(styles.SECONDARY_BUTTON)
+            button = TogglePushButton(f"{index + 1}  {action.name}")
             button.setToolTip(action.name)
             button.clicked.connect(
                 lambda checked, selected=index: self._trigger(selected)
@@ -179,6 +172,7 @@ class ActionPanel(QWidget):
             return
         action = self._actions[index]
         self._selected_index = index
+        self._refresh_selection()
         self.action_selected.emit(
             action.id,
             self._material,
@@ -187,8 +181,4 @@ class ActionPanel(QWidget):
 
     def _refresh_selection(self) -> None:
         for index, button in enumerate(self._buttons):
-            button.setStyleSheet(
-                styles.BUTTON_PRIMARY
-                if index == self._selected_index
-                else styles.SECONDARY_BUTTON
-            )
+            button.setChecked(index == self._selected_index)

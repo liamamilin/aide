@@ -4,21 +4,22 @@
 from datetime import datetime
 
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
-from PyQt5.QtWidgets import (
-    QDialog,
-    QHBoxLayout,
-    QInputDialog,
-    QLabel,
-    QLineEdit,
-    QMessageBox,
-    QPushButton,
-    QScrollArea,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 from ai_desktop.config import AGENTS, Agent
-from ai_desktop.ui import styles
+from ai_desktop.ui.fluent import BodyLabel as QLabel
+from ai_desktop.ui.fluent import (
+    CaptionLabel,
+    SimpleCardWidget,
+    TransparentPushButton,
+    dialog_title,
+)
+from ai_desktop.ui.fluent import FluentDialog as QDialog
+from ai_desktop.ui.fluent import InputDialog as QInputDialog
+from ai_desktop.ui.fluent import LineEdit as QLineEdit
+from ai_desktop.ui.fluent import MessageBox as QMessageBox
+from ai_desktop.ui.fluent import PushButton as QPushButton
+from ai_desktop.ui.fluent import ScrollArea as QScrollArea
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 from ai_desktop.utils.storage import (
     delete_conversation,
@@ -49,7 +50,6 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setMinimumSize(380, 300)
         self.resize(400, 420)
-        self.setStyleSheet(styles.DIALOG_BASE)
 
     def _setup_ui(self):
         root = QVBoxLayout(self)
@@ -57,30 +57,12 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         root.setSpacing(0)
 
         # ── 标题栏 ──
-        title = QWidget()
-        title.setFixedHeight(40)
-        title.setStyleSheet(styles.TITLE_BAR)
-        tl = QHBoxLayout(title)
-        tl.setContentsMargins(12, 0, 8, 0)
-
-        title_lbl = QLabel("对话历史")
-        title_lbl.setStyleSheet(styles.LABEL_BOLD)
-        tl.addWidget(title_lbl)
-        tl.addStretch()
-
-        close_btn = QPushButton("×")
-        close_btn.setFixedSize(24, 24)
-        close_btn.setStyleSheet(styles.CLOSE_BUTTON)
-        close_btn.clicked.connect(self.close)
-        tl.addWidget(close_btn)
-
-        root.addWidget(title)
+        root.addWidget(dialog_title(self, '对话历史'))
 
         # ── 搜索栏 ──
         self._search = QLineEdit()
         self._search.setPlaceholderText("搜索对话…")
         self._search.setClearButtonEnabled(True)
-        self._search.setStyleSheet(styles.SEARCH_FIELD)
         self._search.textChanged.connect(self._on_search_changed)
         root.addWidget(self._search)
 
@@ -93,7 +75,7 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         # ── 列表区域 ──
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
-        self._scroll.setStyleSheet(styles.SCROLL_AREA)
+        self._scroll.setFrameShape(QScrollArea.NoFrame)
 
         self._list_container = QWidget()
         self._list_layout = QVBoxLayout(self._list_container)
@@ -106,7 +88,6 @@ class HistoryDialog(FramelessDragMixin, QDialog):
 
         self._load_more_btn = QPushButton("加载更多")
         self._load_more_btn.setObjectName("history_load_more")
-        self._load_more_btn.setStyleSheet(styles.SECONDARY_BUTTON)
         self._load_more_btn.clicked.connect(self._load_more)
         self._load_more_btn.setVisible(False)
         root.addWidget(self._load_more_btn)
@@ -148,7 +129,6 @@ class HistoryDialog(FramelessDragMixin, QDialog):
             empty_text = "未找到匹配的对话" if query else "暂无历史对话"
             empty = QLabel(empty_text)
             empty.setObjectName("history_empty")
-            empty.setStyleSheet(styles.EMPTY_STATE)
             empty.setAlignment(Qt.AlignCenter)
             self._list_layout.insertWidget(0, empty)
         self._load_more_btn.setVisible(self._cursor is not None)
@@ -185,9 +165,8 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         )
 
     def _make_row(self, convo: dict) -> QWidget:
-        row = QWidget()
+        row = SimpleCardWidget()
         row.setCursor(Qt.PointingHandCursor)
-        row.setStyleSheet(styles.HISTORY_ROW)
 
         rl = QHBoxLayout(row)
         rl.setContentsMargins(8, 6, 8, 6)
@@ -198,7 +177,6 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         icon_text = agent.icon if agent else "💬"
         icon = QLabel(icon_text)
         icon.setFixedWidth(24)
-        icon.setStyleSheet(styles.TITLE_ICON)
         rl.addWidget(icon)
 
         # 标题 + 副标题
@@ -208,7 +186,6 @@ class HistoryDialog(FramelessDragMixin, QDialog):
         title_lbl = QLabel(convo["title"] or "(空对话)")
         title_lbl.setObjectName("history_title")
         title_lbl.setProperty("conversation_id", convo["id"])
-        title_lbl.setStyleSheet(styles.LABEL)
         text_col.addWidget(title_lbl)
 
         dt = datetime.fromtimestamp(convo["created_at"])
@@ -217,26 +194,21 @@ class HistoryDialog(FramelessDragMixin, QDialog):
             f"{agent_name} · {dt.month}月{dt.day}日 · "
             f"{convo['msg_count']}条消息"
         )
-        sub_lbl = QLabel(subtitle)
-        sub_lbl.setStyleSheet(styles.LABEL_SECONDARY)
+        sub_lbl = CaptionLabel(subtitle)
         text_col.addWidget(sub_lbl)
 
         rl.addLayout(text_col, stretch=1)
 
-        rename_btn = QPushButton("✏️")
-        rename_btn.setFixedSize(24, 24)
+        rename_btn = TransparentPushButton("✏️")
         rename_btn.setToolTip("重命名对话")
-        rename_btn.setStyleSheet(styles.HISTORY_DELETE_BUTTON)
         rename_btn.clicked.connect(
             lambda checked, item=convo: self._on_rename(item["id"], item["title"])
         )
         rl.addWidget(rename_btn)
 
         # 删除按钮
-        del_btn = QPushButton("🗑")
-        del_btn.setFixedSize(24, 24)
+        del_btn = TransparentPushButton("🗑")
         del_btn.setToolTip("删除对话")
-        del_btn.setStyleSheet(styles.HISTORY_DELETE_BUTTON)
         del_btn.clicked.connect(lambda checked, cid=convo["id"]: self._on_delete(cid))
         rl.addWidget(del_btn)
 

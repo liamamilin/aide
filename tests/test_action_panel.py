@@ -93,3 +93,16 @@ def test_action_panel_stays_open_until_explicitly_collapsed(qtbot):
     with qtbot.waitSignal(panel.cancelled, timeout=1000):
         panel._collapse()
     assert not panel.isVisible()
+
+
+def test_click_updates_single_fluent_selected_action(qtbot):
+    from ai_desktop.services.action_service import BUILTIN_ACTIONS
+    from ai_desktop.ui.action_panel import ActionPanel
+    panel = ActionPanel(list(BUILTIN_ACTIONS))
+    qtbot.addWidget(panel)
+    panel.show_for_material("Hello")
+    assert [button.isChecked() for button in panel._buttons] == [True, False, False, False]
+    panel._buttons[2].click()
+    assert [button.isChecked() for button in panel._buttons] == [False, False, True, False]
+    panel._buttons[2].click()
+    assert panel._buttons[2].isChecked()

@@ -2,12 +2,11 @@
 
 from unittest.mock import patch
 
-from PyQt5.QtWidgets import QMessageBox
-
 from ai_desktop.config import Agent
 from ai_desktop.services.action_service import BUILTIN_ACTIONS
 from ai_desktop.services.model_profiles import ModelProfile
 from ai_desktop.ui.action_settings_dialog import ActionSettingsDialog
+from ai_desktop.ui.fluent import MessageBox as QMessageBox
 
 AGENTS = [
     Agent("translator", "翻译", "🌐", "Translate."),

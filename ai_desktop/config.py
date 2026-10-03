@@ -26,6 +26,8 @@ QUICK_ACTIONS_ENABLED: bool = True       # 选区捕获后显示快捷动作
 DESKTOP_PET_ENABLED: bool = True         # 使用有状态的桌面宠物悬浮入口
 DESKTOP_PET_REDUCE_MOTION: bool = False  # 停止宠物周期动画，保留必要状态
 DESKTOP_PET_SIZE: str = "medium"         # 宠物尺寸：small / medium / large
+PET_SOURCE: str = "built-in"             # 宠物来源：built-in / petdex
+PET_NAME: str = "owl-v2"                 # 宠物名称（built-in 对应 pets/ 子目录，petdex 对应 ~/.petdex/pets/ 子目录）
 
 # ── 文本处理 ─────────────────────────────────────────
 

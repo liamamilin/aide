@@ -4,24 +4,25 @@ Agent 管理窗口 —— 新增 / 编辑 / 删除自定义 Agent
 from dataclasses import dataclass
 
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import (
-    QComboBox,
-    QDialog,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QPlainTextEdit,
-    QPushButton,
-    QScrollArea,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 
 from ai_desktop.services.action_service import Action
 from ai_desktop.services.model_profiles import ModelProfile
-from ai_desktop.ui import styles
 from ai_desktop.ui.action_settings_dialog import ActionSettingsDialog
+from ai_desktop.ui.fluent import BodyLabel as QLabel
+from ai_desktop.ui.fluent import (
+    CaptionLabel,
+    PrimaryPushButton,
+    SimpleCardWidget,
+    TransparentPushButton,
+    dialog_title,
+)
+from ai_desktop.ui.fluent import ComboBox as QComboBox
+from ai_desktop.ui.fluent import FluentDialog as QDialog
+from ai_desktop.ui.fluent import LineEdit as QLineEdit
+from ai_desktop.ui.fluent import PlainTextEdit as QPlainTextEdit
+from ai_desktop.ui.fluent import PushButton as QPushButton
+from ai_desktop.ui.fluent import ScrollArea as QScrollArea
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 from ai_desktop.ui.model_profile_dialog import ModelProfileDialog
 
@@ -62,10 +63,9 @@ class AgentEditor(FramelessDragMixin, QDialog):
         self.setWindowFlags(
             Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
         )
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_TranslucentBackground, False)
         self.setMinimumSize(420, 340)
         self.resize(440, 400)
-        self.setStyleSheet(styles.DIALOG_BASE)
 
     def _setup_ui(self):
         root = QVBoxLayout(self)
@@ -73,29 +73,12 @@ class AgentEditor(FramelessDragMixin, QDialog):
         root.setSpacing(0)
 
         # ── 标题栏 ──
-        title = QWidget()
-        title.setFixedHeight(40)
-        title.setStyleSheet(styles.TITLE_BAR)
-        tl = QHBoxLayout(title)
-        tl.setContentsMargins(12, 0, 8, 0)
-
-        title_lbl = QLabel("管理 Agent")
-        title_lbl.setStyleSheet(styles.LABEL_BOLD)
-        tl.addWidget(title_lbl)
-        tl.addStretch()
-
-        close_btn = QPushButton("×")
-        close_btn.setFixedSize(24, 24)
-        close_btn.setStyleSheet(styles.CLOSE_BUTTON)
-        close_btn.clicked.connect(self.close)
-        tl.addWidget(close_btn)
-
-        root.addWidget(title)
+        root.addWidget(dialog_title(self, '管理 Agent'))
 
         # ── 列表区域 ──
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(styles.SCROLL_AREA)
+        scroll.setFrameShape(QScrollArea.NoFrame)
 
         self._list_container = QWidget()
         self._list_layout = QVBoxLayout(self._list_container)
@@ -108,26 +91,18 @@ class AgentEditor(FramelessDragMixin, QDialog):
 
         # ── 新增按钮 ──
         add_bar = QWidget()
-        add_bar.setFixedHeight(44)
-        add_bar.setStyleSheet(styles.AGENT_LIST_BAR)
         al = QHBoxLayout(add_bar)
         al.setContentsMargins(12, 0, 12, 0)
 
         add_btn = QPushButton("＋ 新增 Agent")
-        add_btn.setFixedHeight(28)
-        add_btn.setStyleSheet(styles.ADD_AGENT_BUTTON)
         add_btn.clicked.connect(self._on_add)
         al.addWidget(add_btn)
 
-        profiles_btn = QPushButton("模型配置…")
-        profiles_btn.setFixedHeight(28)
-        profiles_btn.setStyleSheet(styles.AGENT_EDIT_BUTTON)
+        profiles_btn = TransparentPushButton("模型配置…")
         profiles_btn.clicked.connect(self._on_manage_profiles)
         al.addWidget(profiles_btn)
 
-        actions_btn = QPushButton("快捷动作…")
-        actions_btn.setFixedHeight(28)
-        actions_btn.setStyleSheet(styles.AGENT_EDIT_BUTTON)
+        actions_btn = TransparentPushButton("快捷动作…")
         actions_btn.clicked.connect(self._on_manage_actions)
         al.addWidget(actions_btn)
 
@@ -151,47 +126,36 @@ class AgentEditor(FramelessDragMixin, QDialog):
         self._load()
 
     def _make_row(self, agent: AgentDef) -> QWidget:
-        row = QWidget()
-        row.setStyleSheet(styles.TRANSPARENT)
+        row = SimpleCardWidget()
         rl = QHBoxLayout(row)
         rl.setContentsMargins(8, 4, 8, 4)
         rl.setSpacing(8)
 
         icon = QLabel(agent.icon)
         icon.setFixedWidth(24)
-        icon.setStyleSheet(styles.TITLE_ICON)
         rl.addWidget(icon)
 
         name = QLabel(agent.name)
-        name.setStyleSheet(styles.LABEL)
         rl.addWidget(name, stretch=1)
 
         profile = next((item for item in self._profiles if item.id == agent.profile_id), None)
-        profile_tag = QLabel(profile.name if profile else "全局设置")
-        profile_tag.setStyleSheet(styles.LABEL_SECONDARY)
+        profile_tag = CaptionLabel(profile.name if profile else "全局设置")
         profile_tag.setToolTip("此 Agent 使用的模型配置")
         rl.addWidget(profile_tag)
 
-        profile_btn = QPushButton("配置")
-        profile_btn.setFixedHeight(24)
-        profile_btn.setStyleSheet(styles.AGENT_EDIT_BUTTON)
+        profile_btn = TransparentPushButton("配置")
         profile_btn.clicked.connect(lambda checked, a=agent: self._on_profile(a))
         rl.addWidget(profile_btn)
 
         if agent.builtin:
-            tag = QLabel("内置")
-            tag.setStyleSheet(styles.LABEL_SECONDARY)
+            tag = CaptionLabel("内置")
             rl.addWidget(tag)
         else:
-            edit_btn = QPushButton("编辑")
-            edit_btn.setFixedHeight(24)
-            edit_btn.setStyleSheet(styles.AGENT_EDIT_BUTTON)
+            edit_btn = TransparentPushButton("编辑")
             edit_btn.clicked.connect(lambda checked, a=agent: self._on_edit(a))
             rl.addWidget(edit_btn)
 
-            del_btn = QPushButton("删除")
-            del_btn.setFixedHeight(24)
-            del_btn.setStyleSheet(styles.DELETE_BUTTON)
+            del_btn = TransparentPushButton("删除")
             del_btn.clicked.connect(lambda checked, a=agent: self._on_delete(a))
             rl.addWidget(del_btn)
 
@@ -290,34 +254,19 @@ class _AgentProfileDialog(FramelessDragMixin, QDialog):
         super().__init__(parent)
         self._setup_drag(36)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_TranslucentBackground, False)
         self.setMinimumWidth(360)
-        self.setStyleSheet(styles.DIALOG_BASE)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        title = QWidget()
-        title.setFixedHeight(36)
-        title.setStyleSheet(styles.TITLE_BAR)
-        tl = QHBoxLayout(title)
-        tl.setContentsMargins(12, 0, 8, 0)
-        tl.addWidget(QLabel(f"{agent.icon} {agent.name} · 模型配置"))
-        tl.addStretch()
-        close = QPushButton("×")
-        close.setFixedSize(24, 24)
-        close.setStyleSheet(styles.CLOSE_BUTTON)
-        close.clicked.connect(self.reject)
-        tl.addWidget(close)
-        root.addWidget(title)
+        root.addWidget(dialog_title(self, f'{agent.icon} {agent.name} · 模型配置'))
 
-        body = QWidget()
-        body.setStyleSheet(styles.DIALOG_BODY)
+        body = SimpleCardWidget()
         layout = QVBoxLayout(body)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.addWidget(QLabel("选择配置；全局设置会跟随主窗口当前模型。"))
         self._combo = QComboBox()
-        self._combo.setStyleSheet(styles.COMBO_BOX)
         self._combo.addItem("全局设置", None)
         for profile in profiles:
             self._combo.addItem(profile.name, profile.id)
@@ -326,11 +275,9 @@ class _AgentProfileDialog(FramelessDragMixin, QDialog):
         buttons = QHBoxLayout()
         buttons.addStretch()
         cancel = QPushButton("取消")
-        cancel.setStyleSheet(styles.CANCEL_BUTTON)
         cancel.clicked.connect(self.reject)
         buttons.addWidget(cancel)
-        save = QPushButton("应用")
-        save.setStyleSheet(styles.SAVE_BUTTON)
+        save = PrimaryPushButton("应用")
         save.clicked.connect(self.accept)
         buttons.addWidget(save)
         layout.addLayout(buttons)
@@ -350,8 +297,7 @@ class _AgentEditDialog(FramelessDragMixin, QDialog):
         self.setWindowFlags(
             Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
         )
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setStyleSheet(styles.DIALOG_BASE)
+        self.setAttribute(Qt.WA_TranslucentBackground, False)
         self._setup_drag(36)
 
         root = QVBoxLayout(self)
@@ -359,23 +305,10 @@ class _AgentEditDialog(FramelessDragMixin, QDialog):
         root.setSpacing(0)
 
         # 标题栏
-        tbar = QWidget()
-        tbar.setFixedHeight(36)
-        tbar.setStyleSheet(styles.TITLE_BAR)
-        tl2 = QHBoxLayout(tbar)
-        tl2.setContentsMargins(12, 0, 8, 0)
-        tl2.addWidget(QLabel(title))
-        tl2.addStretch()
-        cb = QPushButton("×")
-        cb.setFixedSize(24, 24)
-        cb.setStyleSheet(styles.CLOSE_BUTTON)
-        cb.clicked.connect(self.reject)
-        tl2.addWidget(cb)
-        root.addWidget(tbar)
+        root.addWidget(dialog_title(self, title))
 
         # 主体面板（不透明背景，避免半透明窗口下间隙穿透）
-        body = QWidget()
-        body.setStyleSheet(styles.DIALOG_BODY)
+        body = SimpleCardWidget()
         broot = QVBoxLayout(body)
         broot.setContentsMargins(0, 0, 0, 0)
         broot.setSpacing(0)
@@ -386,23 +319,21 @@ class _AgentEditDialog(FramelessDragMixin, QDialog):
         form.setSpacing(10)
 
         form.addWidget(QLabel("名称"))
-        self._name = QLineEdit(agent.name)
-        self._name.setStyleSheet(styles.FORM_INPUT)
+        self._name = QLineEdit()
+        self._name.setText(agent.name)
         form.addWidget(self._name)
 
         form.addWidget(QLabel("图标 (emoji)"))
         # 图标行：输入框 + 选择按钮
         icon_row = QHBoxLayout()
         icon_row.setSpacing(6)
-        self._icon = QLineEdit(agent.icon)
+        self._icon = QLineEdit()
+        self._icon.setText(agent.icon)
         self._icon.setFixedWidth(50)
-        self._icon.setStyleSheet(styles.FORM_INPUT)
         icon_row.addWidget(self._icon)
 
         pick_btn = QPushButton("…")
-        pick_btn.setFixedSize(28, 28)
         pick_btn.setToolTip("选择图标")
-        pick_btn.setStyleSheet(styles.EMOJI_PICK_BUTTON)
         pick_btn.clicked.connect(self._pick_emoji)
         icon_row.addWidget(pick_btn)
         icon_row.addStretch()
@@ -411,7 +342,6 @@ class _AgentEditDialog(FramelessDragMixin, QDialog):
         form.addWidget(QLabel("System Prompt"))
         self._prompt = QPlainTextEdit()
         self._prompt.setPlainText(agent.system_prompt)
-        self._prompt.setStyleSheet(styles.FORM_TEXTAREA)
         form.addWidget(self._prompt, stretch=1)
 
         broot.addLayout(form)
@@ -422,12 +352,10 @@ class _AgentEditDialog(FramelessDragMixin, QDialog):
         bb.addStretch()
 
         cancel = QPushButton("取消")
-        cancel.setStyleSheet(styles.CANCEL_BUTTON)
         cancel.clicked.connect(self.reject)
         bb.addWidget(cancel)
 
-        save = QPushButton("保存")
-        save.setStyleSheet(styles.SAVE_BUTTON)
+        save = PrimaryPushButton("保存")
         save.clicked.connect(self._on_save)
         bb.addWidget(save)
 
@@ -474,10 +402,9 @@ class _EmojiPicker(FramelessDragMixin, QDialog):
         self.setWindowFlags(
             Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
         )
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_TranslucentBackground, False)
         self.setMinimumSize(370, 300)
         self.resize(370, 320)
-        self.setStyleSheet(styles.DIALOG_BASE)
         self._setup_drag(36)
 
         root = QVBoxLayout(self)
@@ -485,24 +412,12 @@ class _EmojiPicker(FramelessDragMixin, QDialog):
         root.setSpacing(0)
 
         # 标题栏
-        tbar = QWidget()
-        tbar.setFixedHeight(36)
-        tbar.setStyleSheet(styles.TITLE_BAR)
-        tl2 = QHBoxLayout(tbar)
-        tl2.setContentsMargins(12, 0, 8, 0)
-        tl2.addWidget(QLabel("选择图标"))
-        tl2.addStretch()
-        cb = QPushButton("×")
-        cb.setFixedSize(24, 24)
-        cb.setStyleSheet(styles.CLOSE_BUTTON)
-        cb.clicked.connect(self.reject)
-        tl2.addWidget(cb)
-        root.addWidget(tbar)
+        root.addWidget(dialog_title(self, '选择图标'))
 
         # 分类区
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(styles.SCROLL_AREA)
+        scroll.setFrameShape(QScrollArea.NoFrame)
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(12, 8, 12, 8)
@@ -514,8 +429,6 @@ class _EmojiPicker(FramelessDragMixin, QDialog):
             grid.setSpacing(4)
             for i, emoji in enumerate(emojis):
                 btn = QPushButton(emoji)
-                btn.setFixedSize(34, 34)
-                btn.setStyleSheet(styles.EMOJI_GRID_BUTTON)
                 btn.clicked.connect(lambda checked, e=emoji: self._select(e))
                 grid.addWidget(btn, 0, i)
             layout.addLayout(grid)

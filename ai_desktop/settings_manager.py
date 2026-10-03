@@ -31,6 +31,8 @@ _SETTING_MAP = [
     ("desktop_pet",     "DESKTOP_PET_ENABLED",   bool),
     ("pet_reduce_motion", "DESKTOP_PET_REDUCE_MOTION", bool),
     ("pet_size",        "DESKTOP_PET_SIZE",      str),
+    ("pet_source",      "PET_SOURCE",            str),
+    ("pet_name",        "PET_NAME",              str),
 ]
 
 _DB_KEY_MAP = {
@@ -49,9 +51,12 @@ _DB_KEY_MAP = {
     "desktop_pet":    "desktop_pet_enabled",
     "pet_reduce_motion": "desktop_pet_reduce_motion",
     "pet_size":       "desktop_pet_size",
+    "pet_source":     "pet_source",
+    "pet_name":       "pet_name",
 }
 
 _PET_SIZES = frozenset({"small", "medium", "large"})
+_PET_SOURCES = frozenset({"built-in", "petdex"})
 
 
 class SettingsManager:
@@ -70,6 +75,8 @@ class SettingsManager:
                         converted = conv(val)
                         if dict_key == "pet_size" and converted not in _PET_SIZES:
                             raise ValueError("invalid pet size")
+                        if dict_key == "pet_source" and converted not in _PET_SOURCES:
+                            raise ValueError("invalid pet source")
                         setattr(config, attr, converted)
                 except (ValueError, TypeError):
                     logger.warning("Invalid setting %s=%s, keeping default", db_key, val)
@@ -99,6 +106,10 @@ class SettingsManager:
                     converted = converted.strip().lower()
                     if converted not in _PET_SIZES:
                         raise ValueError("invalid pet size")
+                if dict_key == "pet_source":
+                    converted = converted.strip().lower()
+                    if converted not in _PET_SOURCES:
+                        raise ValueError("invalid pet source")
             except (ValueError, TypeError):
                 logger.warning("Invalid value for %s: %s", dict_key, new_value)
                 continue

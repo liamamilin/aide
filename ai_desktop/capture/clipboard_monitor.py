@@ -20,7 +20,7 @@ from ai_desktop.capture import text_normalizer
 
 logger = logging.getLogger(__name__)
 
-_keyboard = Controller()
+_keyboard: Controller | None = None
 _COPY_SCRIPT = (
     'tell application "System Events" '
     'to tell (first process whose frontmost is true) '
@@ -173,7 +173,10 @@ def _write_clipboard(text: str) -> bool:
 
 def _try_cmd_c_via_pynput() -> bool:
     """尝试通过 pynput Controller 模拟 ⌘C。成功返回 True。"""
+    global _keyboard
     try:
+        if _keyboard is None:
+            _keyboard = Controller()
         with _keyboard.pressed(Key.cmd):
             _keyboard.press("c")
             _keyboard.release("c")
