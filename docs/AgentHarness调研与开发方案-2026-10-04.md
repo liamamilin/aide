@@ -12,7 +12,7 @@
 | [6](#6-工具设计) | Bash 白名单与分类器、确认与过期、联网搜索 |
 | [7](#7-会话上下文与存储) | schema 5、上下文原则、保留期与清理、隔离语义 |
 | [8](#8-用户体验与预算) | 入口与卡片、流式文本呈现、预算初值、配置冲突 |
-| [9](#9-开发工作包) | H0–H6、中止判据、回归清单 |
+| [9](#9-开发工作包) | 工作包与分支估时、H0 五阶段准入协议、中止判据、回归清单 |
 | [10](#10-下一次开发起点) | 起点与未验证假设 |
 
 修订记录（2026-10-04，两轮）：
@@ -20,6 +20,7 @@
 - 评审修订：补 Ollama 无 `tool_call_id` 的位置配对规则；修正上下文预算算术（计数器上限与注入量上限混读）；增补 H0 中止判据与候选模型；记入 `num_predict > num_ctx` 既有配置冲突。
 - 能力准入：确立 `capability declaration → behavioral verification → admission` 三段式，作为贯穿全文的通用原则；`think` 由 `bool` 改为枚举语义 `ThinkMode`，合法取值域由 `/api/show` 的 `thinking.values` 决定（档位名不被接受时静默回落默认，故必须使用精确值）；UI 两处（全局设置、model profile）均改为 capability-aware。
 - 数据语义：确立「模型侧保真、持久化侧安全」分工（*Model-facing data prioritizes semantic fidelity; persistence-facing data prioritizes safety and minimization*），并明确 context reduction 是执行预算操作而非安全变换；工具输出分三条路径（模型原样 / 存储与日志 redaction / UI 复用），`redaction` 与 `truncation` 判据不同、禁止互相替代；连续 length 终止区分 `generation_budget_exhausted` 与 `probable_context_budget_exhausted`，后者为概率性诊断并附重试与终止条件；工具记录与输出统一保留 30 天，取消按命令类别分级。
+- H0 重构为准入协议：由六个零散问题改为 H0.1 Capability Discovery → H0.2 Behavioral Verification → H0.3 Token/Latency Distribution → H0.4 Budget Selection → H0.5 Tool-use Admission 五阶段，每阶段有 exit artifact 与失败分支；**只有 H0.5 允许得出工具调用能力不足的结论**，此前只能记为未归因失败；`task_mode_enabled = budget_verified AND tool_use_admitted` 为硬门；H0.2 的 named effort 验证以「可重复、可解释的行为差异」为判据，不采用「low token 必须小于 high」这类单次比较；H0.3 须留存每次 run 原始观测而非仅统计量；H0.4 产出经验证的 `task_profile` 组而非孤立 `num_predict`；H1 按 H0.2 结果分两支估时。
 - 架构决策：改为唯一执行路径（普通对话是空工具集的退化情形）；`general_assistant` 承载工具授权，不新增 Agent 入口；放弃 Pi RPC 并记录可勾选的重评触发条件；Bash 权限改为白名单 + 分类器三层判定，网络命令归确认、搜索走 `web_search`；工作包新增 H6 删除旧聊天路径。
 - 协议核实补充：`done_reason` 截断轮次不得执行工具（否则半截命令污染确认卡片并训练出盲点点击）；`think` 须支持思考强度档位，`num_predict` 与 `think` 必须一起定；确认等待 10 分钟过期并走拒绝路径；工具执行记录与输出文件统一保留 30 天，run/step 随会话级联；卡片内实时显示流式文本并在状态切换时保留已显示内容。
 - 源码核实补充：`StreamEvent` 缺 run_id/step_id 导致多轮事件归属失效，`_on_stream_event` 的 worker 反查在 8 轮下两种实现均不可用，须改为事件自带身份；附件持有绑在 worker 上，须改为 run 级并把图片 token 计入预算；纯对话同样写 run 行（schema 5 只迁移一次）；`num_predict` 若小于 thinking 需求会与截断规则形成死锁，须由 H0 实测分布决定，取消原先的 `≤ 2048` 预设值。
@@ -386,7 +387,7 @@ INHERIT 对应 wire value `None`（用模型默认），不落成 `null` 字面�
 | `llm/chat_client.py` | `bool \| None` | `ThinkMode` |
 | `llm/service_checks.py` | 只读 `capabilities` | 解析 `thinking.values` / `default` |
 
-**必须删除 `bool(first("think", …))`。** 这是 silent corruption：`bool("low")` 为 `True`，档位会被静默压成开启，三态化完全失效且无任何报错。resolver 应直接透传枚举，由 `_payload()` 原样序列化（该处已原样透传，无需改动协议层）。
+**必须删除 `bool(first("think", …))`。** 这是 silent corruption：`bool("low")` 为 `True`，档位会被静默压成开启，枚举化完全失效且无任何报错。resolver 应直接透传枚举，由 `_payload()` 原样序列化（该处已原样透传，无需改动协议层）。
 
 `ui/settings_dialog.py` 的 `FIELDS` 类型声明直接决定控件：`bool` 渲染为 `QCheckBox`，现有分支无枚举类型，须新增一处 `key ==` 特判（参照 `pet_size` / `pet_source` 的既有写法）。profile 对话框已是 `QComboBox` + `currentData()`，架构上支持任意条目，但条目必须由该模型的 `thinking.values` 生成，不能沿用硬编码列表。
 
@@ -590,30 +591,127 @@ per_item = min(4 KiB, 剩余 token 预算 / 本轮预计注入条数)
 
 ## 9. 开发工作包
 
-单人初估 **13–19 个工作日**，不是发布日期。未包含新增云端模型提供商、真正 OS 沙箱或公开分发签名。缓冲不均摊：H2、H5 与 H6 涉及分类器、冻结包与签名，是本项目历史上最易超期的部分，各自多留 1 天。
+单人初估见下表合计（分支 A），不是发布日期。未包含新增云端模型提供商、真正 OS 沙箱或公开分发签名。缓冲不均摊：H2、H5 与 H6 涉及分类器、冻结包与签名，是本项目历史上最易超期的部分，各自多留 1 天。H0 为模型测试，其耗时取决于候选模型的实际行为，不计入工程估时。
 
 | 工作包 | 预计 | 交付与验收 |
 |---|---|---|
-| H0 协议/模型验证 | 2–3 天 | 脱敏 Ollama 样本；模拟单次/多次工具、thinking、畸形参数、取消；三个候选模型逐个固定任务验证；默认参数与任务模式参数对照；按中止判据给出分支结论 |
-| H1 统一运行循环 | 5–6 天 | 类型、注册表、校验、顺序循环、身份、取消、预算；`StreamEvent`/`ChatResult` 增加 run_id 与 step_id 并改造归属判断（两处产出点）；单 worker 多轮与附件 run 级持有；`tools=[]` 退化路径；`think` 枚举化（12 处，含 `model_profiles` 三层覆盖、两处 UI capability-aware、旧设置值兼容）；`done_reason` 判定；聊天路径以适配器接入并置于开关之下；两步模拟任务，终态只发一次 |
+| H0 模型准入 | 2–3 天（不含在工程估时内） | 按 H0.1–H0.5 五阶段执行，每阶段产出 exit artifact；三个候选模型逐个走完；原始观测全部留存；产出经验证的 `task_profile`；给出 admission result 与中止判据分支 |
+| H1 统一运行循环（分支 A：named effort 已验证） | 6–7 天 | 类型、注册表、校验、顺序循环、身份、取消、预算；`StreamEvent`/`ChatResult` 增加 run_id 与 step_id 并改造归属判断（两处产出点）；单 worker 多轮与附件 run 级持有；`tools=[]` 退化路径；`think` 枚举化（12 处，含 `model_profiles` 三层覆盖、两处 UI capability-aware、旧设置值兼容）；`done_reason` 判定；聊天路径以适配器接入并置于开关之下；两步模拟任务，终态只发一次 |
+| H1 统一运行循环（分支 B：named effort 不可靠，bool fallback） | 5–6 天 | 同上，档位项退化为布尔。capability discovery、capability-aware 合法取值域、resolver 修正、两处 UI、校验、摘要渲染与 service checks 均保留，12 个落点不减少 |
 | H2 Bash 执行与分类器 | 3–4 天 | 白名单（含条件白名单与 workspace 限定）、分类器四条要求与 fail-closed、确认卡片与触发原因与 10 分钟过期、进程组停止；输出与环境；中文路径、非零退出、大输出、子进程验收 |
 | H3 搜索适配 | 1–1.5 天 | Exa/Parallel HTTP、Keychain、配置、来源；模拟故障/取消，小额真实请求验证 |
 | H4 会话与存储 | 2–3 天 | schema 5（含纯对话 run 行）、备份升级、运行记录、切换隔离、重启中断；历史会话无 run 行时降级显示；secret redaction（落库与日志侧）；工具记录与输出统一 30 天保留及会话级联清理；打开历史不执行命令 |
-| H5 Fluent 与打包 | 2–3 天 | 授权指示与 `bash_policy` 开关（按 workspace 记忆）、思考档位选择器、卡片内流式文本与状态切换、确认/停止、来源、重执行区分；`general_assistant` prompt 改写；完整回归、桌面与冻结包测试 |
+| H5 Fluent 与打包 | 2–3 天 | 授权指示与 `bash_policy` 开关（按 workspace 记忆）、按 capability profile 生成的思考档位选择器、卡片内流式文本与状态切换、确认/停止、来源、重执行区分；`general_assistant` prompt 改写；完整回归、桌面与冻结包测试 |
 | H6 删除旧聊天路径 | 0.5–1 天 | 移除适配器后的旧发送实现与开关，确认现有 184 项相关测试行为不变 |
 
 依赖为 H0→H1→H2/H3→H4→H5→H6。本轮没有开始开发。H6 是收尾项而非可选清理：旧路径必须在本版内删除，否则第 5 节「只有一条执行路径」不成立。
 
-H0 的六个准入问题：
+H1 估时按 H0.2 的结果分支，不预设。分支 B 不等于回到改动前的规模：capability discovery、capability-aware 合法取值域、resolver 修正、两处 UI、校验、摘要渲染与 service checks 在两条分支下都要实现，落点数不变（12 处）。总量按分支 A 记为 **14–21 个工作日**，其中 H0 的模型测试耗时单独计算，不并入工程估时。
 
-1. 所选模型能否返回结构化 tool_calls，收到 tool 结果后继续调用或完成？记录模型 digest 和 Ollama 版本，不能只记名称。
-2. 流式调用如何汇集？有 ID/index 按协议合并，无服务端 ID 按本地轮次/调用序号标识，不按相同参数直接去重吞掉合法重复调用。只在轮次完成后执行。
-3. 改写后的 `general_assistant` prompt（单一 prompt 同时服务聊天与任务）是否足以让模型在不确定时主动调用工具，而非直接回答「不确定」？须观察若干真实任务的工具调用率，这是对 prompt 的直接验收。
-4. **候选模型完成一个两工具任务所需的 thinking token 分布**（多次采样取上界）。该分布决定 `num_predict` 取值；不先测就定 `num_predict`，会得到"每轮截断、工具永不执行"的死锁，且该现象会被误判为模型不支持工具。
-5. 现有 `num_predict=20480` / `num_ctx=8192` / `think=True` 组合下，模型是否还能稳定发出工具调用并给出最终回答？须用现有默认与任务模式参数（`num_ctx ≥ 16384`、按第 4 项分布定 `num_predict`、`think` 取 low 档）对照测试，避免把配置问题误判为模型能力问题。
-6. 两工具任务是否可靠？按下列候选逐个实测，不通过则进入中止判据，不偷偷执行回答代码块，也不自动切收费云端。
+### H0 模型准入协议
 
-H0 候选模型固定为 `qwen3:8b`、`qwen2.5:7b-instruct`、`llama3.1:8b`，逐个记录结果，不在 H0 期间无限更换模型。
+H0 不是测试清单，而是**准入协议**：每个阶段都有明确输入、产出、通过条件与失败分支。未产出 exit artifact 不得进入下一阶段。
+
+```text
+H0.1 Capability Discovery
+        ↓
+H0.2 Behavioral Verification
+        ↓
+H0.3 Token / Latency Distribution
+        ↓
+H0.4 Budget Selection
+        ↓
+H0.5 Tool-use Admission
+        ↓
+TASK MODE ENABLED
+```
+
+| 阶段 | 核心问题 | 产出（exit artifact） | 失败处理 |
+|---|---|---|---|
+| H0.1 | 模型声明支持什么？ | capability profile | 收窄合法取值域 |
+| H0.2 | 声明的能力真的生效吗？ | verified capability profile | named effort 不可靠 → bool fallback |
+| H0.3 | 实际 token / latency 怎么分布？ | 原始观测 + P50/P90/P95/max | 数据不足 → 不进入预算选择 |
+| H0.4 | 什么预算不会制造 length 死锁？ | 已验证的 `task_profile` | 无安全配置 → 不准入 |
+| H0.5 | 在正确预算下能否稳定使用工具？ | admission result | 失败 → 该模型不进入 task mode |
+
+**只有 H0.5 允许得出「模型工具调用能力不够」的结论。** 在 H0.1–H0.4 走完之前出现的"没有 tool call"，只能记为**测试无效或未归因失败**，不得归档为模型能力结论。原因是失败可能来自任一前置环节——能力未生效、thinking 挤占生成预算、上下文被工具结果推高——这些都会表现为"不发出工具调用"，与能力不足在现象上无法区分。
+
+#### H0.1 Capability Discovery
+
+读取 `/api/show`，产出每个候选模型的 capability profile：`thinking.values`、`thinking.default`、`capabilities`（含 `vision`）。据此确定 `think` 的合法取值域（第 5 节）。
+
+产出物须含模型名与 digest、Ollama 版本，不接受仅模型名。
+
+#### H0.2 Behavioral Verification
+
+验证 H0.1 声明的能力是否真的生效。**通过条件是「多次重复测试后，不同 effort 档位表现出可重复、可解释的行为差异」**，而不是"low 的 token 数必须小于 high"。
+
+单次比较不可靠：随机波动可产生 `low=950` / `high=970`，据此无法判断。判据为：
+
+- 各档位分别多次重复（同 seed、同 `num_predict`、同任务），记录分布；
+- 需观察到**档位间的系统性趋势**（如随档位升高而 thinking token 单调上升，或至少存在超出组内波动的稳定偏移）；
+- 分布无法与随机波动区分时判定为**未验证**，named effort 不作为可靠能力使用。
+
+三组区分须贯穿全文，不得混用：
+
+```text
+API accepted ≠ supported
+declared     ≠ verified
+not disproven ≠ verified
+```
+
+不通过时走 **bool fallback**——这是**正常分支而非异常补丁**：capability discovery、capability-aware 合法取值域、resolver 修正、两处 UI、校验、摘要渲染与 service checks 全部保留，仅档位项退化为布尔。H1 的 12 个落点不因退回布尔而减少。
+
+#### H0.3 Token / Latency Distribution
+
+测候选模型在三类任务下的实际占用：工具使用任务、规划任务、简单任务。
+
+**须保留每次 run 的原始观测，不得只留最终统计量。** 报告只写 `P95 = 3820` 是不够的；Ollama 或 GGUF 换版本后行为变化时，无原始记录就无法追踪差异。每条记录含：
+
+```text
+model / model digest / Ollama version / task id / think value
+num_predict / eval_count / thinking tokens（若可得）/ latency
+done_reason / tool_calls
+```
+
+数据量不足（重复次数不足以给出分布）时不得进入 H0.4——用单次或两次的上界定预算等于把噪声写进配置。
+
+#### H0.4 Budget Selection
+
+产出**一组经验证的运行配置**，而非孤立的 `num_predict`：
+
+```yaml
+task_profile:
+  think: <档位或布尔>
+  num_predict: <由 H0.3 分布上界加余量确定>
+  num_ctx: 16384 或更高
+  tool_result_budget: <由上下文容量反推>
+  max_rounds: 8
+```
+
+被验证的是这组参数**共同作用后的行为**，不是任何单一参数。单独确认 `num_predict=8192` 不足以保证组合安全。
+
+通过条件：在该配置下多轮运行不出现 `done_reason == "length"`，第 5 节的两类预算终止均不应触发。无安全配置即不准入，且不得为绕过该结论而放宽截断轮次的处理规则。
+
+#### H0.5 Tool-use Admission
+
+在 H0.4 的配置下评估工具使用能力：能否返回结构化 `tool_calls`、收到 tool 结果后能否继续调用或完成、改写后的 `general_assistant` 单一 prompt 能否驱动主动调用（而非直接回答"不确定"）。
+
+**流式汇集的协议细节与模型能力无关**，可独立验证：有 `id`/`index` 按协议合并，无服务端 ID 按本地轮次与调用序号标识，不按相同参数去重吞掉合法重复调用，只在轮次完成后执行。该项不通过属于实现缺陷，归入 H1 修复范围，不构成模型能力结论。
+
+#### 候选模型
+
+固定为 `qwen3:8b`、`qwen2.5:7b-instruct`、`llama3.1:8b`，逐个走完五阶段并记录结果。H0 期间不更换模型——换模型会使分布数据作废，且"再换一个试试"不是准入依据。
+
+#### Task Mode 硬门
+
+```text
+task_mode_enabled = budget_verified AND tool_use_admitted
+```
+
+这是**硬门，不是警告**。H0 未完成时：普通对话与 Action 功能照常可用，**Task Mode 不开放**。不做"先让用户用、事后补验证"的过渡——那正是把能力声明当成能力成立的起点。
+
+H0 的测试耗时与 H1 的工程估时分开计算，不合并。
 
 ### H0 中止判据
 
@@ -653,12 +751,14 @@ H0 候选模型固定为 `qwen3:8b`、`qwen2.5:7b-instruct`、`llama3.1:8b`，�
 - **保留期**：全部工具记录与输出满 30 天被清理，删除会话立即清除、未到期文件保留；删除失败只记日志不阻塞启动。分级逻辑不存在——`cat .env` 与 `rm nonexistent` 的处理必须一致。
 - **redaction 与 truncation 不混用**：模型侧上下文原样含敏感内容，落库与日志已脱敏；上下文削减仅依据容量、不依据内容；redaction 不导致预算下降，truncation 不导致内容脱敏。
 - **预算耗尽终止**：连续 length 无改善时终止 run 并给出可操作说明；context 类诊断标注为 probable 而非确定归因；context 类最多重试一次，低于最小阈值即终止。
+- **准入归因**：H0.1–H0.4 未走完时出现的「无 tool call」只能记为未归因失败，不得写入模型能力结论；Task Mode 在 `budget_verified AND tool_use_admitted` 之前不可用，H0 未过不得以「先试用」方式开放。
+- **named effort 验证**：多次重复实验中若档位间差异无法与组内波动区分，判定未验证并走 bool fallback；不接受单次比较或严格单调作为通过条件。
 
 ## 10. 下一次开发起点
 
-先做 **H0 + H1**：模拟工具验证协议，再用选定的本地模型做有限真实验证。此时无需搜索密钥；H3 实际搜索验收才需要对应凭据。不先做大量 UI，不安装 Pi 或任何 Node 依赖。
+先做 **H0 + H1**：按五阶段准入协议验证模型，再用经验证的 `task_profile` 实现统一循环。此时无需搜索密钥；H3 实际搜索验收才需要对应凭据。不先做大量 UI，不安装 Pi 或任何 Node 依赖。
 
-H0 必须先给出中止判据的分支结论再进入 H1：若三个候选模型全部不通过工具调用验收，就停在 H0，不投入 H1–H6。H0 期间同时确定任务模式的 `num_ctx` 与 `num_predict` 取值，避免用现有默认参数误判模型能力，并验证改写后的 `general_assistant` prompt 是否足以驱动工具调用。
+H0 必须先给出 `admission result` 与中止判据分支再进入依赖模型的开发：若三个候选模型全部未准入，就停在 H0，不投入 H2–H6。H1 的循环骨架可并行开工——事件身份、`tools=[]` 退化路径、旧路径适配器均不依赖模型结论。但**顺序不可颠倒的部分**是：`done_reason` 判定与预算反推的测试用例需要 H0.3 的真实分布作输入，用构造的假数据通过测试不等于验证了实际行为。
 
 H1 按统一循环实施，不建独立的 Harness 专用循环：先让普通对话在 `tools=[]` 下走通同一路径并置于开关之下，工具循环在其上叠加。这样每个阶段都有一条可运行的路径，H6 删除旧实现时也不会出现功能真空。
 
