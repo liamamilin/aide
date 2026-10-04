@@ -44,3 +44,7 @@ QWEN.md
 build/
 dist/
 *.dmg
+
+# ── 本地工具目录 / 生成素材（非源码）───────────────
+.commandcode/
+vibe_images/
