@@ -1,0 +1,71 @@
+{
+  "model": "qwen3.5:9b-mlx",
+  "options": {
+    "num_ctx": 8192,
+    "num_predict": 1024,
+    "temperature": 0
+  },
+  "real_local_model": true,
+  "paid_search_used": false,
+  "user_data_isolated": true,
+  "runs": [
+    {
+      "mode": "bash",
+      "status": "succeeded",
+      "tools": [
+        "bash"
+      ],
+      "model_rounds": 2,
+      "seconds": 7.112,
+      "answer": "文件中包含的 verification_code 是：H5-READONLY-4807",
+      "admission": {
+        "model": "qwen3.5:9b-mlx",
+        "digest": "203e30078279db51132b9e026ceb7bb21330e5b1af67ef190671b375c9770404",
+        "service_version": "0.34.3",
+        "evidence": "H0 explicit-web-v3 / H1-H3",
+        "budget_verified": true,
+        "tool_use_admitted": true
+      }
+    },
+    {
+      "search_http_requests": 1,
+      "simulated_search_provider": "parallel",
+      "mode": "parallel",
+      "status": "succeeded",
+      "tools": [
+        "web_search"
+      ],
+      "model_rounds": 2,
+      "seconds": 3.356,
+      "answer": "根据搜索结果，Aide quasar guide 的 policy identifier 为 **H5-WEB-PARALLEL** [S1]。",
+      "admission": {
+        "model": "qwen3.5:9b-mlx",
+        "digest": "203e30078279db51132b9e026ceb7bb21330e5b1af67ef190671b375c9770404",
+        "service_version": "0.34.3",
+        "evidence": "H0 explicit-web-v3 / H1-H3",
+        "budget_verified": true,
+        "tool_use_admitted": true
+      }
+    },
+    {
+      "search_http_requests": 1,
+      "simulated_search_provider": "exa",
+      "mode": "exa",
+      "status": "succeeded",
+      "tools": [
+        "web_search"
+      ],
+      "model_rounds": 2,
+      "seconds": 2.145,
+      "answer": "根据搜索结果，Aide quasar guide 的 policy identifier 为 **H5-WEB-EXA** [S1]。",
+      "admission": {
+        "model": "qwen3.5:9b-mlx",
+        "digest": "203e30078279db51132b9e026ceb7bb21330e5b1af67ef190671b375c9770404",
+        "service_version": "0.34.3",
+        "evidence": "H0 explicit-web-v3 / H1-H3",
+        "budget_verified": true,
+        "tool_use_admitted": true
+      }
+    }
+  ]
+}

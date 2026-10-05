@@ -199,7 +199,7 @@ def test_schema_one_upgrades_to_model_profiles_with_backup(tmp_path, monkeypatch
 
     storage.init_db()
     current = storage._conn()
-    assert storage._schema_version(current) == storage.SCHEMA_VERSION == 4
+    assert storage._schema_version(current) == storage.SCHEMA_VERSION == 5
     tables = {
         row[0]
         for row in current.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -226,7 +226,7 @@ def test_schema_two_upgrades_to_actions_with_backup(tmp_path, monkeypatch):
 
     storage.init_db()
     current = storage._conn()
-    assert storage._schema_version(current) == storage.SCHEMA_VERSION == 4
+    assert storage._schema_version(current) == storage.SCHEMA_VERSION == 5
     columns = {
         row[1]
         for row in current.execute("PRAGMA table_info(actions)").fetchall()

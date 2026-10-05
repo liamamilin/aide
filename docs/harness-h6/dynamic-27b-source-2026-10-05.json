@@ -1,0 +1,21 @@
+{
+  "model": "qwen3.8:27b-mlx",
+  "real_local_model": true,
+  "native_qt": true,
+  "qt_platform": "cocoa",
+  "paid_search_used": false,
+  "user_data_isolated": true,
+  "execution": "source",
+  "global_hotkeys_started": false,
+  "complete": true,
+  "cases": [
+    {
+      "case": "bash_readonly",
+      "status": "passed",
+      "run_status": "succeeded",
+      "model_steps": 2,
+      "seconds": 15.681
+    }
+  ],
+  "passed": true
+}

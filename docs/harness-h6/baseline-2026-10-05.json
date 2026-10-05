@@ -1,0 +1,55 @@
+{
+  "complete": false,
+  "real_local_model": true,
+  "native_qt": true,
+  "user_data_isolated": true,
+  "paid_search_used": false,
+  "cases": [
+    {
+      "case": "ordinary_send_and_regenerate",
+      "status": "failed"
+    },
+    {
+      "case": "action_current_translate",
+      "status": "passed"
+    },
+    {
+      "case": "action_current_explain",
+      "status": "passed"
+    },
+    {
+      "case": "action_current_summarize",
+      "status": "passed"
+    },
+    {
+      "case": "action_current_rewrite",
+      "status": "passed"
+    },
+    {
+      "case": "action_new_translate",
+      "status": "passed"
+    },
+    {
+      "case": "action_new_explain",
+      "status": "passed"
+    }
+  ],
+  "first_run_observation": {
+    "status": "limited",
+    "wire_think": null,
+    "configured_think": "off",
+    "answer_empty": true
+  },
+  "crash": {
+    "pid": 82551,
+    "report_name": "python3.10-2026-10-05-110515.ips",
+    "exception": "EXC_BAD_ACCESS / SIGBUS",
+    "top_symbols": [
+      "sipSubClass_QAbstractSocket",
+      "convertSubClass",
+      "sip_api_convert_from_type",
+      "meth_QObject_sender"
+    ],
+    "diagnosis": "queued Worker finished callback can dereference deleted Qt sender"
+  }
+}

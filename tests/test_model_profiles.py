@@ -7,6 +7,7 @@ import pytest
 
 from ai_desktop import config
 from ai_desktop.agent_manager import AgentManager
+from ai_desktop.llm.thinking import ThinkingCapability, ThinkMode, ThinkSetting
 from ai_desktop.services.model_profiles import (
     ModelOverrides,
     ModelProfile,
@@ -70,6 +71,7 @@ def test_resolution_is_fieldwise_and_uses_documented_precedence(tmp_db, monkeypa
         action_profile_id="action",
         temporary=ModelOverrides(temperature=1.1),
         available_models=["global-model", "agent-model"],
+        thinking_capability=ThinkingCapability((False, True), True, True),
     )
     assert resolved.model == "agent-model"
     assert resolved.think is False
@@ -86,6 +88,7 @@ def test_missing_model_and_deleted_profile_fall_back_with_visible_warnings(tmp_d
         agent_profile_id="missing",
         action_profile_id="deleted",
         available_models=["available-model"],
+        thinking_capability=ThinkingCapability((False, True), True, True),
     )
     assert resolved.model == "available-model"
     assert resolved.think is False
@@ -156,7 +159,7 @@ def test_profile_editor_preserves_inheritance_and_explicit_values(qtbot):
     )
     qtbot.addWidget(dialog)
     assert dialog.profile().model == "model-a"
-    assert dialog.profile().think is False
+    assert dialog.profile().think == ThinkSetting(ThinkMode.OFF)
     assert dialog.profile().temperature == 0.25
     assert dialog.profile().num_predict == 640
 

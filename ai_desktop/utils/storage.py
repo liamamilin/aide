@@ -14,7 +14,7 @@ from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 class UnsupportedSchemaVersionError(RuntimeError):
@@ -405,11 +405,17 @@ def _migrate_v3_to_v4(db: sqlite3.Connection) -> None:
         )
 
 
+def _migrate_v4_to_v5(db: sqlite3.Connection) -> None:
+    from ai_desktop.services.audit_store import migrate
+    migrate(db)
+
+
 _MIGRATIONS = {
     0: _migrate_v0_to_v1,
     1: _migrate_v1_to_v2,
     2: _migrate_v2_to_v3,
     3: _migrate_v3_to_v4,
+    4: _migrate_v4_to_v5,
 }
 
 
@@ -446,6 +452,11 @@ def init_db() -> None:
         _migrate_legacy_attachments(db)
     if _db_uses_app_data_root():
         collect_attachment_garbage()
+    from ai_desktop.services.audit_store import cleanup, recover_interrupted
+    if getattr(_local, 'audit_recovered_db', None) != str(DB_PATH):
+        recover_interrupted(db)
+        _local.audit_recovered_db = str(DB_PATH)
+    cleanup()
 
 
 def _ensure_column(db, table: str, column: str, definition: str) -> None:
@@ -624,9 +635,12 @@ def delete_conversation(convo_id: int) -> None:
         ).fetchall()
     ]
     with _attachment_lock:
+        from ai_desktop.services.audit_store import cleanup, queue_deletions
+        queue_deletions(db, 'conversation_id', convo_id)
         db.execute("DELETE FROM conversations WHERE id=?", (convo_id,))
         db.commit()
         _update_or_collect_attachments(db, attachment_ids)
+        cleanup()
 
 
 def delete_message(message_id: int, *, preserve_attachments: bool = False) -> None:
@@ -641,6 +655,8 @@ def delete_message(message_id: int, *, preserve_attachments: bool = False) -> No
     ]
     row = db.execute("SELECT conversation_id FROM messages WHERE id=?", (message_id,)).fetchone()
     with _attachment_lock:
+        from ai_desktop.services.audit_store import cleanup, queue_deletions
+        queue_deletions(db, 'user_message_id', message_id)
         db.execute("DELETE FROM messages WHERE id=?", (message_id,))
         if row is not None:
             remaining = db.execute(
@@ -658,6 +674,7 @@ def delete_message(message_id: int, *, preserve_attachments: bool = False) -> No
             attachment_ids,
             preserve=preserve_attachments,
         )
+        cleanup()
 
 
 def save_message(convo_id: int, role: str, content: str, images: Optional[List[str]] = None) -> Message:
@@ -800,6 +817,10 @@ def save_generation(
                 now,
             ),
         )
+        run_id = config_snapshot.get('run_id') if isinstance(config_snapshot, dict) else None
+        if isinstance(run_id, str):
+            db.execute('UPDATE agent_runs SET generation_id=? WHERE run_id=? AND user_message_id=?',
+                       (cur.lastrowid, run_id, user_message_id))
         db.commit()
     except Exception:
         db.rollback()

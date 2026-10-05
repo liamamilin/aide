@@ -1,0 +1,1068 @@
+{
+  "status": "recorded",
+  "admitted": true,
+  "candidate_override": true,
+  "results": {
+    "qwen3.5:9b-mlx": {
+      "model": "qwen3.5:9b-mlx",
+      "digest": "203e30078279db51132b9e026ceb7bb21330e5b1af67ef190671b375c9770404",
+      "admitted": true,
+      "application_tools_enabled": false,
+      "baseline": {
+        "path": "docs/harness-h0/2026-10-04-9b-v2/summary.json",
+        "sha256": "11bce70a5b3490deace28158510604a287dcc98cca83de9ca1d39f5f0fd00f00",
+        "reused_stages": [
+          "H0.2",
+          "H0.3",
+          "H0.4"
+        ]
+      },
+      "dataset_revision": "explicit-web-v3",
+      "task_definitions": [
+        {
+          "id": "list",
+          "kind": "single",
+          "prompt": "List files in the workspace with ls. Name note.txt.",
+          "markers": [
+            "note.txt"
+          ],
+          "tools": [
+            "bash"
+          ],
+          "minimum": 1
+        },
+        {
+          "id": "read",
+          "kind": "single",
+          "prompt": "Read note.txt with cat and report its verification code.",
+          "markers": [
+            "AMBER-731"
+          ],
+          "tools": [
+            "bash"
+          ],
+          "minimum": 1
+        },
+        {
+          "id": "search",
+          "kind": "single",
+          "prompt": "Search the web for the Aide quasar guide. Report its policy identifier.",
+          "markers": [
+            "ORBIT-924"
+          ],
+          "tools": [
+            "web_search"
+          ],
+          "minimum": 1
+        },
+        {
+          "id": "duplicate",
+          "kind": "single",
+          "prompt": "Call bash with cat note.txt twice, as two separate calls. Then report the code.",
+          "markers": [
+            "AMBER-731"
+          ],
+          "tools": [
+            "bash"
+          ],
+          "minimum": 2
+        },
+        {
+          "id": "read_search",
+          "kind": "multi",
+          "prompt": "Read note.txt, search its reference topic, and report both verification code and policy identifier.",
+          "markers": [
+            "AMBER-731",
+            "ORBIT-924"
+          ],
+          "tools": [
+            "bash",
+            "web_search"
+          ],
+          "minimum": 2
+        },
+        {
+          "id": "release_search",
+          "kind": "multi",
+          "prompt": "Read release.txt, search its reference topic, and report version and policy identifier.",
+          "markers": [
+            "1.5.0",
+            "ORBIT-924"
+          ],
+          "tools": [
+            "bash",
+            "web_search"
+          ],
+          "minimum": 2
+        },
+        {
+          "id": "plan_chain",
+          "kind": "multi",
+          "prompt": "Read plan.txt, then independently verify the release file and its reference policy. Report version and policy identifier.",
+          "markers": [
+            "1.5.0",
+            "ORBIT-924"
+          ],
+          "tools": [
+            "bash",
+            "web_search"
+          ],
+          "minimum": 3
+        },
+        {
+          "id": "two_files",
+          "kind": "multi",
+          "prompt": "Read note.txt and release.txt in separate calls. Report the verification code and version.",
+          "markers": [
+            "AMBER-731",
+            "1.5.0"
+          ],
+          "tools": [
+            "bash"
+          ],
+          "minimum": 2
+        },
+        {
+          "id": "missing_file",
+          "kind": "failure",
+          "prompt": "First try cat absent.txt. If it fails, read note.txt and report its verification code.",
+          "markers": [
+            "AMBER-731"
+          ],
+          "tools": [
+            "bash"
+          ],
+          "minimum": 1,
+          "error": "not_found"
+        },
+        {
+          "id": "search_timeout",
+          "kind": "failure",
+          "prompt": "First search the web for offline guide. If it times out, read note.txt and report its verification code.",
+          "markers": [
+            "AMBER-731"
+          ],
+          "tools": [
+            "bash",
+            "web_search"
+          ],
+          "minimum": 1,
+          "error": "timeout"
+        }
+      ],
+      "task_profile": {
+        "think": false,
+        "num_ctx": 8192,
+        "num_predict": 1024,
+        "truncate": "unknown",
+        "shift": "unknown",
+        "max_rounds": 8,
+        "tool_result_bytes": 4096,
+        "thinking_tokens": "unknown"
+      },
+      "H0.5": {
+        "status": "synthetic_pass",
+        "rates": {
+          "single": 1.0,
+          "multi": 1.0,
+          "failure": 1.0
+        },
+        "checks": [
+          {
+            "task_id": "list",
+            "kind": "single",
+            "repeat": 0,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "b91c3da93c3340548305b7033d113157/0/0",
+                "provider_call_id": "call_gdwm0uj7",
+                "name": "bash",
+                "arguments": {
+                  "command": "ls"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "note.txt\nrelease.txt\nplan.txt",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              }
+            ],
+            "answer": "Files in the workspace: note.txt, release.txt, plan.txt.",
+            "passed": true
+          },
+          {
+            "task_id": "list",
+            "kind": "single",
+            "repeat": 1,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "25c78565673f4a50b420f5338120f921/0/0",
+                "provider_call_id": "call_telfnheq",
+                "name": "bash",
+                "arguments": {
+                  "command": "ls"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "note.txt\nrelease.txt\nplan.txt",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              }
+            ],
+            "answer": "Files in the workspace: note.txt, release.txt, plan.txt.",
+            "passed": true
+          },
+          {
+            "task_id": "read",
+            "kind": "single",
+            "repeat": 0,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "228bed3ab1b04c3b9d21fdf66003043f/0/0",
+                "provider_call_id": "call_k4lu6e5q",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              }
+            ],
+            "answer": "The verification code in note.txt is **AMBER-731**.",
+            "passed": true
+          },
+          {
+            "task_id": "read",
+            "kind": "single",
+            "repeat": 1,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "88b578c26f2f4a2d9b652f34a244e743/0/0",
+                "provider_call_id": "call_b34eg381",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              }
+            ],
+            "answer": "The verification code in note.txt is **AMBER-731**.",
+            "passed": true
+          },
+          {
+            "task_id": "search",
+            "kind": "single",
+            "repeat": 0,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "dc859582d1a846b6ba1baa055065fdd4/0/0",
+                "provider_call_id": "call_1ufvo9s7",
+                "name": "web_search",
+                "arguments": {
+                  "query": "Aide quasar guide policy identifier",
+                  "objective": "Find the policy identifier of the Aide quasar guide"
+                },
+                "result": {
+                  "provider": "h0-fixture",
+                  "sources": [
+                    {
+                      "source_id": "S1",
+                      "title": "Synthetic Aide policy",
+                      "url": "https://example.com/aide-policy",
+                      "published_at": null,
+                      "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                    }
+                  ],
+                  "truncated": false
+                }
+              }
+            ],
+            "answer": "The policy identifier for the Aide quasar guide is **ORBIT-924**.",
+            "passed": true
+          },
+          {
+            "task_id": "search",
+            "kind": "single",
+            "repeat": 1,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "1bb9bc4c7dfb4f76b9e0e5a61eb29669/0/0",
+                "provider_call_id": "call_9d010sgs",
+                "name": "web_search",
+                "arguments": {
+                  "query": "Aide quasar guide policy identifier",
+                  "objective": "Find the policy identifier of the Aide quasar guide"
+                },
+                "result": {
+                  "provider": "h0-fixture",
+                  "sources": [
+                    {
+                      "source_id": "S1",
+                      "title": "Synthetic Aide policy",
+                      "url": "https://example.com/aide-policy",
+                      "published_at": null,
+                      "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                    }
+                  ],
+                  "truncated": false
+                }
+              }
+            ],
+            "answer": "The policy identifier for the Aide quasar guide is **ORBIT-924**.",
+            "passed": true
+          },
+          {
+            "task_id": "duplicate",
+            "kind": "single",
+            "repeat": 0,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "eeac19f7cd6347ce8cf09ab5b61933ff/0/0",
+                "provider_call_id": "call_ougxzt9z",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "eeac19f7cd6347ce8cf09ab5b61933ff/1/0",
+                "provider_call_id": "call_8yalpxzs",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              }
+            ],
+            "answer": "The verification code is **AMBER-731**.",
+            "passed": true
+          },
+          {
+            "task_id": "duplicate",
+            "kind": "single",
+            "repeat": 1,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "f1eed7491e93440bbf925fec1079d7a8/0/0",
+                "provider_call_id": "call_15au1pf0",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "f1eed7491e93440bbf925fec1079d7a8/1/0",
+                "provider_call_id": "call_op2203xt",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              }
+            ],
+            "answer": "The verification code is **AMBER-731**.",
+            "passed": true
+          },
+          {
+            "task_id": "read_search",
+            "kind": "multi",
+            "repeat": 0,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "9135a78be01e4f768b6b7d451d2df6bd/0/0",
+                "provider_call_id": "call_n7m7oke6",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "9135a78be01e4f768b6b7d451d2df6bd/1/0",
+                "provider_call_id": "call_yua8n528",
+                "name": "web_search",
+                "arguments": {
+                  "query": "Aide quasar guide policy identifier",
+                  "objective": "Find the policy identifier for the Aide quasar guide topic"
+                },
+                "result": {
+                  "provider": "h0-fixture",
+                  "sources": [
+                    {
+                      "source_id": "S1",
+                      "title": "Synthetic Aide policy",
+                      "url": "https://example.com/aide-policy",
+                      "published_at": null,
+                      "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                    }
+                  ],
+                  "truncated": false
+                }
+              }
+            ],
+            "answer": "Verification code: AMBER-731, Policy identifier: ORBIT-924",
+            "passed": true
+          },
+          {
+            "task_id": "read_search",
+            "kind": "multi",
+            "repeat": 1,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "f5f13a27de7c45b09df3218f47dfe59c/0/0",
+                "provider_call_id": "call_1u0i49m4",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "f5f13a27de7c45b09df3218f47dfe59c/1/0",
+                "provider_call_id": "call_6zt87rz4",
+                "name": "web_search",
+                "arguments": {
+                  "query": "Aide quasar guide policy identifier",
+                  "objective": "Find the policy identifier for the Aide quasar guide topic"
+                },
+                "result": {
+                  "provider": "h0-fixture",
+                  "sources": [
+                    {
+                      "source_id": "S1",
+                      "title": "Synthetic Aide policy",
+                      "url": "https://example.com/aide-policy",
+                      "published_at": null,
+                      "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                    }
+                  ],
+                  "truncated": false
+                }
+              }
+            ],
+            "answer": "Verification code: AMBER-731, Policy identifier: ORBIT-924",
+            "passed": true
+          },
+          {
+            "task_id": "release_search",
+            "kind": "multi",
+            "repeat": 0,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "df29701eb6ce4e5cab66db534cf79395/0/0",
+                "provider_call_id": "call_rnoqk5gx",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat release.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "release version: 1.5.0\nreference topic: Aide release policy\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "df29701eb6ce4e5cab66db534cf79395/1/0",
+                "provider_call_id": "call_sn91vig7",
+                "name": "web_search",
+                "arguments": {
+                  "query": "Aide release policy",
+                  "objective": "Find the version and policy identifier for Aide release policy"
+                },
+                "result": {
+                  "provider": "h0-fixture",
+                  "sources": [
+                    {
+                      "source_id": "S1",
+                      "title": "Synthetic Aide policy",
+                      "url": "https://example.com/aide-policy",
+                      "published_at": null,
+                      "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                    }
+                  ],
+                  "truncated": false
+                }
+              }
+            ],
+            "answer": "Version: 1.5.0, Policy Identifier: ORBIT-924",
+            "passed": true
+          },
+          {
+            "task_id": "release_search",
+            "kind": "multi",
+            "repeat": 1,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "dc656e3e95104cf1b63431746673efd9/0/0",
+                "provider_call_id": "call_m0rlhnng",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat release.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "release version: 1.5.0\nreference topic: Aide release policy\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "dc656e3e95104cf1b63431746673efd9/1/0",
+                "provider_call_id": "call_57ylqfaa",
+                "name": "web_search",
+                "arguments": {
+                  "query": "Aide release policy",
+                  "objective": "Find the version and policy identifier for Aide release policy"
+                },
+                "result": {
+                  "provider": "h0-fixture",
+                  "sources": [
+                    {
+                      "source_id": "S1",
+                      "title": "Synthetic Aide policy",
+                      "url": "https://example.com/aide-policy",
+                      "published_at": null,
+                      "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                    }
+                  ],
+                  "truncated": false
+                }
+              }
+            ],
+            "answer": "Version: 1.5.0, Policy Identifier: ORBIT-924",
+            "passed": true
+          },
+          {
+            "task_id": "plan_chain",
+            "kind": "multi",
+            "repeat": 0,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "c20ea3d18fc9459a996530bb84bc9c14/0/0",
+                "provider_call_id": "call_jxn6rluh",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat plan.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "Read release.txt, then look up the Aide release policy.\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "c20ea3d18fc9459a996530bb84bc9c14/1/0",
+                "provider_call_id": "call_qd3pamw1",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat release.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "release version: 1.5.0\nreference topic: Aide release policy\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "c20ea3d18fc9459a996530bb84bc9c14/2/0",
+                "provider_call_id": "call_p0cjxepa",
+                "name": "bash",
+                "arguments": {
+                  "command": "ls -la"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "note.txt\nrelease.txt\nplan.txt",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "c20ea3d18fc9459a996530bb84bc9c14/3/0",
+                "provider_call_id": "call_ie0ivq84",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "c20ea3d18fc9459a996530bb84bc9c14/4/0",
+                "provider_call_id": "call_bkjgndzb",
+                "name": "web_search",
+                "arguments": {
+                  "query": "Aide release policy version 1.5.0",
+                  "objective": "Find the official Aide release policy and verify version 1.5.0"
+                },
+                "result": {
+                  "provider": "h0-fixture",
+                  "sources": [
+                    {
+                      "source_id": "S1",
+                      "title": "Synthetic Aide policy",
+                      "url": "https://example.com/aide-policy",
+                      "published_at": null,
+                      "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                    }
+                  ],
+                  "truncated": false
+                }
+              }
+            ],
+            "answer": "Version: 1.5.0  \nPolicy identifier: ORBIT-924",
+            "passed": true
+          },
+          {
+            "task_id": "plan_chain",
+            "kind": "multi",
+            "repeat": 1,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "a749a777a4db4dafb02a06c30500a883/0/0",
+                "provider_call_id": "call_kysrqty3",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat plan.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "Read release.txt, then look up the Aide release policy.\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "a749a777a4db4dafb02a06c30500a883/1/0",
+                "provider_call_id": "call_5sgel4mq",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat release.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "release version: 1.5.0\nreference topic: Aide release policy\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "a749a777a4db4dafb02a06c30500a883/2/0",
+                "provider_call_id": "call_2nilaopc",
+                "name": "bash",
+                "arguments": {
+                  "command": "ls -la"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "note.txt\nrelease.txt\nplan.txt",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "a749a777a4db4dafb02a06c30500a883/3/0",
+                "provider_call_id": "call_hhwt7r3z",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "a749a777a4db4dafb02a06c30500a883/4/0",
+                "provider_call_id": "call_hykyj4yi",
+                "name": "web_search",
+                "arguments": {
+                  "query": "Aide release policy version 1.5.0",
+                  "objective": "Find the official Aide release policy and verify version 1.5.0"
+                },
+                "result": {
+                  "provider": "h0-fixture",
+                  "sources": [
+                    {
+                      "source_id": "S1",
+                      "title": "Synthetic Aide policy",
+                      "url": "https://example.com/aide-policy",
+                      "published_at": null,
+                      "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                    }
+                  ],
+                  "truncated": false
+                }
+              }
+            ],
+            "answer": "Version: 1.5.0  \nPolicy identifier: ORBIT-924",
+            "passed": true
+          },
+          {
+            "task_id": "two_files",
+            "kind": "multi",
+            "repeat": 0,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "f7400058d0d94e988fdf6b88f793ef90/0/0",
+                "provider_call_id": "call_ol12uym7",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "f7400058d0d94e988fdf6b88f793ef90/1/0",
+                "provider_call_id": "call_dwca7cp6",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat release.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "release version: 1.5.0\nreference topic: Aide release policy\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              }
+            ],
+            "answer": "Verification code: AMBER-731; Version: 1.5.0",
+            "passed": true
+          },
+          {
+            "task_id": "two_files",
+            "kind": "multi",
+            "repeat": 1,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "50f9036c249b4dd780fdbd1bfd96ffda/0/0",
+                "provider_call_id": "call_qc0cf10t",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              },
+              {
+                "local_call_id": "50f9036c249b4dd780fdbd1bfd96ffda/1/0",
+                "provider_call_id": "call_z71zqbzs",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat release.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "release version: 1.5.0\nreference topic: Aide release policy\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              }
+            ],
+            "answer": "Verification code: AMBER-731; Version: 1.5.0",
+            "passed": true
+          },
+          {
+            "task_id": "missing_file",
+            "kind": "failure",
+            "repeat": 0,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "bf78460ece8648ed878b9138a535416d/0/0",
+                "provider_call_id": "call_21xp78fr",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat absent.txt"
+                },
+                "result": {
+                  "error_type": "not_found",
+                  "exit_code": 1,
+                  "stderr": "File not found"
+                }
+              },
+              {
+                "local_call_id": "bf78460ece8648ed878b9138a535416d/1/0",
+                "provider_call_id": "call_lyqn0pr6",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              }
+            ],
+            "answer": "The verification code is **AMBER-731**.",
+            "passed": true
+          },
+          {
+            "task_id": "missing_file",
+            "kind": "failure",
+            "repeat": 1,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "b7b1a283708b47cd8ab03b124d5337be/0/0",
+                "provider_call_id": "call_8qpwg5ja",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat absent.txt"
+                },
+                "result": {
+                  "error_type": "not_found",
+                  "exit_code": 1,
+                  "stderr": "File not found"
+                }
+              },
+              {
+                "local_call_id": "b7b1a283708b47cd8ab03b124d5337be/1/0",
+                "provider_call_id": "call_s1c5at7m",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              }
+            ],
+            "answer": "The verification code is **AMBER-731**.",
+            "passed": true
+          },
+          {
+            "task_id": "search_timeout",
+            "kind": "failure",
+            "repeat": 0,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "396b8f6d5b3249c09b11e89a657b8eff/0/0",
+                "provider_call_id": "call_a0p75e5g",
+                "name": "web_search",
+                "arguments": {
+                  "query": "offline guide verification code",
+                  "objective": "Find the verification code for the offline guide"
+                },
+                "result": {
+                  "error_type": "timeout",
+                  "sources": []
+                }
+              },
+              {
+                "local_call_id": "396b8f6d5b3249c09b11e89a657b8eff/1/0",
+                "provider_call_id": "call_o3q4dmth",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              }
+            ],
+            "answer": "The verification code is **AMBER-731**.",
+            "passed": true
+          },
+          {
+            "task_id": "search_timeout",
+            "kind": "failure",
+            "repeat": 1,
+            "status": "succeeded",
+            "trace": [
+              {
+                "local_call_id": "65f07affa4f34197aef5d3d5d1d93b4f/0/0",
+                "provider_call_id": "call_59l7jnuv",
+                "name": "web_search",
+                "arguments": {
+                  "query": "offline guide verification code",
+                  "objective": "Find the verification code for the offline guide"
+                },
+                "result": {
+                  "error_type": "timeout",
+                  "sources": []
+                }
+              },
+              {
+                "local_call_id": "65f07affa4f34197aef5d3d5d1d93b4f/1/0",
+                "provider_call_id": "call_6f6lgttb",
+                "name": "bash",
+                "arguments": {
+                  "command": "cat note.txt"
+                },
+                "result": {
+                  "exit_code": 0,
+                  "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                  "stderr": "",
+                  "truncated": false,
+                  "duration": 0
+                }
+              }
+            ],
+            "answer": "The verification code is **AMBER-731**.",
+            "passed": true
+          }
+        ]
+      },
+      "scope": "bounded synthetic evaluation; ambiguous search intent remains unverified"
+    }
+  },
+  "discovery": {
+    "schema_version": 1,
+    "ollama_version": "0.34.3",
+    "base_url": "http://127.0.0.1:11434",
+    "candidates": [
+      "qwen3.5:9b-mlx"
+    ],
+    "profiles": {
+      "qwen3.5:9b-mlx": {
+        "status": "discovered",
+        "digest": "203e30078279db51132b9e026ceb7bb21330e5b1af67ef190671b375c9770404",
+        "capabilities": [
+          "completion",
+          "vision",
+          "thinking",
+          "tools"
+        ],
+        "thinking": {
+          "values": [
+            false,
+            true
+          ],
+          "default": true
+        },
+        "details": {
+          "parent_model": "",
+          "format": "safetensors",
+          "family": "qwen3_5",
+          "families": null,
+          "parameter_size": "9.4B",
+          "quantization_level": "nvfp4"
+        },
+        "model_info": {
+          "general.architecture": "qwen3_5",
+          "general.parameter_count": 9409468800,
+          "qwen3_5.block_count": 32,
+          "qwen3_5.context_length": 262144,
+          "qwen3_5.embedding_length": 4096
+        },
+        "admitted": false
+      }
+    }
+  },
+  "application_tools_enabled": false
+}

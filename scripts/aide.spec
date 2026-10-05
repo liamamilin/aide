@@ -77,6 +77,7 @@ a = Analysis(
         'AppKit',
         'Foundation',
         'CoreFoundation',
+        'Security',
         'HIServices',
         'objc',
         'Quartz',

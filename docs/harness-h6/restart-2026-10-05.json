@@ -1,0 +1,20 @@
+{
+  "model": "qwen3.5:9b-mlx",
+  "real_local_model": false,
+  "native_qt": true,
+  "paid_search_used": false,
+  "user_data_isolated": true,
+  "complete": true,
+  "cases": [
+    {
+      "case": "restart_and_readonly_history",
+      "status": "passed",
+      "restart": "passed",
+      "history_executed_tools": false,
+      "authorization_restored": false,
+      "synthetic_history_fixture": true,
+      "seconds": 0.797
+    }
+  ],
+  "passed": true
+}

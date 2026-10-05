@@ -1,0 +1,29 @@
+{
+  "status": "verified",
+  "model": "qwen3.5:9b-mlx",
+  "digest": "203e30078279db51132b9e026ceb7bb21330e5b1af67ef190671b375c9770404",
+  "ollama_version": "0.34.3",
+  "task_profile": {
+    "think": false,
+    "num_ctx": 8192,
+    "num_predict": 1024,
+    "truncate": "unknown",
+    "shift": "unknown",
+    "max_rounds": 8,
+    "tool_result_bytes": 4096,
+    "thinking_tokens": "unknown"
+  },
+  "dataset_revision": "explicit-web-v3",
+  "latest_scorer_checks_passed": 20,
+  "baseline_measurements": 15,
+  "observed_max_calls_per_turn": 1,
+  "same_turn_multiple_call_behavior_verified": false,
+  "application_tools_enabled": false,
+  "files": {
+    "docs/harness-h0/2026-10-04-9b-v2/summary.json": "11bce70a5b3490deace28158510604a287dcc98cca83de9ca1d39f5f0fd00f00",
+    "docs/harness-h0/2026-10-04-9b-v2/observations.jsonl": "f25f13b14a519e783aad9d88ee30262fa655deb5ffc9022130ed828ab00eaba7",
+    "docs/harness-h0/2026-10-04-9b-v3/summary.json": "4375f5caf3fb9c13a29751d07a14458c1e379794d21671f0e97c6669badfec9b",
+    "docs/harness-h0/2026-10-04-9b-v3/observations.jsonl": "881a9957fb56629d1799b53e1e50934261085fee50ec9465651bdeee67ae5e54",
+    "docs/harness-h0/2026-10-04-local-discovery/discovery.json": "38de52aac3800ad59f064ccfc449e844379f15861b2ebe57926ae30644e0f288"
+  }
+}

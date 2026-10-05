@@ -1,0 +1,185 @@
+{
+  "scope": "Diagnostic only: explicit web intent; not full admission",
+  "discovery": {
+    "schema_version": 1,
+    "ollama_version": "0.34.3",
+    "base_url": "http://127.0.0.1:11434",
+    "candidates": [
+      "qwen3.5:9b-mlx"
+    ],
+    "profiles": {
+      "qwen3.5:9b-mlx": {
+        "status": "discovered",
+        "digest": "203e30078279db51132b9e026ceb7bb21330e5b1af67ef190671b375c9770404",
+        "capabilities": [
+          "completion",
+          "vision",
+          "thinking",
+          "tools"
+        ],
+        "thinking": {
+          "values": [
+            false,
+            true
+          ],
+          "default": true
+        },
+        "details": {
+          "parent_model": "",
+          "format": "safetensors",
+          "family": "qwen3_5",
+          "families": null,
+          "parameter_size": "9.4B",
+          "quantization_level": "nvfp4"
+        },
+        "model_info": {
+          "general.architecture": "qwen3_5",
+          "general.parameter_count": 9409468800,
+          "qwen3_5.block_count": 32,
+          "qwen3_5.context_length": 262144,
+          "qwen3_5.embedding_length": 4096
+        },
+        "admitted": false
+      }
+    }
+  },
+  "checks": [
+    {
+      "task_id": "search",
+      "repeat": 0,
+      "status": "succeeded",
+      "trace": [
+        {
+          "local_call_id": "cbdfdd76e75c49a18b4cca051e7edee3/0/0",
+          "provider_call_id": "call_gpx61de8",
+          "name": "web_search",
+          "arguments": {
+            "query": "Aide quasar guide policy identifier",
+            "objective": "Find the policy identifier associated with the Aide quasar guide"
+          },
+          "result": {
+            "provider": "h0-fixture",
+            "sources": [
+              {
+                "source_id": "S1",
+                "title": "Synthetic Aide policy",
+                "url": "https://example.com/aide-policy",
+                "published_at": null,
+                "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+              }
+            ],
+            "truncated": false
+          }
+        }
+      ],
+      "answer": "The policy identifier for the Aide quasar guide is **ORBIT-924**.",
+      "passed": true
+    },
+    {
+      "task_id": "search",
+      "repeat": 1,
+      "status": "succeeded",
+      "trace": [
+        {
+          "local_call_id": "412d7e98c0f44593a17dd8f5e49b0483/0/0",
+          "provider_call_id": "call_luy0aquk",
+          "name": "web_search",
+          "arguments": {
+            "query": "Aide quasar guide policy identifier",
+            "objective": "Find the policy identifier of the Aide quasar guide"
+          },
+          "result": {
+            "provider": "h0-fixture",
+            "sources": [
+              {
+                "source_id": "S1",
+                "title": "Synthetic Aide policy",
+                "url": "https://example.com/aide-policy",
+                "published_at": null,
+                "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+              }
+            ],
+            "truncated": false
+          }
+        }
+      ],
+      "answer": "The policy identifier for the Aide quasar guide is **ORBIT-924**.",
+      "passed": true
+    },
+    {
+      "task_id": "search_timeout",
+      "repeat": 0,
+      "status": "succeeded",
+      "trace": [
+        {
+          "local_call_id": "2d6f4b95a3a343bd8369459b43750604/0/0",
+          "provider_call_id": "call_sqjltqx3",
+          "name": "web_search",
+          "arguments": {
+            "query": "offline guide verification code",
+            "objective": "Find the verification code for the offline guide"
+          },
+          "result": {
+            "error_type": "timeout",
+            "sources": []
+          }
+        },
+        {
+          "local_call_id": "2d6f4b95a3a343bd8369459b43750604/1/0",
+          "provider_call_id": "call_s4xg6tol",
+          "name": "bash",
+          "arguments": {
+            "command": "cat note.txt"
+          },
+          "result": {
+            "exit_code": 0,
+            "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+            "stderr": "",
+            "truncated": false,
+            "duration": 0
+          }
+        }
+      ],
+      "answer": "The verification code is **AMBER-731**.",
+      "passed": true
+    },
+    {
+      "task_id": "search_timeout",
+      "repeat": 1,
+      "status": "succeeded",
+      "trace": [
+        {
+          "local_call_id": "5df38f77da9a46dfbf13e5387d084687/0/0",
+          "provider_call_id": "call_sc45ed34",
+          "name": "web_search",
+          "arguments": {
+            "query": "offline guide verification code",
+            "objective": "Find the verification code for an offline guide"
+          },
+          "result": {
+            "error_type": "timeout",
+            "sources": []
+          }
+        },
+        {
+          "local_call_id": "5df38f77da9a46dfbf13e5387d084687/1/0",
+          "provider_call_id": "call_4hqklezh",
+          "name": "bash",
+          "arguments": {
+            "command": "cat note.txt"
+          },
+          "result": {
+            "exit_code": 0,
+            "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+            "stderr": "",
+            "truncated": false,
+            "duration": 0
+          }
+        }
+      ],
+      "answer": "The verification code is **AMBER-731**.",
+      "passed": true
+    }
+  ],
+  "admitted": false
+}

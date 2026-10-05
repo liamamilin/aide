@@ -10,6 +10,8 @@ TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/aide-smoke.XXXXXX")"
 OUTPUT="${TEMP_ROOT}/process.log"
 OCR_OUTPUT="${TEMP_ROOT}/ocr-runtime.json"
 SPEECH_OUTPUT="${TEMP_ROOT}/speech-runtime.json"
+SEARCH_OUTPUT="${TEMP_ROOT}/search-runtime.json"
+EXECUTION_OUTPUT="${TEMP_ROOT}/execution-runtime.json"
 PID=""
 
 cleanup() {
@@ -38,6 +40,12 @@ echo "==> Checking packaged Apple Vision OCR runtime"
 echo "==> Checking packaged English speech runtime"
 "$EXECUTABLE" --speech-runtime >"$SPEECH_OUTPUT" 2>&1
 "$PYTHON_BIN" -c 'import json, sys; value = json.load(open(sys.argv[1])); assert value == {"engine": "kokoro", "language": "en-us", "status": "ready"}' "$SPEECH_OUTPUT"
+echo "==> Checking packaged search Keychain bridge (no credential access)"
+"$EXECUTABLE" --search-runtime >"$SEARCH_OUTPUT" 2>&1
+"$PYTHON_BIN" -c 'import json, sys; value = json.load(open(sys.argv[1])); assert value == {"keychain_available": True, "providers": ["parallel", "exa"]}' "$SEARCH_OUTPUT"
+echo "==> Checking packaged Bash runtime with a fixed temporary read-only fixture"
+"$EXECUTABLE" --execution-runtime >"$EXECUTION_OUTPUT" 2>&1
+"$PYTHON_BIN" -c 'import json, sys; value = json.load(open(sys.argv[1])); assert value == {"engine": "bash", "status": "ready", "automatic_mode": "fixed_argv"}' "$EXECUTION_OUTPUT"
 echo "==> Launching packaged executable with isolated data and logs"
 
 AIDE_SMOKE_TEST=1 \
@@ -87,5 +95,13 @@ if [ ! -f "${TEMP_ROOT}/logs/app.log" ]; then
     cat "$OUTPUT" >&2
     exit 1
 fi
+"$PYTHON_BIN" -c 'from pathlib import Path; import sys; text = Path(sys.argv[1]).read_text(); assert "Fluent command card initialized and invalidated without execution" in text' "${TEMP_ROOT}/logs/app.log"
+echo "==> Packaged Fluent command card confirmation/output lifecycle passed"
+"$PYTHON_BIN" -c 'from pathlib import Path; import sys; text = Path(sys.argv[1]).read_text(); assert "Fluent search card and verified citations initialized without network" in text' "${TEMP_ROOT}/logs/app.log"
+echo "==> Packaged Fluent search card and verified citations passed without network"
+"$PYTHON_BIN" -c 'from pathlib import Path; import sys; text = Path(sys.argv[1]).read_text(); assert "Audit schema retention and read-only history verified without tools" in text' "${TEMP_ROOT}/logs/app.log"
+echo "==> Packaged audit schema, retention and read-only history passed without tools"
+"$PYTHON_BIN" -c 'from pathlib import Path; import sys; text = Path(sys.argv[1]).read_text(); assert "Explicit task authorization and model-step cards verified without execution" in text' "${TEMP_ROOT}/logs/app.log"
+echo "==> Packaged explicit task authorization and model-step cards passed without execution"
 
 echo "==> Packaged app initialized schema ${ACTUAL_SCHEMA} and exited cleanly — SMOKE TEST PASSED"

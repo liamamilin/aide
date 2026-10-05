@@ -1,0 +1,35 @@
+{
+  "model": "qwen3.5:9b-mlx",
+  "real_local_model": false,
+  "native_qt": true,
+  "qt_platform": "cocoa",
+  "paid_search_used": false,
+  "user_data_isolated": true,
+  "execution": "frozen-app",
+  "global_hotkeys_started": false,
+  "complete": true,
+  "cases": [
+    {
+      "case": "settings_task_limits",
+      "status": "passed",
+      "saved_and_reloaded": {
+        "search_max_results": 99,
+        "task_max_tool_calls": 39,
+        "task_max_search_calls": 17,
+        "task_max_model_rounds": 25
+      },
+      "worker_limits": {
+        "max_model_rounds": 25,
+        "max_tool_calls": 39,
+        "max_search_calls": 17,
+        "tool_result_bytes": 4096,
+        "active_seconds": 300,
+        "context_reserve": 512
+      },
+      "model_or_tools_executed": false,
+      "credential_access": false,
+      "seconds": 1.636
+    }
+  ],
+  "passed": true
+}

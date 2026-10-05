@@ -1,0 +1,54 @@
+{
+  "model": "qwen3.5:9b-mlx",
+  "real_local_model": false,
+  "native_qt": true,
+  "qt_platform": "cocoa",
+  "paid_search_used": false,
+  "user_data_isolated": true,
+  "execution": "source",
+  "global_hotkeys_started": false,
+  "complete": true,
+  "cases": [
+    {
+      "case": "settings_tab_navigation",
+      "status": "passed",
+      "mouse_click_visits": [
+        {
+          "route": "generation",
+          "title": "全局生成默认值",
+          "index": 1
+        },
+        {
+          "route": "search",
+          "title": "搜索服务",
+          "index": 2
+        },
+        {
+          "route": "execution",
+          "title": "工作区与命令",
+          "index": 3
+        },
+        {
+          "route": "desktop",
+          "title": "宠物与快捷动作",
+          "index": 4
+        },
+        {
+          "route": "model",
+          "title": "连接本地模型",
+          "index": 0
+        },
+        {
+          "route": "generation",
+          "title": "全局生成默认值",
+          "index": 1
+        }
+      ],
+      "draft_preserved": true,
+      "settings_saved": false,
+      "screen_capture_used": false,
+      "seconds": 4.185
+    }
+  ],
+  "passed": true
+}

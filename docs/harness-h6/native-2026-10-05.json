@@ -1,0 +1,40 @@
+{
+  "native_qt": true,
+  "real_model": false,
+  "simulated_loopback_http": true,
+  "paid_search_used": false,
+  "user_data_isolated": true,
+  "flows": [
+    {
+      "flow": "ordinary_send",
+      "status": "passed"
+    },
+    {
+      "flow": "action_current_and_retry",
+      "status": "passed"
+    },
+    {
+      "flow": "limited_retry_preserves_active_answer",
+      "status": "passed"
+    },
+    {
+      "flow": "command_approve",
+      "status": "passed",
+      "file_written": true
+    },
+    {
+      "flow": "command_reject",
+      "status": "passed",
+      "file_written": false
+    },
+    {
+      "flow": "command_hide",
+      "status": "passed",
+      "file_written": false
+    },
+    {
+      "flow": "new_conversation_cancels_preflight",
+      "status": "passed"
+    }
+  ]
+}

@@ -1,23 +1,25 @@
 """
-LLM 聊天客户端（Ollama /api/chat）
+Immutable Ollama request preparation. Chat execution belongs to RunWorker / QtChatTransport.
 """
 import json
 import logging
 import time
 import uuid
-from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+from collections.abc import Iterable
 from typing import List
 
 import requests
 from urllib3.exceptions import TimeoutError as HTTPTimeoutError
 
 from ai_desktop import config
-from ai_desktop.llm.events import ErrorCode, EventKind, RequestContext, RequestMessage, StreamEvent
+from ai_desktop.llm.events import ErrorCode, RequestContext, RequestMessage
+from ai_desktop.llm.ollama_protocol import StreamProtocolError
+from ai_desktop.llm.thinking import ThinkMode, ThinkSetting, normalize_think, resolve_think
 from ai_desktop.utils import images as image_utils
 from ai_desktop.utils.storage import Message
 
 logger = logging.getLogger(__name__)
+_USE_GLOBAL = object()
 
 
 def list_models(base_url: str = "") -> List[str]:
@@ -34,20 +36,8 @@ def list_models(base_url: str = "") -> List[str]:
     return []  # fallback: no models available
 
 
-@dataclass
-class ChatResponse:
-    text: str
-    ok: bool
-    error: str = ""
-    error_code: ErrorCode | None = None
-
-
 class ImagePreparationError(Exception):
     """An attachment could not be read before submitting the request."""
-
-
-class StreamProtocolError(Exception):
-    """The server response is malformed or ends without a completion event."""
 
 
 def _exception_error(exc: Exception) -> tuple[ErrorCode, str]:
@@ -66,27 +56,6 @@ def _exception_error(exc: Exception) -> tuple[ErrorCode, str]:
     return ErrorCode.INTERNAL, "请求处理失败，请重试。"
 
 
-def _response_message(data: object) -> tuple[dict, str]:
-    if not isinstance(data, dict):
-        raise StreamProtocolError("Response must be an object")
-    if "error" in data:
-        error = data["error"]
-        if not isinstance(error, str) or not error:
-            raise StreamProtocolError("Invalid server error")
-        return {}, error
-    message = data.get("message", {})
-    if not isinstance(message, dict):
-        raise StreamProtocolError("Invalid message")
-    for key in ("content", "thinking"):
-        if not isinstance(message.get(key, ""), str):
-            raise StreamProtocolError(f"Invalid {key}")
-    if not isinstance(data.get("done", False), bool):
-        raise StreamProtocolError("Invalid completion flag")
-    if "message" not in data and data.get("done") is not True:
-        raise StreamProtocolError("Missing message")
-    return message, ""
-
-
 def _payload(request: RequestContext, stream: bool) -> dict:
     return {
         "model": request.model,
@@ -98,16 +67,8 @@ def _payload(request: RequestContext, stream: bool) -> dict:
     }
 
 
-def _close_response(response) -> None:
-    if response is not None:
-        try:
-            response.close()
-        except Exception:
-            logger.warning("Failed to release HTTP response", exc_info=True)
-
-
 class ChatClient:
-    """Ollama Chat API 客户端"""
+    """Build request snapshots and prepare messages without sending chat HTTP."""
 
     def __init__(self, base_url: str = "", model: str = "", timeout: int = 0):
         self.base_url = (base_url or config.OLLAMA_BASE_URL).rstrip("/")
@@ -116,9 +77,24 @@ class ChatClient:
 
     def create_request(self, messages: Iterable[Message], system_prompt: str = "", *,
                        conversation_id: int = 0, agent_id: str = "",
-                       think: bool | None = None,
+                       think: bool | str | None = _USE_GLOBAL,
+                       think_setting: ThinkSetting | None = None, think_source: str = "",
+                       origin: str = "chat", action_id: str | None = None,
                        options: dict[str, int | float] | None = None) -> RequestContext:
         """Snapshot on submission; image I/O stays in the worker."""
+        if origin not in {"chat", "action"}:
+            raise ValueError("Unknown request origin")
+        if action_id is not None and origin != "action":
+            raise ValueError("Action ID requires action origin")
+        if think is _USE_GLOBAL:
+            think_setting = normalize_think(config.OLLAMA_THINK)
+            think, _ = resolve_think(think_setting, None)
+            think_source = "全局设置"
+        elif think is not None and type(think) is not bool and not isinstance(think, str):
+            raise ValueError("think wire value must be bool, string or null")
+        if think_setting is None:
+            think_setting = (ThinkSetting(ThinkMode.NAMED, think) if isinstance(think, str) else
+                             normalize_think(think))
         resolved_options: dict[str, int | float] = {
             "num_predict": config.OLLAMA_NUM_PREDICT,
             "num_ctx": config.OLLAMA_NUM_CTX,
@@ -137,39 +113,16 @@ class ChatClient:
             base_url=self.base_url,
             model=self.model,
             timeout=self.timeout,
-            think=config.OLLAMA_THINK if think is None else think,
+            think=think,
             keep_alive=config.OLLAMA_KEEP_ALIVE,
             options=tuple(resolved_options.items()),
             created_at=time.time(),
+            run_id=uuid.uuid4().hex,
+            step_id=uuid.uuid4().hex,
+            origin=origin,
+            action_id=action_id,
+            think_setting=think_setting, think_source=think_source or "本次请求",
         )
-
-    def chat(self, messages: list[Message], system_prompt: str = "") -> ChatResponse:
-        """发送多轮对话，返回助手的回复"""
-        request = self.create_request(messages, system_prompt)
-        resp = None
-        try:
-            resp = requests.post(
-                f"{request.base_url}/api/chat",
-                json=_payload(request, stream=False),
-                timeout=request.timeout,
-            )
-            if resp.status_code == 200:
-                message, error = _response_message(resp.json())
-                if error:
-                    return ChatResponse(text="", ok=False, error=error, error_code=ErrorCode.SERVER)
-                return ChatResponse(text=message.get("content", ""), ok=True)
-            else:
-                return ChatResponse(text="", ok=False, error=f"HTTP {resp.status_code}", error_code=ErrorCode.HTTP)
-        except Exception as e:
-            code, error = _exception_error(e)
-            logger.warning("Chat failed: %s", code.value, exc_info=code == ErrorCode.INTERNAL)
-            return ChatResponse(text="", ok=False, error=error, error_code=code)
-        finally:
-            _close_response(resp)
-
-    def chat_stream(self, messages: list[Message], system_prompt: str = "") -> "ChatStream":
-        """Return typed events, including exactly one terminal event."""
-        return ChatStream(self.create_request(messages, system_prompt))
 
     @staticmethod
     def _build_ollama_messages(messages: Iterable[Message | RequestMessage], system_prompt: str = "") -> list[dict]:
@@ -186,50 +139,3 @@ class ChatClient:
                     raise ImagePreparationError from exc
             ollama_msgs.append(msg)
         return ollama_msgs
-
-
-class ChatStream:
-    """Ollama streaming chat 迭代器"""
-
-    def __init__(self, request: RequestContext):
-        self.request = request
-
-    def __iter__(self) -> Iterator[StreamEvent]:
-        request = self.request
-        resp = None
-        try:
-            resp = requests.post(
-                f"{request.base_url}/api/chat",
-                json=_payload(request, stream=True),
-                timeout=request.timeout,
-                stream=True,
-            )
-            if resp.status_code != 200:
-                yield StreamEvent(request.request_id, EventKind.ERROR, f"HTTP {resp.status_code}", ErrorCode.HTTP)
-                return
-
-            for line in resp.iter_lines(decode_unicode=True):
-                if not line:
-                    continue
-                data = json.loads(line)
-                message, error = _response_message(data)
-                if error:
-                    yield StreamEvent(request.request_id, EventKind.ERROR, error, ErrorCode.SERVER)
-                    return
-                thinking = message.get("thinking", "")
-                content = message.get("content", "")
-                if thinking:
-                    yield StreamEvent(request.request_id, EventKind.THINKING, thinking)
-                if content:
-                    yield StreamEvent(request.request_id, EventKind.CONTENT, content)
-                if data.get("done"):
-                    yield StreamEvent(request.request_id, EventKind.COMPLETE)
-                    return
-            raise StreamProtocolError("Missing completion event")
-        except Exception as e:
-            code, error = _exception_error(e)
-            logger.warning("Chat stream %s failed: %s", request.request_id, code.value,
-                           exc_info=code == ErrorCode.INTERNAL)
-            yield StreamEvent(request.request_id, EventKind.ERROR, error, code)
-        finally:
-            _close_response(resp)

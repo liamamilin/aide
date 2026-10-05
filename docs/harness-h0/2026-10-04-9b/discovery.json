@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "ollama_version": "0.34.3",
+  "base_url": "http://127.0.0.1:11434",
+  "candidates": [
+    "qwen3.5:9b-mlx"
+  ],
+  "profiles": {
+    "qwen3.5:9b-mlx": {
+      "status": "discovered",
+      "digest": "203e30078279db51132b9e026ceb7bb21330e5b1af67ef190671b375c9770404",
+      "capabilities": [
+        "completion",
+        "vision",
+        "thinking",
+        "tools"
+      ],
+      "thinking": {
+        "values": [
+          false,
+          true
+        ],
+        "default": true
+      },
+      "details": {
+        "parent_model": "",
+        "format": "safetensors",
+        "family": "qwen3_5",
+        "families": null,
+        "parameter_size": "9.4B",
+        "quantization_level": "nvfp4"
+      },
+      "model_info": {
+        "general.architecture": "qwen3_5",
+        "general.parameter_count": 9409468800,
+        "qwen3_5.block_count": 32,
+        "qwen3_5.context_length": 262144,
+        "qwen3_5.embedding_length": 4096
+      },
+      "admitted": false
+    }
+  }
+}

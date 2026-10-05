@@ -12,16 +12,17 @@ from typing import Optional
 from ai_desktop.ui.theme import MarkdownColors, current_markdown
 
 
-def to_html(text: str, colors: Optional[MarkdownColors] = None) -> tuple[str, dict[str, str]]:
-    renderer = _Renderer(text, colors or current_markdown())
+def to_html(text: str, colors: Optional[MarkdownColors] = None, *, sources=None) -> tuple[str, dict[str, str]]:
+    renderer = _Renderer(text, colors or current_markdown(), sources)
     html_out = renderer.render()
     return html_out, renderer.code_map
 
 
 class _Renderer:
-    def __init__(self, text: str, colors: MarkdownColors):
+    def __init__(self, text: str, colors: MarkdownColors, sources=None):
         self.lines = text.split("\n")
         self.c = colors
+        self.sources = frozenset((sources or {}).keys())
         self.result: list[str] = []
         self.para_buf: list[str] = []
         self.in_code_block = False
@@ -63,7 +64,7 @@ class _Renderer:
                             break
                         rows.append(cells)
                         index += 1
-                    self.result.append(_render_table(headings, rows, self.c))
+                    self.result.append(_render_table(headings, rows, self.c, self.sources))
                     continue
 
             if not line.strip():
@@ -73,7 +74,7 @@ class _Renderer:
 
             if _is_single(line):
                 self._flush_para()
-                self.result.append(_render_single(line, self.c))
+                self.result.append(_render_single(line, self.c, self.sources))
                 index += 1
                 continue
 
@@ -91,7 +92,7 @@ class _Renderer:
         self.para_buf = []
         if text.strip():
             self.result.append(
-                f'<p style="margin:4px 0;line-height:1.6;">{_fmt(text, self.c)}</p>'
+                f'<p style="margin:4px 0;line-height:1.6;">{_fmt(text, self.c, self.sources)}</p>'
             )
 
     def _flush_code(self) -> None:
@@ -126,18 +127,18 @@ def _table_cells(line: str) -> list[str]:
             for cell in re.split(r"(?<!\\)\|", value)]
 
 
-def _render_table(headings: list[str], rows: list[list[str]], c: MarkdownColors) -> str:
+def _render_table(headings: list[str], rows: list[list[str]], c: MarkdownColors, sources=()) -> str:
     """Stack comparisons vertically so they remain readable in a narrow chat."""
     blocks = []
     for row in rows:
         details = "".join(
-            f'<br><span style="color:{c.bullet};">{_fmt(heading, c)}</span>'
-            f' · {_fmt(value, c)}'
+            f'<br><span style="color:{c.bullet};">{_fmt(heading, c, sources)}</span>'
+            f' · {_fmt(value, c, sources)}'
             for heading, value in zip(headings[1:], row[1:])
         )
         blocks.append(
             '<p style="margin:8px 0;line-height:1.5;">'
-            f'<b style="color:{c.heading};">{_fmt(row[0], c)}</b>'
+            f'<b style="color:{c.heading};">{_fmt(row[0], c, sources)}</b>'
             f'{details}</p>'
         )
     return "".join(blocks)
@@ -153,13 +154,13 @@ def _is_single(line: str) -> bool:
     return any(re.match(p, s) for p in _SINGLE_PATTERNS)
 
 
-def _render_single(line: str, c: MarkdownColors) -> str:
+def _render_single(line: str, c: MarkdownColors, sources=()) -> str:
     s = line.strip()
 
     m = re.match(r"^(#{1,3})\s+(.+)$", s)
     if m:
         level = len(m.group(1))
-        content = _fmt(m.group(2), c)
+        content = _fmt(m.group(2), c, sources)
         sizes = {1: 18, 2: 15, 3: 14}
         margins = {1: "12px 0 6px", 2: "10px 0 4px", 3: "8px 0 2px"}
         return (
@@ -169,7 +170,7 @@ def _render_single(line: str, c: MarkdownColors) -> str:
         )
 
     if re.match(r"^[-*]\s", s):
-        content = _fmt(re.sub(r"^[-*]\s+", "", s), c)
+        content = _fmt(re.sub(r"^[-*]\s+", "", s), c, sources)
         return (
             f'<div style="margin:2px 0 2px 16px;">'
             f'<span style="color:{c.bullet};">•</span> {content}</div>'
@@ -177,7 +178,7 @@ def _render_single(line: str, c: MarkdownColors) -> str:
 
     m = re.match(r"^(\d+)\.\s+(.+)$", s)
     if m:
-        content = _fmt(m.group(2), c)
+        content = _fmt(m.group(2), c, sources)
         return (
             f'<div style="margin:2px 0 2px 16px;">'
             f'<span style="color:{c.bullet};">{m.group(1)}.</span> {content}</div>'
@@ -186,19 +187,24 @@ def _render_single(line: str, c: MarkdownColors) -> str:
     if re.match(r"^[-*_]{3,}$", s):
         return f'<hr style="border:none;border-top:1px solid {c.hr};margin:8px 0;">'
 
-    return f'<p style="margin:4px 0;line-height:1.6;">{_fmt(s, c)}</p>'
+    return f'<p style="margin:4px 0;line-height:1.6;">{_fmt(s, c, sources)}</p>'
 
 
 # ── 行内格式 ──
 
-def _fmt(text: str, c: MarkdownColors) -> str:
+def _fmt(text: str, c: MarkdownColors, sources=()) -> str:
     text = html.escape(text, quote=False)
-    text = re.sub(
-        r"`([^`]+)`",
-        f'<code style="background:{c.inline_code_bg};color:{c.inline_code_text};'
-        f'padding:1px 5px;border-radius:3px;font-family:Menlo,monospace;font-size:12px;">\\1</code>',
-        text,
-    )
-    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
-    text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
-    return text
+    pieces = re.split(r'(`[^`]+`)', text)
+    for index, part in enumerate(pieces):
+        if part.startswith('`') and part.endswith('`'):
+            pieces[index] = (f'<code style="background:{c.inline_code_bg};color:{c.inline_code_text};'
+                             'padding:1px 5px;border-radius:3px;font-family:Menlo,monospace;'
+                             f'font-size:12px;">{part[1:-1]}</code>')
+            continue
+        part = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", part)
+        part = re.sub(r"\*(.+?)\*", r"<i>\1</i>", part)
+        # IDs resolve through the owning answer bubble, never a model-provided URL.
+        part = re.sub(r'\[(S[1-9][0-9]*)\]', lambda m:
+                      f'<a href="source://{m[1]}">{m[0]}</a>' if m[1] in sources else m[0], part)
+        pieces[index] = part
+    return ''.join(pieces)

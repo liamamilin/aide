@@ -1,0 +1,64 @@
+{
+  "ollama_version": "0.34.3",
+  "model": "qwen3.5:9b-mlx",
+  "digest": "203e30078279db51132b9e026ceb7bb21330e5b1af67ef190671b375c9770404",
+  "options": {
+    "think": false,
+    "num_ctx": 8192,
+    "num_predict": 1024,
+    "temperature": 0
+  },
+  "scope": "Two bounded smoke samples, not a reliability or performance benchmark",
+  "results": [
+    {
+      "provider": "parallel",
+      "status": "succeeded",
+      "seconds": 10.45,
+      "answer": "The official Python documentation is available at https://www.python.org/doc [S1].",
+      "model_rounds": 2,
+      "searches": [
+        {
+          "provider": "parallel",
+          "duration": 2.208,
+          "error_type": "",
+          "error": "",
+          "truncated": false,
+          "sources": [
+            {
+              "source_id": "S1",
+              "title": "Our Documentation",
+              "url": "https://www.python.org/doc"
+            }
+          ]
+        }
+      ],
+      "search_calls_limit": 1,
+      "automatic_retries": 0
+    },
+    {
+      "provider": "exa",
+      "status": "succeeded",
+      "seconds": 8.367,
+      "answer": "The official Python documentation can be found at https://docs.python.org/3/. [S1]",
+      "model_rounds": 2,
+      "searches": [
+        {
+          "provider": "exa",
+          "duration": 5.174,
+          "error_type": "",
+          "error": "",
+          "truncated": false,
+          "sources": [
+            {
+              "source_id": "S1",
+              "title": "3.14.6 Documentation",
+              "url": "https://docs.python.org/3/"
+            }
+          ]
+        }
+      ],
+      "search_calls_limit": 1,
+      "automatic_retries": 0
+    }
+  ]
+}

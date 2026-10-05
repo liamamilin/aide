@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ai_desktop import config
+from ai_desktop.llm.thinking import ThinkMode, ThinkSetting, normalize_think, resolve_think
 from ai_desktop.utils import storage
 
 _ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -20,7 +21,7 @@ class ModelProfile:
     id: str
     name: str
     model: str | None = None
-    think: bool | None = None
+    think: ThinkSetting | bool | None = None
     temperature: float | None = None
     num_predict: int | None = None
     updated_at: float = 0.0
@@ -29,7 +30,7 @@ class ModelProfile:
 @dataclass(frozen=True)
 class ModelOverrides:
     model: str | None = None
-    think: bool | None = None
+    think: ThinkSetting | bool | None = None
     temperature: float | None = None
     num_predict: int | None = None
 
@@ -37,11 +38,19 @@ class ModelOverrides:
 @dataclass(frozen=True)
 class ResolvedModelConfig:
     model: str
-    think: bool
+    think: bool | str | None
     temperature: float
     num_predict: int
     profile_name: str = ""
     warnings: tuple[str, ...] = ()
+    think_setting: ThinkSetting = ThinkSetting()
+    think_source: str = "全局设置"
+    thinking_warnings: tuple[str, ...] = ()
+
+    def for_model(self, model, capability):
+        value, warnings = resolve_think(self.think_setting, capability)
+        other = tuple(item for item in self.warnings if item not in self.thinking_warnings)
+        return replace(self, model=model, think=value, warnings=other + warnings, thinking_warnings=warnings)
 
     @property
     def options(self) -> dict[str, int | float]:
@@ -53,7 +62,8 @@ class ResolvedModelConfig:
     @property
     def summary(self) -> str:
         source = self.profile_name or "全局设置"
-        thinking = "思考开" if self.think else "思考关"
+        thinking = "模型默认" if self.think is None else ("思考开" if self.think is True else
+                                                       "思考关" if self.think is False else f"思考 {self.think}")
         return (
             f"{source} · {self.model} · {thinking} · "
             f"温度 {self.temperature:g} · 输出 {self.num_predict}"
@@ -70,8 +80,7 @@ def validate_profile(profile: ModelProfile) -> ModelProfile:
         raise ValueError(f"配置名称长度必须为 1–{MAX_PROFILE_NAME} 个字符。")
     if model and len(model) > MAX_MODEL_NAME:
         raise ValueError(f"模型名称不能超过 {MAX_MODEL_NAME} 个字符。")
-    if profile.think is not None and not isinstance(profile.think, bool):
-        raise ValueError("思考选项必须是开启、关闭或继承。")
+    thinking = normalize_think(profile.think, allow_inherit=True)
     temperature = profile.temperature
     if temperature is not None:
         if isinstance(temperature, bool) or not isinstance(temperature, (int, float)):
@@ -89,7 +98,7 @@ def validate_profile(profile: ModelProfile) -> ModelProfile:
         profile_id,
         name,
         model,
-        profile.think,
+        thinking,
         temperature,
         num_predict,
         float(profile.updated_at or time.time()),
@@ -135,7 +144,7 @@ class ModelProfileManager:
     def save(self, profile: ModelProfile) -> ModelProfile:
         normalized = validate_profile(profile)
         options = {
-            "think": normalized.think,
+            "think": normalized.think.record(),
             "temperature": normalized.temperature,
             "num_predict": normalized.num_predict,
         }
@@ -176,6 +185,7 @@ class ModelProfileManager:
         action_profile_id: str | None = None,
         temporary: ModelOverrides | None = None,
         available_models: list[str] | None = None,
+        thinking_capability=None,
     ) -> ResolvedModelConfig:
         warnings: list[str] = []
         layers: list[tuple[str, ModelOverrides]] = []
@@ -222,11 +232,25 @@ class ModelProfileManager:
                     return value
             return default
 
+        setting = normalize_think(config.OLLAMA_THINK)
+        think_source = "全局设置"
+        for label, layer in layers:
+            candidate = normalize_think(layer.think, allow_inherit=True)
+            if candidate.mode != ThinkMode.INHERIT:
+                setting, think_source = candidate, label
+                selected_profile = selected_profile or label
+                break
+        capability = thinking_capability(model) if callable(thinking_capability) else thinking_capability
+        wire_think, think_warnings = resolve_think(setting, capability)
+        warnings.extend(think_warnings)
         return ResolvedModelConfig(
             model=model,
-            think=bool(first("think", config.OLLAMA_THINK)),
+            think=wire_think,
             temperature=float(first("temperature", config.OLLAMA_TEMPERATURE)),
             num_predict=int(first("num_predict", config.OLLAMA_NUM_PREDICT)),
             profile_name=selected_profile,
             warnings=tuple(warnings),
+            think_setting=setting,
+            think_source=think_source,
+            thinking_warnings=think_warnings,
         )
