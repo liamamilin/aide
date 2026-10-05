@@ -1,0 +1,1344 @@
+{
+  "status": "recorded",
+  "admitted": false,
+  "candidate_override": true,
+  "results": {
+    "qwen3.5:9b-mlx": {
+      "model": "qwen3.5:9b-mlx",
+      "digest": "203e30078279db51132b9e026ceb7bb21330e5b1af67ef190671b375c9770404",
+      "stages": {
+        "H0.2": {
+          "status": "verified",
+          "observations": [
+            {
+              "think": false,
+              "thinking_chars": 0,
+              "done_reason": "stop",
+              "correct": true
+            },
+            {
+              "think": false,
+              "thinking_chars": 0,
+              "done_reason": "stop",
+              "correct": true
+            },
+            {
+              "think": false,
+              "thinking_chars": 0,
+              "done_reason": "stop",
+              "correct": true
+            },
+            {
+              "think": true,
+              "thinking_chars": 7193,
+              "done_reason": "stop",
+              "correct": true
+            },
+            {
+              "think": true,
+              "thinking_chars": 7193,
+              "done_reason": "stop",
+              "correct": true
+            },
+            {
+              "think": true,
+              "thinking_chars": 7193,
+              "done_reason": "stop",
+              "correct": true
+            }
+          ]
+        },
+        "H0.3": {
+          "status": "measured",
+          "observations": [
+            {
+              "class": "simple",
+              "done_reason": "stop",
+              "eval_count": 2,
+              "prompt_eval_count": 95,
+              "latency_seconds": 0.3768
+            },
+            {
+              "class": "simple",
+              "done_reason": "stop",
+              "eval_count": 2,
+              "prompt_eval_count": 95,
+              "latency_seconds": 0.1289
+            },
+            {
+              "class": "simple",
+              "done_reason": "stop",
+              "eval_count": 2,
+              "prompt_eval_count": 95,
+              "latency_seconds": 0.1322
+            },
+            {
+              "class": "simple",
+              "done_reason": "stop",
+              "eval_count": 2,
+              "prompt_eval_count": 95,
+              "latency_seconds": 0.1304
+            },
+            {
+              "class": "simple",
+              "done_reason": "stop",
+              "eval_count": 2,
+              "prompt_eval_count": 95,
+              "latency_seconds": 0.1306
+            },
+            {
+              "class": "planning",
+              "done_reason": "stop",
+              "eval_count": 90,
+              "prompt_eval_count": 105,
+              "latency_seconds": 2.7686
+            },
+            {
+              "class": "planning",
+              "done_reason": "stop",
+              "eval_count": 90,
+              "prompt_eval_count": 105,
+              "latency_seconds": 2.4534
+            },
+            {
+              "class": "planning",
+              "done_reason": "stop",
+              "eval_count": 90,
+              "prompt_eval_count": 105,
+              "latency_seconds": 2.4516
+            },
+            {
+              "class": "planning",
+              "done_reason": "stop",
+              "eval_count": 90,
+              "prompt_eval_count": 105,
+              "latency_seconds": 2.4541
+            },
+            {
+              "class": "planning",
+              "done_reason": "stop",
+              "eval_count": 90,
+              "prompt_eval_count": 105,
+              "latency_seconds": 2.4506
+            },
+            {
+              "class": "tool",
+              "done_reason": "stop",
+              "eval_count": 27,
+              "prompt_eval_count": 426,
+              "latency_seconds": 1.9743
+            },
+            {
+              "class": "tool",
+              "done_reason": "stop",
+              "eval_count": 27,
+              "prompt_eval_count": 426,
+              "latency_seconds": 0.7911
+            },
+            {
+              "class": "tool",
+              "done_reason": "stop",
+              "eval_count": 27,
+              "prompt_eval_count": 426,
+              "latency_seconds": 0.79
+            },
+            {
+              "class": "tool",
+              "done_reason": "stop",
+              "eval_count": 27,
+              "prompt_eval_count": 426,
+              "latency_seconds": 0.7881
+            },
+            {
+              "class": "tool",
+              "done_reason": "stop",
+              "eval_count": 27,
+              "prompt_eval_count": 426,
+              "latency_seconds": 0.7907
+            }
+          ],
+          "small_sample_only": true,
+          "eval_count": {
+            "samples": 15,
+            "p50": 27,
+            "p90": 90,
+            "p95": 90,
+            "max": 90
+          },
+          "latency_seconds": {
+            "samples": 15,
+            "p50": 0.7907,
+            "p90": 2.4541,
+            "p95": 2.7686,
+            "max": 2.7686
+          }
+        },
+        "H0.4": {
+          "status": "sample_verified",
+          "task_profile": {
+            "think": false,
+            "num_ctx": 8192,
+            "num_predict": 1024,
+            "truncate": "unknown",
+            "shift": "unknown",
+            "max_rounds": 8,
+            "tool_result_bytes": 4096,
+            "thinking_tokens": "unknown"
+          },
+          "normal_checks": [
+            {
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "838a81a5b06548a693420883b039610d/0/0",
+                  "provider_call_id": "call_l63zak7s",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "note.txt\nrelease.txt\nplan.txt",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                }
+              ],
+              "answer": "Files in the workspace: note.txt, release.txt, plan.txt.",
+              "passed": true
+            },
+            {
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "0c13fa11218d4afabc440f595f1f8125/0/0",
+                  "provider_call_id": "call_uwk07te8",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "0c13fa11218d4afabc440f595f1f8125/1/0",
+                  "provider_call_id": "call_x6c6fjvd",
+                  "name": "web_search",
+                  "arguments": {
+                    "query": "Aide quasar guide policy identifier",
+                    "objective": "Find the policy identifier for the Aide quasar guide topic"
+                  },
+                  "result": {
+                    "provider": "h0-fixture",
+                    "sources": [
+                      {
+                        "source_id": "S1",
+                        "title": "Synthetic Aide policy",
+                        "url": "https://example.com/aide-policy",
+                        "published_at": null,
+                        "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                      }
+                    ],
+                    "truncated": false
+                  }
+                }
+              ],
+              "answer": "Verification code: AMBER-731, Policy identifier: ORBIT-924",
+              "passed": true
+            },
+            {
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "dfef19fe79e842bba7e8dd74c45e2ba9/0/0",
+                  "provider_call_id": "call_upz5awfb",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat release.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "release version: 1.5.0\nreference topic: Aide release policy\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "dfef19fe79e842bba7e8dd74c45e2ba9/1/0",
+                  "provider_call_id": "call_693qey7p",
+                  "name": "web_search",
+                  "arguments": {
+                    "query": "Aide release policy",
+                    "objective": "Find the policy identifier for Aide release version 1.5.0"
+                  },
+                  "result": {
+                    "provider": "h0-fixture",
+                    "sources": [
+                      {
+                        "source_id": "S1",
+                        "title": "Synthetic Aide policy",
+                        "url": "https://example.com/aide-policy",
+                        "published_at": null,
+                        "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                      }
+                    ],
+                    "truncated": false
+                  }
+                }
+              ],
+              "answer": "Version: 1.5.0, Policy Identifier: ORBIT-924",
+              "passed": true
+            }
+          ],
+          "length_done_reason": "length",
+          "context_shift_and_large_results_pending": true
+        },
+        "H0.5": {
+          "status": "synthetic_fail",
+          "rates": {
+            "single": 0.75,
+            "multi": 1.0,
+            "failure": 0.5
+          },
+          "checks": [
+            {
+              "task_id": "list",
+              "kind": "single",
+              "repeat": 0,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "714071e6c4254077a62a6165bf628230/0/0",
+                  "provider_call_id": "call_iscn7jpc",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "note.txt\nrelease.txt\nplan.txt",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                }
+              ],
+              "answer": "Files in the workspace: note.txt, release.txt, plan.txt.",
+              "passed": true
+            },
+            {
+              "task_id": "list",
+              "kind": "single",
+              "repeat": 1,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "d60bad252d5644a584865d0a92dad090/0/0",
+                  "provider_call_id": "call_z6t2y1nm",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "note.txt\nrelease.txt\nplan.txt",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                }
+              ],
+              "answer": "Files in the workspace: note.txt, release.txt, plan.txt.",
+              "passed": true
+            },
+            {
+              "task_id": "read",
+              "kind": "single",
+              "repeat": 0,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "7b2ff04894a349f18e09251ce300af59/0/0",
+                  "provider_call_id": "call_ild35k68",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                }
+              ],
+              "answer": "The verification code in note.txt is **AMBER-731**.",
+              "passed": true
+            },
+            {
+              "task_id": "read",
+              "kind": "single",
+              "repeat": 1,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "f287ad449ee643a3abe7e7e83e472879/0/0",
+                  "provider_call_id": "call_rdq051o6",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                }
+              ],
+              "answer": "The verification code in note.txt is **AMBER-731**.",
+              "passed": true
+            },
+            {
+              "task_id": "search",
+              "kind": "single",
+              "repeat": 0,
+              "status": "limited",
+              "reason": "rounds",
+              "trace": [
+                {
+                  "local_call_id": "1e244f514abe4b5e9b15de69c088aa5f/0/0",
+                  "provider_call_id": "call_kp771aj6",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "find / -name \"*aide*quasar*\" -o -name \"*quasar*aide*\" 2>/dev/null | head -20"
+                  },
+                  "result": {
+                    "error_type": "fixture_command_unsupported",
+                    "exit_code": null
+                  }
+                },
+                {
+                  "local_call_id": "1e244f514abe4b5e9b15de69c088aa5f/1/0",
+                  "provider_call_id": "call_6k835hbj",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls -la /"
+                  },
+                  "result": {
+                    "error_type": "fixture_command_unsupported",
+                    "exit_code": null
+                  }
+                },
+                {
+                  "local_call_id": "1e244f514abe4b5e9b15de69c088aa5f/2/0",
+                  "provider_call_id": "call_3j969kt1",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "pwd"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "/h0-fixture",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "1e244f514abe4b5e9b15de69c088aa5f/3/0",
+                  "provider_call_id": "call_ka1c57v9",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls -la /h0-fixture"
+                  },
+                  "result": {
+                    "error_type": "fixture_command_unsupported",
+                    "exit_code": null
+                  }
+                },
+                {
+                  "local_call_id": "1e244f514abe4b5e9b15de69c088aa5f/4/0",
+                  "provider_call_id": "call_bg730yry",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls -la /h0-fixture/"
+                  },
+                  "result": {
+                    "error_type": "fixture_command_unsupported",
+                    "exit_code": null
+                  }
+                },
+                {
+                  "local_call_id": "1e244f514abe4b5e9b15de69c088aa5f/5/0",
+                  "provider_call_id": "call_2k9mssri",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls /h0-fixture/"
+                  },
+                  "result": {
+                    "error_type": "fixture_command_unsupported",
+                    "exit_code": null
+                  }
+                },
+                {
+                  "local_call_id": "1e244f514abe4b5e9b15de69c088aa5f/6/0",
+                  "provider_call_id": "call_3l5gcitu",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls /h0-fixture/ 2>&1"
+                  },
+                  "result": {
+                    "error_type": "fixture_command_unsupported",
+                    "exit_code": null
+                  }
+                },
+                {
+                  "local_call_id": "1e244f514abe4b5e9b15de69c088aa5f/7/0",
+                  "provider_call_id": "call_0tvr09j3",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls /h0-fixture/ 2>&1 | head -50"
+                  },
+                  "result": {
+                    "error_type": "fixture_command_unsupported",
+                    "exit_code": null
+                  }
+                }
+              ],
+              "passed": false
+            },
+            {
+              "task_id": "search",
+              "kind": "single",
+              "repeat": 1,
+              "status": "limited",
+              "reason": "rounds",
+              "trace": [
+                {
+                  "local_call_id": "27ab514b8f924c8abc782cf12d66f09b/0/0",
+                  "provider_call_id": "call_bg4ctcij",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "find / -name \"*aide*quasar*\" -o -name \"*quasar*aide*\" 2>/dev/null | head -20"
+                  },
+                  "result": {
+                    "error_type": "fixture_command_unsupported",
+                    "exit_code": null
+                  }
+                },
+                {
+                  "local_call_id": "27ab514b8f924c8abc782cf12d66f09b/1/0",
+                  "provider_call_id": "call_bdzpdofs",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls -la /"
+                  },
+                  "result": {
+                    "error_type": "fixture_command_unsupported",
+                    "exit_code": null
+                  }
+                },
+                {
+                  "local_call_id": "27ab514b8f924c8abc782cf12d66f09b/2/0",
+                  "provider_call_id": "call_kx6rmzq3",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "pwd"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "/h0-fixture",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "27ab514b8f924c8abc782cf12d66f09b/3/0",
+                  "provider_call_id": "call_d2b1tr1q",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls -la /h0-fixture"
+                  },
+                  "result": {
+                    "error_type": "fixture_command_unsupported",
+                    "exit_code": null
+                  }
+                },
+                {
+                  "local_call_id": "27ab514b8f924c8abc782cf12d66f09b/4/0",
+                  "provider_call_id": "call_504weum4",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls -la /h0-fixture/"
+                  },
+                  "result": {
+                    "error_type": "fixture_command_unsupported",
+                    "exit_code": null
+                  }
+                },
+                {
+                  "local_call_id": "27ab514b8f924c8abc782cf12d66f09b/5/0",
+                  "provider_call_id": "call_comcov6b",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls /h0-fixture/"
+                  },
+                  "result": {
+                    "error_type": "fixture_command_unsupported",
+                    "exit_code": null
+                  }
+                },
+                {
+                  "local_call_id": "27ab514b8f924c8abc782cf12d66f09b/6/0",
+                  "provider_call_id": "call_b42g7u09",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls /h0-fixture/ 2>&1"
+                  },
+                  "result": {
+                    "error_type": "fixture_command_unsupported",
+                    "exit_code": null
+                  }
+                },
+                {
+                  "local_call_id": "27ab514b8f924c8abc782cf12d66f09b/7/0",
+                  "provider_call_id": "call_11cb07zm",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls /h0-fixture/ 2>&1 | head -50"
+                  },
+                  "result": {
+                    "error_type": "fixture_command_unsupported",
+                    "exit_code": null
+                  }
+                }
+              ],
+              "passed": false
+            },
+            {
+              "task_id": "duplicate",
+              "kind": "single",
+              "repeat": 0,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "6c2ad35992a1471a8af081a06f15f12a/0/0",
+                  "provider_call_id": "call_ge2rrdnz",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "6c2ad35992a1471a8af081a06f15f12a/1/0",
+                  "provider_call_id": "call_ab1k570i",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                }
+              ],
+              "answer": "The verification code is **AMBER-731**.",
+              "passed": true
+            },
+            {
+              "task_id": "duplicate",
+              "kind": "single",
+              "repeat": 1,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "d350b1c940ca4981975ff8f1cb00a7db/0/0",
+                  "provider_call_id": "call_fho7z32o",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "d350b1c940ca4981975ff8f1cb00a7db/1/0",
+                  "provider_call_id": "call_conn9j95",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                }
+              ],
+              "answer": "The verification code is **AMBER-731**.",
+              "passed": true
+            },
+            {
+              "task_id": "read_search",
+              "kind": "multi",
+              "repeat": 0,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "45ee4a45fc1c48bcb34ba71561d6aca5/0/0",
+                  "provider_call_id": "call_3cb9vvfs",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "45ee4a45fc1c48bcb34ba71561d6aca5/1/0",
+                  "provider_call_id": "call_xhxzn8t2",
+                  "name": "web_search",
+                  "arguments": {
+                    "query": "Aide quasar guide policy identifier",
+                    "objective": "Find the policy identifier for the Aide quasar guide topic"
+                  },
+                  "result": {
+                    "provider": "h0-fixture",
+                    "sources": [
+                      {
+                        "source_id": "S1",
+                        "title": "Synthetic Aide policy",
+                        "url": "https://example.com/aide-policy",
+                        "published_at": null,
+                        "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                      }
+                    ],
+                    "truncated": false
+                  }
+                }
+              ],
+              "answer": "Verification code: AMBER-731, Policy identifier: ORBIT-924",
+              "passed": true
+            },
+            {
+              "task_id": "read_search",
+              "kind": "multi",
+              "repeat": 1,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "de1652c4e3a04367bccd1dde0f246df2/0/0",
+                  "provider_call_id": "call_2xxb4vyr",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "de1652c4e3a04367bccd1dde0f246df2/1/0",
+                  "provider_call_id": "call_hfpibloj",
+                  "name": "web_search",
+                  "arguments": {
+                    "query": "Aide quasar guide policy identifier",
+                    "objective": "Find the policy identifier for the Aide quasar guide topic"
+                  },
+                  "result": {
+                    "provider": "h0-fixture",
+                    "sources": [
+                      {
+                        "source_id": "S1",
+                        "title": "Synthetic Aide policy",
+                        "url": "https://example.com/aide-policy",
+                        "published_at": null,
+                        "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                      }
+                    ],
+                    "truncated": false
+                  }
+                }
+              ],
+              "answer": "Verification code: AMBER-731, Policy identifier: ORBIT-924",
+              "passed": true
+            },
+            {
+              "task_id": "release_search",
+              "kind": "multi",
+              "repeat": 0,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "61b11ba5eb8a4f74a4300b6f3ea5641e/0/0",
+                  "provider_call_id": "call_232wb2rf",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat release.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "release version: 1.5.0\nreference topic: Aide release policy\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "61b11ba5eb8a4f74a4300b6f3ea5641e/1/0",
+                  "provider_call_id": "call_7yc796yr",
+                  "name": "web_search",
+                  "arguments": {
+                    "query": "Aide release policy",
+                    "objective": "Find the policy identifier for Aide release version 1.5.0"
+                  },
+                  "result": {
+                    "provider": "h0-fixture",
+                    "sources": [
+                      {
+                        "source_id": "S1",
+                        "title": "Synthetic Aide policy",
+                        "url": "https://example.com/aide-policy",
+                        "published_at": null,
+                        "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                      }
+                    ],
+                    "truncated": false
+                  }
+                }
+              ],
+              "answer": "Version: 1.5.0, Policy Identifier: ORBIT-924",
+              "passed": true
+            },
+            {
+              "task_id": "release_search",
+              "kind": "multi",
+              "repeat": 1,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "d866a55f486e48239b1a3d2faefe6403/0/0",
+                  "provider_call_id": "call_bywuauog",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat release.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "release version: 1.5.0\nreference topic: Aide release policy\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "d866a55f486e48239b1a3d2faefe6403/1/0",
+                  "provider_call_id": "call_hmk8khjh",
+                  "name": "web_search",
+                  "arguments": {
+                    "query": "Aide release policy",
+                    "objective": "Find the policy identifier for Aide release version 1.5.0"
+                  },
+                  "result": {
+                    "provider": "h0-fixture",
+                    "sources": [
+                      {
+                        "source_id": "S1",
+                        "title": "Synthetic Aide policy",
+                        "url": "https://example.com/aide-policy",
+                        "published_at": null,
+                        "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                      }
+                    ],
+                    "truncated": false
+                  }
+                }
+              ],
+              "answer": "Version: 1.5.0, Policy Identifier: ORBIT-924",
+              "passed": true
+            },
+            {
+              "task_id": "plan_chain",
+              "kind": "multi",
+              "repeat": 0,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "1a95620bb2f1427ba1e5f8f1a1d93e4a/0/0",
+                  "provider_call_id": "call_gxg9atsz",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat plan.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "Read release.txt, then look up the Aide release policy.\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "1a95620bb2f1427ba1e5f8f1a1d93e4a/1/0",
+                  "provider_call_id": "call_jrk778a6",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat release.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "release version: 1.5.0\nreference topic: Aide release policy\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "1a95620bb2f1427ba1e5f8f1a1d93e4a/2/0",
+                  "provider_call_id": "call_xm00lttu",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls -la"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "note.txt\nrelease.txt\nplan.txt",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "1a95620bb2f1427ba1e5f8f1a1d93e4a/3/0",
+                  "provider_call_id": "call_vujp06xu",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "1a95620bb2f1427ba1e5f8f1a1d93e4a/4/0",
+                  "provider_call_id": "call_ghr0y6zm",
+                  "name": "web_search",
+                  "arguments": {
+                    "query": "Aide release policy version 1.5.0",
+                    "objective": "Find the official Aide release policy and verify version 1.5.0"
+                  },
+                  "result": {
+                    "provider": "h0-fixture",
+                    "sources": [
+                      {
+                        "source_id": "S1",
+                        "title": "Synthetic Aide policy",
+                        "url": "https://example.com/aide-policy",
+                        "published_at": null,
+                        "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                      }
+                    ],
+                    "truncated": false
+                  }
+                }
+              ],
+              "answer": "Version: 1.5.0, Policy Identifier: ORBIT-924",
+              "passed": true
+            },
+            {
+              "task_id": "plan_chain",
+              "kind": "multi",
+              "repeat": 1,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "47a51519bcc34c9184d46ee069a53d8f/0/0",
+                  "provider_call_id": "call_jxqi6wnq",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat plan.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "Read release.txt, then look up the Aide release policy.\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "47a51519bcc34c9184d46ee069a53d8f/1/0",
+                  "provider_call_id": "call_l8zcys0n",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat release.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "release version: 1.5.0\nreference topic: Aide release policy\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "47a51519bcc34c9184d46ee069a53d8f/2/0",
+                  "provider_call_id": "call_0uzhdybx",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "ls -la"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "note.txt\nrelease.txt\nplan.txt",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "47a51519bcc34c9184d46ee069a53d8f/3/0",
+                  "provider_call_id": "call_m0fhw4bp",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "47a51519bcc34c9184d46ee069a53d8f/4/0",
+                  "provider_call_id": "call_a7q53758",
+                  "name": "web_search",
+                  "arguments": {
+                    "query": "Aide release policy version 1.5.0",
+                    "objective": "Find the official Aide release policy and verify version 1.5.0"
+                  },
+                  "result": {
+                    "provider": "h0-fixture",
+                    "sources": [
+                      {
+                        "source_id": "S1",
+                        "title": "Synthetic Aide policy",
+                        "url": "https://example.com/aide-policy",
+                        "published_at": null,
+                        "excerpt": "policy identifier: ORBIT-924; supported version: 1.5.0"
+                      }
+                    ],
+                    "truncated": false
+                  }
+                }
+              ],
+              "answer": "Version: 1.5.0, Policy Identifier: ORBIT-924",
+              "passed": true
+            },
+            {
+              "task_id": "two_files",
+              "kind": "multi",
+              "repeat": 0,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "b707963db7614f7c83acb38c95776dce/0/0",
+                  "provider_call_id": "call_9o0ykge3",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "b707963db7614f7c83acb38c95776dce/1/0",
+                  "provider_call_id": "call_o1uv8yte",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat release.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "release version: 1.5.0\nreference topic: Aide release policy\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                }
+              ],
+              "answer": "Verification code: AMBER-731, Version: 1.5.0",
+              "passed": true
+            },
+            {
+              "task_id": "two_files",
+              "kind": "multi",
+              "repeat": 1,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "859644dda060470a9a8e48608f6e7617/0/0",
+                  "provider_call_id": "call_oltayiqq",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                },
+                {
+                  "local_call_id": "859644dda060470a9a8e48608f6e7617/1/0",
+                  "provider_call_id": "call_8ajkesx9",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat release.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "release version: 1.5.0\nreference topic: Aide release policy\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                }
+              ],
+              "answer": "Verification code: AMBER-731, Version: 1.5.0",
+              "passed": true
+            },
+            {
+              "task_id": "missing_file",
+              "kind": "failure",
+              "repeat": 0,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "ca7a61cecd0445f68814790eaf6099b0/0/0",
+                  "provider_call_id": "call_qxsh9nx1",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat absent.txt"
+                  },
+                  "result": {
+                    "error_type": "not_found",
+                    "exit_code": 1,
+                    "stderr": "File not found"
+                  }
+                },
+                {
+                  "local_call_id": "ca7a61cecd0445f68814790eaf6099b0/1/0",
+                  "provider_call_id": "call_da79ayci",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                }
+              ],
+              "answer": "The verification code from note.txt is **AMBER-731**.",
+              "passed": true
+            },
+            {
+              "task_id": "missing_file",
+              "kind": "failure",
+              "repeat": 1,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "f7192dc9e5ee4fb5843da1a4533169d4/0/0",
+                  "provider_call_id": "call_9u269lcz",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat absent.txt"
+                  },
+                  "result": {
+                    "error_type": "not_found",
+                    "exit_code": 1,
+                    "stderr": "File not found"
+                  }
+                },
+                {
+                  "local_call_id": "f7192dc9e5ee4fb5843da1a4533169d4/1/0",
+                  "provider_call_id": "call_ry7jjtok",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                }
+              ],
+              "answer": "The verification code from note.txt is **AMBER-731**.",
+              "passed": true
+            },
+            {
+              "task_id": "search_timeout",
+              "kind": "failure",
+              "repeat": 0,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "958836ca94cd4bacbb0930c5c1d9026a/0/0",
+                  "provider_call_id": "call_aragndgr",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                }
+              ],
+              "answer": "The verification code is **AMBER-731**.",
+              "passed": false
+            },
+            {
+              "task_id": "search_timeout",
+              "kind": "failure",
+              "repeat": 1,
+              "status": "succeeded",
+              "trace": [
+                {
+                  "local_call_id": "42047f7f0b3f48bea7d5732c188fa884/0/0",
+                  "provider_call_id": "call_018gy189",
+                  "name": "bash",
+                  "arguments": {
+                    "command": "cat note.txt"
+                  },
+                  "result": {
+                    "exit_code": 0,
+                    "stdout": "verification code: AMBER-731\nreference topic: Aide quasar guide\n",
+                    "stderr": "",
+                    "truncated": false,
+                    "duration": 0
+                  }
+                }
+              ],
+              "answer": "The verification code is **AMBER-731**.",
+              "passed": false
+            }
+          ]
+        }
+      },
+      "admitted": false,
+      "scope": "synthetic tools, non-streaming, no host Bash or real search",
+      "synthetic_tool_use_verified": false,
+      "remaining_admission_gates": [
+        "streaming protocol fixtures",
+        "context pressure and result budgets",
+        "real Bash cancellation/approval/isolation",
+        "application regression and packaging"
+      ]
+    }
+  },
+  "discovery": {
+    "schema_version": 1,
+    "ollama_version": "0.34.3",
+    "base_url": "http://127.0.0.1:11434",
+    "candidates": [
+      "qwen3.5:9b-mlx"
+    ],
+    "profiles": {
+      "qwen3.5:9b-mlx": {
+        "status": "discovered",
+        "digest": "203e30078279db51132b9e026ceb7bb21330e5b1af67ef190671b375c9770404",
+        "capabilities": [
+          "completion",
+          "vision",
+          "thinking",
+          "tools"
+        ],
+        "thinking": {
+          "values": [
+            false,
+            true
+          ],
+          "default": true
+        },
+        "details": {
+          "parent_model": "",
+          "format": "safetensors",
+          "family": "qwen3_5",
+          "families": null,
+          "parameter_size": "9.4B",
+          "quantization_level": "nvfp4"
+        },
+        "model_info": {
+          "general.architecture": "qwen3_5",
+          "general.parameter_count": 9409468800,
+          "qwen3_5.block_count": 32,
+          "qwen3_5.context_length": 262144,
+          "qwen3_5.embedding_length": 4096
+        },
+        "admitted": false
+      }
+    }
+  }
+}

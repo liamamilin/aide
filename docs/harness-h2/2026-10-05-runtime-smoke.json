@@ -1,0 +1,140 @@
+{
+  "ollama_version": "0.34.3",
+  "model": "qwen3.5:9b-mlx",
+  "digest": "203e30078279db51132b9e026ceb7bb21330e5b1af67ef190671b375c9770404",
+  "status": "succeeded",
+  "text": "The contents of notes.txt are:\n\n```\nH2 readonly fixture verified.\n```",
+  "seconds": 7.111,
+  "model_requests": 2,
+  "tools": [
+    {
+      "exit_code": 0,
+      "stdout": "H2 readonly fixture verified.\n",
+      "stderr": "",
+      "duration": 0.004,
+      "truncated": false,
+      "error_type": "",
+      "execution_mode": "argv"
+    }
+  ],
+  "confirmation_requests": 0,
+  "paid_search_used": false,
+  "workspace_was_temporary": true,
+  "events": [
+    {
+      "seq": 1,
+      "kind": "started",
+      "status": ""
+    },
+    {
+      "seq": 2,
+      "kind": "model_started",
+      "status": ""
+    },
+    {
+      "seq": 3,
+      "kind": "model_finished",
+      "status": "succeeded"
+    },
+    {
+      "seq": 4,
+      "kind": "tool_started",
+      "status": ""
+    },
+    {
+      "seq": 5,
+      "kind": "tool_finished",
+      "status": "succeeded"
+    },
+    {
+      "seq": 6,
+      "kind": "model_started",
+      "status": ""
+    },
+    {
+      "seq": 7,
+      "kind": "content",
+      "status": ""
+    },
+    {
+      "seq": 8,
+      "kind": "content",
+      "status": ""
+    },
+    {
+      "seq": 9,
+      "kind": "content",
+      "status": ""
+    },
+    {
+      "seq": 10,
+      "kind": "content",
+      "status": ""
+    },
+    {
+      "seq": 11,
+      "kind": "content",
+      "status": ""
+    },
+    {
+      "seq": 12,
+      "kind": "content",
+      "status": ""
+    },
+    {
+      "seq": 13,
+      "kind": "content",
+      "status": ""
+    },
+    {
+      "seq": 14,
+      "kind": "content",
+      "status": ""
+    },
+    {
+      "seq": 15,
+      "kind": "content",
+      "status": ""
+    },
+    {
+      "seq": 16,
+      "kind": "content",
+      "status": ""
+    },
+    {
+      "seq": 17,
+      "kind": "content",
+      "status": ""
+    },
+    {
+      "seq": 18,
+      "kind": "content",
+      "status": ""
+    },
+    {
+      "seq": 19,
+      "kind": "content",
+      "status": ""
+    },
+    {
+      "seq": 20,
+      "kind": "content",
+      "status": ""
+    },
+    {
+      "seq": 21,
+      "kind": "content",
+      "status": ""
+    },
+    {
+      "seq": 22,
+      "kind": "model_finished",
+      "status": "succeeded"
+    },
+    {
+      "seq": 23,
+      "kind": "finished",
+      "status": "succeeded"
+    }
+  ]
+}

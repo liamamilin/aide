@@ -38,6 +38,38 @@ def dialog(qtbot):
     return d
 
 
+@pytest.mark.parametrize("route,field", [
+    ("model", "base_url"), ("generation", "temperature"),
+    ("search", "search_provider"), ("execution", "execution_workspace"),
+    ("desktop", "desktop_pet"),
+])
+def test_tab_mouse_click_shows_matching_page(qtbot, dialog, route, field):
+    # Start elsewhere so every case exercises a real page transition, including
+    # returning to the initially selected model tab. Fluent emits itemClicked(True).
+    qtbot.mouseClick(dialog._pivot.widget("generation" if route != "generation" else "desktop"), Qt.LeftButton)
+    qtbot.mouseClick(dialog._pivot.widget(route), Qt.LeftButton)
+    assert dialog._pivot.currentRouteKey() == route
+    assert dialog._widgets[field].isVisibleTo(dialog)
+    for other_route, _, _, _, start, _ in dialog.GROUPS:
+        if other_route != route:
+            assert not dialog._widgets[dialog.FIELDS[start][0]].isVisibleTo(dialog)
+
+
+def test_tab_programmatic_navigation_and_draft_preserved(qtbot, dialog):
+    dialog._widgets["base_url"].setText("http://localhost:12345")
+    dialog._widgets["temperature"].setValue(0.35)
+    with qtbot.assertNotEmitted(dialog.settings_applied):
+        dialog._pivot.setCurrentItem("desktop")
+        assert dialog._widgets["desktop_pet"].isVisibleTo(dialog)
+        dialog._pages.setCurrentIndex(2)
+        assert dialog._pivot.currentRouteKey() == "search"
+        assert dialog._widgets["search_provider"].isVisibleTo(dialog)
+        qtbot.mouseClick(dialog._pivot.widget("model"), Qt.LeftButton)
+        assert dialog._widgets["base_url"].text() == "http://localhost:12345"
+        qtbot.mouseClick(dialog._pivot.widget("generation"), Qt.LeftButton)
+        assert dialog._widgets["temperature"].value() == 0.35
+
+
 # ── L1: Signal Emission Tests ──────────────────────────
 
 class TestSettingsDialogSignals:

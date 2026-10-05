@@ -5,6 +5,8 @@ from dataclasses import replace
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
+from ai_desktop import config
+from ai_desktop.llm.thinking import ThinkMode, normalize_think
 from ai_desktop.services.model_profiles import ModelProfile, validate_profile
 from ai_desktop.ui.fluent import BodyLabel as QLabel
 from ai_desktop.ui.fluent import (
@@ -25,15 +27,18 @@ from ai_desktop.ui.fluent import PushButton as QPushButton
 from ai_desktop.ui.fluent import ScrollArea as QScrollArea
 from ai_desktop.ui.fluent import SpinBox as QSpinBox
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
+from ai_desktop.ui.thinking_selector import ThinkingSelector
 
 
 class ModelProfileDialog(FramelessDragMixin, QDialog):
     profiles_saved = pyqtSignal(list)
 
-    def __init__(self, profiles: list[ModelProfile], models: list[str], parent=None):
+    def __init__(self, profiles: list[ModelProfile], models: list[str], parent=None, *,
+                 global_model="", base_url="", model_versions=None):
         super().__init__(parent)
         self._profiles = list(profiles)
         self._models = list(dict.fromkeys(models))
+        self._thinking_context = dict(global_model=global_model, base_url=base_url, model_versions=model_versions)
         self._setup_drag(40)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground, False)
@@ -104,8 +109,9 @@ class ModelProfileDialog(FramelessDragMixin, QDialog):
     @staticmethod
     def _summary(profile: ModelProfile) -> str:
         values = [profile.model or "继承模型"]
-        if profile.think is not None:
-            values.append("思考开" if profile.think else "思考关")
+        thinking = normalize_think(profile.think, allow_inherit=True)
+        if thinking.mode != ThinkMode.INHERIT:
+            values.append(f"思考：{thinking.label}")
         if profile.temperature is not None:
             values.append(f"温度 {profile.temperature:g}")
         if profile.num_predict is not None:
@@ -114,7 +120,7 @@ class ModelProfileDialog(FramelessDragMixin, QDialog):
 
     def _on_add(self) -> None:
         profile = ModelProfile(self._next_id(), "", updated_at=0)
-        dialog = _ModelProfileEditDialog("新增模型配置", profile, self._models, self)
+        dialog = _ModelProfileEditDialog("新增模型配置", profile, self._models, self, **self._thinking_context)
         if dialog.exec_() == QDialog.Accepted:
             self._profiles.append(dialog.profile())
             self._profiles.sort(key=lambda item: (item.name.casefold(), item.id))
@@ -122,7 +128,7 @@ class ModelProfileDialog(FramelessDragMixin, QDialog):
             self.profiles_saved.emit(self.profiles)
 
     def _on_edit(self, profile: ModelProfile) -> None:
-        dialog = _ModelProfileEditDialog("编辑模型配置", profile, self._models, self)
+        dialog = _ModelProfileEditDialog("编辑模型配置", profile, self._models, self, **self._thinking_context)
         if dialog.exec_() == QDialog.Accepted:
             index = self._profiles.index(profile)
             self._profiles[index] = dialog.profile()
@@ -153,14 +159,18 @@ class ModelProfileDialog(FramelessDragMixin, QDialog):
 
 
 class _ModelProfileEditDialog(FramelessDragMixin, QDialog):
-    def __init__(self, title: str, profile: ModelProfile, models: list[str], parent=None):
+    def __init__(self, title: str, profile: ModelProfile, models: list[str], parent=None, *,
+                 global_model="", base_url="", model_versions=None):
         super().__init__(parent)
         self._source = profile
+        self._global_model = global_model
+        self._base_url = base_url or config.OLLAMA_BASE_URL
+        self._model_versions = dict(model_versions or {})
         self._setup_drag(36)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground, False)
-        self.setMinimumSize(420, 390)
-        self.resize(440, 420)
+        self.setMinimumSize(460, 460)
+        self.resize(520, 600)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -190,12 +200,10 @@ class _ModelProfileEditDialog(FramelessDragMixin, QDialog):
         form.addWidget(self._model)
 
         form.addWidget(QLabel("思考模式"))
-        self._think = QComboBox()
-        self._think.addItem("继承全局设置", None)
-        self._think.addItem("开启", True)
-        self._think.addItem("关闭", False)
-        self._think.setCurrentIndex(max(0, self._think.findData(profile.think)))
+        self._think = ThinkingSelector(profile.think, self, allow_inherit=True)
         form.addWidget(self._think)
+        self._model.currentIndexChanged.connect(self._thinking_model_changed)
+        self._thinking_model_changed()
 
         self._temperature_enabled = QCheckBox("覆盖温度")
         self._temperature_enabled.setChecked(profile.temperature is not None)
@@ -228,8 +236,23 @@ class _ModelProfileEditDialog(FramelessDragMixin, QDialog):
         save = PrimaryPushButton("保存")
         save.clicked.connect(self._save)
         buttons.addWidget(save)
-        form.addLayout(buttons)
-        root.addWidget(body)
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setWidget(body)
+        root.addWidget(scroll, 1)
+        footer = QWidget(self)
+        footer.setLayout(buttons)
+        buttons.setContentsMargins(16, 12, 16, 16)
+        root.addWidget(footer)
+
+    def _thinking_model_changed(self):
+        model = self._model.currentData() or self._global_model
+        self._think.set_model(self._base_url, model, self._model_versions.get(model, ""))
+
+    def done(self, result):
+        self._think.stop()
+        super().done(result)
 
     def profile(self) -> ModelProfile:
         return validate_profile(

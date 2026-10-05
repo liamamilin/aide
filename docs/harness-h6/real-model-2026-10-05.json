@@ -1,0 +1,134 @@
+{
+  "model": "qwen3.5:9b-mlx",
+  "real_local_model": true,
+  "native_qt": true,
+  "paid_search_used": false,
+  "user_data_isolated": true,
+  "complete": true,
+  "cases": [
+    {
+      "case": "ordinary_send_and_regenerate",
+      "status": "passed",
+      "requests": 2,
+      "duplicate_user_messages": false,
+      "seconds": 0.82
+    },
+    {
+      "case": "action_current_translate",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "current",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 3.559
+    },
+    {
+      "case": "action_current_explain",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "current",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 4.1
+    },
+    {
+      "case": "action_current_summarize",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "current",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 1.423
+    },
+    {
+      "case": "action_current_rewrite",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "current",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 0.704
+    },
+    {
+      "case": "action_new_translate",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "new",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 3.02
+    },
+    {
+      "case": "action_new_explain",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "new",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 8.037
+    },
+    {
+      "case": "action_new_summarize",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "new",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 1.836
+    },
+    {
+      "case": "action_new_rewrite",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "new",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 1.079
+    },
+    {
+      "case": "bash_readonly",
+      "status": "passed",
+      "run_status": "succeeded",
+      "model_steps": 2,
+      "seconds": 2.679
+    },
+    {
+      "case": "bash_approve",
+      "status": "passed",
+      "confirmations": 1,
+      "file_written": true,
+      "run_status": "succeeded",
+      "seconds": 3.331
+    },
+    {
+      "case": "bash_reject",
+      "status": "passed",
+      "confirmations": 1,
+      "file_written": false,
+      "run_status": "succeeded",
+      "seconds": 1.965
+    },
+    {
+      "case": "bash_hide",
+      "status": "passed",
+      "confirmations": 1,
+      "file_written": false,
+      "run_status": "cancelled",
+      "seconds": 1.523
+    },
+    {
+      "case": "cancel_then_new_conversation",
+      "status": "passed",
+      "old_run_status": "cancelled",
+      "new_context_clean": true,
+      "seconds": 0.983
+    },
+    {
+      "case": "restart_and_readonly_history",
+      "status": "failed",
+      "error": "AssertionError: Restart subprocess failed",
+      "seconds": 0.859
+    }
+  ],
+  "passed": false
+}

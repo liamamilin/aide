@@ -1,0 +1,160 @@
+{
+  "model": "qwen3.5:9b-mlx",
+  "real_local_model": true,
+  "native_qt": true,
+  "qt_platform": "cocoa",
+  "paid_search_used": false,
+  "user_data_isolated": true,
+  "execution": "frozen-app",
+  "global_hotkeys_started": false,
+  "complete": true,
+  "cases": [
+    {
+      "case": "window_layout_and_restore",
+      "status": "passed",
+      "native_layout_sizes": [
+        [
+          400,
+          460
+        ],
+        [
+          520,
+          800
+        ]
+      ],
+      "expanded_and_restored": true,
+      "default_size_restored": true,
+      "draft_preserved": true,
+      "screen_capture_used": false,
+      "cross_app_focus_verified": false,
+      "seconds": 0.209
+    },
+    {
+      "case": "ordinary_send_and_regenerate",
+      "status": "passed",
+      "requests": 2,
+      "duplicate_user_messages": false,
+      "seconds": 1.773
+    },
+    {
+      "case": "action_current_translate",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "current",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 3.653
+    },
+    {
+      "case": "action_current_explain",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "current",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 4.215
+    },
+    {
+      "case": "action_current_summarize",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "current",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 1.248
+    },
+    {
+      "case": "action_current_rewrite",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "current",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 0.707
+    },
+    {
+      "case": "action_new_translate",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "new",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 3.076
+    },
+    {
+      "case": "action_new_explain",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "new",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 8.487
+    },
+    {
+      "case": "action_new_summarize",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "new",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 1.917
+    },
+    {
+      "case": "action_new_rewrite",
+      "status": "passed",
+      "requests": 2,
+      "context_mode": "new",
+      "tools": [],
+      "agent_unchanged_on_retry": true,
+      "seconds": 0.697
+    },
+    {
+      "case": "bash_readonly",
+      "status": "passed",
+      "run_status": "succeeded",
+      "model_steps": 2,
+      "seconds": 1.689
+    },
+    {
+      "case": "bash_approve",
+      "status": "passed",
+      "confirmations": 1,
+      "file_written": true,
+      "run_status": "succeeded",
+      "seconds": 2.255
+    },
+    {
+      "case": "bash_reject",
+      "status": "passed",
+      "confirmations": 1,
+      "file_written": false,
+      "run_status": "succeeded",
+      "seconds": 1.539
+    },
+    {
+      "case": "bash_hide",
+      "status": "passed",
+      "confirmations": 1,
+      "file_written": false,
+      "run_status": "cancelled",
+      "seconds": 1.311
+    },
+    {
+      "case": "cancel_then_new_conversation",
+      "status": "passed",
+      "old_run_status": "cancelled",
+      "new_context_clean": true,
+      "seconds": 0.449
+    },
+    {
+      "case": "restart_and_readonly_history",
+      "status": "passed",
+      "restart": "passed",
+      "history_executed_tools": false,
+      "authorization_restored": false,
+      "synthetic_history_fixture": false,
+      "seconds": 1.328
+    }
+  ],
+  "passed": true
+}

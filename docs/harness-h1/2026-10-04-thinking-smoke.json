@@ -1,0 +1,68 @@
+{
+  "ollama_version": "0.34.3",
+  "model_digests": {
+    "qwen3.5:9b-mlx": "203e30078279db51132b9e026ceb7bb21330e5b1af67ef190671b375c9770404",
+    "qwen3.8:27b-mlx": "5642e97495e1a088883805981563dcdc4a040c2f53388b7a41d1f24d3622cf7e"
+  },
+  "discovery_only_27b": true,
+  "settings_modes": [
+    {
+      "mode": "model_default"
+    },
+    {
+      "mode": "off"
+    },
+    {
+      "mode": "on"
+    }
+  ],
+  "profile_modes": [
+    {
+      "mode": "inherit"
+    },
+    {
+      "mode": "model_default"
+    },
+    {
+      "mode": "off"
+    },
+    {
+      "mode": "named",
+      "level": "low"
+    },
+    {
+      "mode": "named",
+      "level": "medium"
+    },
+    {
+      "mode": "named",
+      "level": "xhigh"
+    }
+  ],
+  "generation_model": "qwen3.5:9b-mlx",
+  "runs": [
+    {
+      "think": false,
+      "think_setting": {
+        "mode": "off"
+      },
+      "source": "smoke",
+      "status": "succeeded",
+      "text": "OK",
+      "thinking_chars": 0,
+      "seconds": 5.336
+    },
+    {
+      "think": null,
+      "think_setting": {
+        "mode": "model_default"
+      },
+      "source": "smoke",
+      "status": "succeeded",
+      "text": "OK",
+      "thinking_chars": 549,
+      "seconds": 3.646
+    }
+  ],
+  "real_tools_used": false
+}

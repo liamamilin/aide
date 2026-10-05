@@ -8,6 +8,7 @@ from PyQt5.QtCore import QObject, QTimer, QUrl, pyqtSignal
 from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 
 from ai_desktop import config
+from ai_desktop.llm.thinking import ThinkingCapability, parse_thinking
 from ai_desktop.utils.update_checker import (
     mark_update_check_started,
     parse_update_info,
@@ -49,6 +50,7 @@ class ModelCapabilityResult:
     version: str
     capability: ImageCapability
     error: str = ""
+    thinking: ThinkingCapability = ThinkingCapability()
 
 
 def normalize_service_url(base_url: str) -> str:
@@ -283,8 +285,14 @@ class AsyncServiceChecks(QObject):
                 detail,
             )
         else:
-            capability, error = self._parse_model_capability(bytes(reply.readAll()))
-            result = self._model_capability_result(active, capability, error)
+            body = bytes(reply.readAll())
+            capability, error = self._parse_model_capability(body)
+            try:
+                data = json.loads(body.decode("utf-8"))
+                thinking = parse_thinking(data) if isinstance(data, dict) else ThinkingCapability()
+            except (ValueError, UnicodeError):
+                thinking = ThinkingCapability(error="思考能力检查失败；使用模型默认。")
+            result = self._model_capability_result(active, capability, error, thinking)
         self._release_model_capability(active)
         self.model_capability_checked.emit(result)
 
@@ -316,6 +324,7 @@ class AsyncServiceChecks(QObject):
         active: dict,
         capability: ImageCapability,
         error: str = "",
+        thinking: ThinkingCapability = ThinkingCapability(),
     ) -> ModelCapabilityResult:
         return ModelCapabilityResult(
             active["sequence"],
@@ -324,6 +333,7 @@ class AsyncServiceChecks(QObject):
             active["version"],
             capability,
             error,
+            thinking,
         )
 
     def _release_model_capability(

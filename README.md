@@ -109,6 +109,7 @@ python scripts/release_check.py --version 1.5.0 --require-new-tag
 - **Notifications** — macOS notification when a reply finishes while the window is in the background
 
 ### Agent
+- **Tool tasks (candidate)** — explicitly enable Bash / Parallel / Exa in General Assistant; tool runs follow the selected model after a fresh capability check, with command approval, cancellation, citations, and run history. See the [H5 guide](docs/H5显式工具任务入口-2026-10-05.md).
 - **5 built-in agents**: Code Expert 💻 / Translator 🌐 / General Assistant 🤖 / Summarizer 📄 / Polisher ✍️
 - **Custom agents** — create / edit / delete with custom emoji icon and prompt
 - **Task model profiles** — assign a reusable model, thinking mode, temperature, and output limit to each agent; every field can inherit the global setting

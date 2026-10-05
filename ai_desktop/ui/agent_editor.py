@@ -47,13 +47,15 @@ class AgentEditor(FramelessDragMixin, QDialog):
     def __init__(self, builtin_agents: list[AgentDef], custom_agents: list[AgentDef],
                  parent=None, *, profiles: list[ModelProfile] | None = None,
                  models: list[str] | None = None,
-                 actions: list[Action] | None = None):
+                 actions: list[Action] | None = None,
+                 global_model="", base_url="", model_versions=None):
         super().__init__(parent)
         self._setup_drag(40)
         self._builtin = builtin_agents
         self._custom = list(custom_agents)
         self._profiles = list(profiles or [])
         self._models = list(models or [])
+        self._thinking_context = dict(global_model=global_model, base_url=base_url, model_versions=model_versions)
         self._actions = list(actions or [])
         self._setup_window()
         self._setup_ui()
@@ -203,7 +205,7 @@ class AgentEditor(FramelessDragMixin, QDialog):
         self._refresh()
 
     def _on_manage_profiles(self) -> None:
-        dialog = ModelProfileDialog(self._profiles, self._models, self)
+        dialog = ModelProfileDialog(self._profiles, self._models, self, **self._thinking_context)
         dialog.profiles_saved.connect(self._on_profiles_updated)
         dialog.exec_()
 

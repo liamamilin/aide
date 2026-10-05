@@ -5,3 +5,4 @@ pynput>=1.7.6,<2.0.0
 requests>=2.31.0,<3.0.0
 urllib3>=1.26.0,<3.0.0
 pyobjc-framework-Vision>=12.2.2,<13.0.0; sys_platform == "darwin"
+pyobjc-framework-Security>=12.2.2,<13.0.0; sys_platform == "darwin"

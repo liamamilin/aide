@@ -1,0 +1,42 @@
+{
+  "requests": 2,
+  "automatic_retries": 0,
+  "results": [
+    {
+      "provider": "parallel",
+      "query": "Python official documentation",
+      "max_results": 1,
+      "parallel_mode": "basic",
+      "http_status": 200,
+      "ok": true,
+      "error": "",
+      "cancelled": false,
+      "seconds": 2.293,
+      "sources": [
+        {
+          "id": "S1",
+          "title": "http://python.org/doc",
+          "url": "http://python.org/doc"
+        }
+      ]
+    },
+    {
+      "provider": "exa",
+      "query": "Python official documentation",
+      "max_results": 1,
+      "parallel_mode": null,
+      "http_status": 200,
+      "ok": true,
+      "error": "",
+      "cancelled": false,
+      "seconds": 4.824,
+      "sources": [
+        {
+          "id": "S1",
+          "title": "3.14.6 Documentation",
+          "url": "https://docs.python.org/3/"
+        }
+      ]
+    }
+  ]
+}

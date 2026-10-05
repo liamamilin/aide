@@ -2,7 +2,9 @@
 对话窗口 —— Agent 多轮对话
 """
 import html
+import json
 import logging
+import time
 from pathlib import Path
 
 from PyQt5.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer, pyqtSignal
@@ -18,10 +20,13 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from ai_desktop import config
 from ai_desktop.capture.text_normalizer import normalize
 from ai_desktop.config import Agent
+from ai_desktop.llm.run_types import RunEventKind
 from ai_desktop.llm.service_checks import ImageCapability, ServiceState
 from ai_desktop.services.action_service import Action
+from ai_desktop.services.audit_store import RETENTION_SECONDS
 from ai_desktop.ui import markdown, theme
 from ai_desktop.ui.action_panel import ActionPanel
 from ai_desktop.ui.float_button import pin_to_all_spaces
@@ -50,6 +55,8 @@ from ai_desktop.ui.fluent import PushButton as QPushButton
 from ai_desktop.ui.fluent import ScrollArea as QScrollArea
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 from ai_desktop.ui.ocr_preview_dialog import OCRPreviewDialog
+from ai_desktop.ui.task_step_card import TaskStepCard
+from ai_desktop.ui.tool_card import ToolCard, open_source_url, search_sources
 from ai_desktop.utils import images as image_utils
 from ai_desktop.utils.paths import resource_path
 from ai_desktop.utils.window_state import (
@@ -135,6 +142,8 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
     new_convo_requested = pyqtSignal()
     history_requested = pyqtSignal()
     export_requested = pyqtSignal()
+    run_history_requested = pyqtSignal()
+    task_settings_requested = pyqtSignal()
     manage_agents_requested = pyqtSignal()
     stop_requested = pyqtSignal()
     agent_changed = pyqtSignal(Agent)
@@ -144,6 +153,8 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
     regenerate_requested = pyqtSignal()
     generation_selected = pyqtSignal(int)
     closed = pyqtSignal()
+    command_decided = pyqtSignal(object, bool)
+    tool_stop_requested = pyqtSignal(str)
     geometry_changed = pyqtSignal()
     ocr_requested = pyqtSignal(str)
     ocr_cancel_requested = pyqtSignal()
@@ -175,12 +186,16 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self._pending_images: list[str] = []     # 发送前暂存的图片（应用数据目录路径）
         self._ocr_preview_dialog: OCRPreviewDialog | None = None
         self._stream_bubble: QLabel | None = None
+        self._stream_container: QWidget | None = None
         self._stream_copy_btn: QPushButton | None = None
         self._stream_regen_btn: QPushButton | None = None
         self._stream_version_btn: QPushButton | None = None
         self._stream_versions: list = []
         self._stream_version_index: int = -1
         self._regen_available: bool = False
+        self._tool_run_id = None
+        self._task_model_cards = {}
+        self._tool_cards = {}
         self._stream_text: str = ""
         self._stream_buffer: str = ""               # 积攒的回复 token
         self._thinking_text: str = ""               # 完整思考文本
@@ -476,6 +491,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         more_menu = QMenu(more_btn)
         self._history_action = more_menu.addAction("对话历史…")
         self._export_action = more_menu.addAction("导出当前对话")
+        self._run_history_action = more_menu.addAction("运行记录…")
         more_menu.addSeparator()
         self._manage_agents_action = more_menu.addAction("管理 Agent…")
         more_menu.addSeparator()
@@ -487,6 +503,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self._reset_window_action = window_menu.addAction("恢复默认大小")
         self._history_action.triggered.connect(self.history_requested.emit)
         self._export_action.triggered.connect(self.export_requested.emit)
+        self._run_history_action.triggered.connect(self.run_history_requested.emit)
         self._manage_agents_action.triggered.connect(self.manage_agents_requested.emit)
         self._expand_window_action.triggered.connect(self.toggle_expanded_window)
         self._grow_window_action.triggered.connect(lambda: self.scale_window(1.15))
@@ -550,6 +567,21 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self._preview_layout.setContentsMargins(8, 4, 8, 4)
         self._preview_layout.setSpacing(6)
         root.addWidget(self._image_preview)
+
+        self._task_row = QWidget()
+        task_layout = QVBoxLayout(self._task_row)
+        task_layout.setContentsMargins(16, 0, 16, 0)
+        task_layout.setSpacing(4)
+        self._task_btn = TransparentPushButton('工具：关闭')
+        self._task_btn.setAccessibleName('工具授权设置')
+        self._task_btn.clicked.connect(self.task_settings_requested.emit)
+        task_layout.addWidget(self._task_btn, alignment=Qt.AlignLeft)
+        self._task_status = CaptionLabel('')
+        self._task_status.setWordWrap(True)
+        task_layout.addWidget(self._task_status)
+        self._task_status.hide()
+        self._task_row.setVisible(self._active_agent.id == 'general_assistant')
+        root.addWidget(self._task_row)
 
         # ── 输入区域 ──
         input_row = QHBoxLayout()
@@ -833,7 +865,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
             if source is None:
                 continue
             thinking = getattr(label, "_thinking_source", "")
-            body, code_map = self._render_assistant_body(source, thinking)
+            body, code_map = self._render_assistant_body(source, thinking, getattr(label, '_search_sources', {}))
             label.setText(self._wrap_assistant_html(body))
             label.code_map = code_map
         self.update()
@@ -1231,6 +1263,10 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
 
     def take_shutdown_workers(self) -> list:
         """Stop timers owned by the window during app shutdown."""
+        run_id = self._tool_run_id
+        self.finish_tool_run('已停止')
+        if run_id is not None:
+            self.tool_stop_requested.emit(run_id)
         self._ollama_timer.stop()
         self._stream_timer.stop()
         self._scroll_timer.stop()
@@ -1320,8 +1356,8 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self._insert_widget(bubble)
 
     def add_assistant_message(self, text: str, *, versions: list | None = None,
-                              version_index: int = -1, regen_available: bool = False) -> None:
-        body, code_map = self._render_assistant_body(text)
+                              version_index: int = -1, regen_available: bool = False, sources=None) -> None:
+        body, code_map = self._render_assistant_body(text, sources=sources)
         bubble = self._make_bubble(
             body,
             is_user=False,
@@ -1329,6 +1365,8 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
             code_map=code_map,
             markdown_source=text,
         )
+        label = bubble.findChild(QLabel, 'message_bubble')
+        label._search_sources = dict(sources or {})
         btn = bubble.findChild(QPushButton, "copy_btn_assistant")
         if btn:
             btn.clicked.connect(
@@ -1364,7 +1402,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
             self._stream_version_btn = version
         self._insert_widget(bubble)
 
-    def show_generation(self, generation_id: int, answer: str) -> bool:
+    def show_generation(self, generation_id: int, answer: str, *, sources=None) -> bool:
         """Display one stored version on the newest assistant bubble."""
         latest = self._latest_finalized_assistant_buttons()
         if latest is None:
@@ -1377,12 +1415,12 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         if not labels:
             return False
         label = labels[-1]
-        body, code_map = self._render_assistant_body(answer)
+        body, code_map = self._render_assistant_body(answer, sources=sources)
         label.setText(self._wrap_assistant_html(body))
         label._markdown_source = answer
         label._thinking_source = ""
-        if code_map:
-            label.code_map = code_map
+        label._search_sources = dict(sources or {})
+        label.code_map = code_map
         try:
             index = next(
                 i for i, item in enumerate(self._stream_versions)
@@ -1401,9 +1439,9 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
 
     @staticmethod
     def _render_assistant_body(
-        text: str, thinking: str = "",
+        text: str, thinking: str = "", sources=None,
     ) -> tuple[str, dict[str, str]]:
-        body, code_map = markdown.to_html(text)
+        body, code_map = markdown.to_html(text, sources=sources)
         if thinking.strip():
             colors = theme.current()
             escaped = html.escape(thinking, quote=False)
@@ -1423,6 +1461,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
 
     def begin_assistant_stream(self) -> None:
         """创建空的助手气泡，准备接收流式 token"""
+        self._run_sources = {}
         self._user_scrolled_up = False  # 新回复开始，恢复自动跟随
         self._stream_text = ""
         self._stream_buffer = ""
@@ -1433,6 +1472,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self._stream_regen_btn = None
         self._stream_version_btn = None
         bubble = self._make_bubble("", is_user=False, is_html=True)
+        self._stream_container = bubble
         lbl = bubble.findChild(QLabel)
         if lbl:
             self._stream_bubble = lbl
@@ -1474,10 +1514,14 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
             changed = True
         if not changed:
             return
+        if self._stream_container is not None:
+            self._stream_container.show()
         # 流式显示：思考文字用前缀标注
         display = ""
-        if self._thinking_text:
+        if self._thinking_text and not isinstance(self._stream_container, TaskStepCard):
             display += f"💭 {self._thinking_text}\n\n"
+        if isinstance(self._stream_container, TaskStepCard):
+            self._stream_container.set_thinking(self._thinking_text)
         display += self._stream_text
         self._stream_bubble.setText(display)
         self._stream_bubble.setTextFormat(Qt.PlainText)
@@ -1490,19 +1534,26 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         if self._stream_bubble is None:
             return
         # 完成结果是权威正文；错误和取消提示不混入正文或后续推理上下文。
+        if self._stream_container is not None:
+            self._stream_container.show()
         self._stream_text = text
         if ok and self._stream_text:
+            if isinstance(self._stream_container, TaskStepCard):
+                self._stream_container.finish('已完成', final=True)
             body, code_map = self._render_assistant_body(
-                self._stream_text, self._thinking_text,
+                self._stream_text, '' if isinstance(self._stream_container, TaskStepCard) else self._thinking_text,
+                getattr(self, '_run_sources', {}),
             )
             self._stream_bubble.setText(self._wrap_assistant_html(body))
             self._stream_bubble.setTextFormat(Qt.RichText)
             self._stream_bubble._markdown_source = self._stream_text
-            self._stream_bubble._thinking_source = self._thinking_text
-            if code_map:
-                self._stream_bubble.code_map = code_map
-                self._stream_bubble.linkActivated.connect(self._on_link_activated)
+            self._stream_bubble._thinking_source = ('' if isinstance(self._stream_container, TaskStepCard)
+                                                    else self._thinking_text)
+            self._stream_bubble._search_sources = dict(getattr(self, '_run_sources', {}))
+            self._stream_bubble.code_map = code_map
         elif not ok:
+            if isinstance(self._stream_container, TaskStepCard):
+                self._stream_container.finish('已停止' if cancelled else '未完成', final=True)
             status = "⏹ 已停止生成（未完成）" if cancelled else f"❌ {error or '生成失败，请重试。'}"
             display = f"{text}\n\n{status}" if text else status
             self._stream_bubble.setText(display)
@@ -1525,6 +1576,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
 
         self._scroll_to_bottom()
         self._stream_bubble = None
+        self._stream_container = None
         self._stream_copy_btn = None
         self._stream_regen_btn = None
         self._stream_version_btn = None
@@ -1582,6 +1634,8 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self._stream_versions = snapshots
         active = next((i for i, v in enumerate(snapshots) if v.get("active")), -1)
         self._stream_version_index = active if active >= 0 else (len(snapshots) - 1 if snapshots else -1)
+        current = snapshots[self._stream_version_index] if self._stream_version_index >= 0 else {}
+        regen.setText('重新执行' if current.get('task') else '重新生成')
         regen.setVisible(True)
         self._apply_version_label()
 
@@ -1641,6 +1695,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         menu.exec_(QCursor.pos())
 
     def set_thinking(self, thinking: bool) -> None:
+        self._task_btn.setEnabled(not thinking and config.GENERAL_ASSISTANT_TOOLS_ENABLED)
         self._send_btn.setEnabled(True)
         try:
             self._send_btn.clicked.disconnect()
@@ -1658,12 +1713,42 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         if not thinking:
             self._input.setFocus()
 
+    def set_task_authorization(self, authorization, *, model=None, checking=False):
+        self._task_row.setVisible(self._active_agent.id == 'general_assistant')
+        self._task_btn.setText('工具：本对话已启用' if authorization else '工具：关闭')
+        self._task_btn.setToolTip('授权仅在本对话后续轮次有效；新建或切换对话后关闭。'
+                                 '工具任务使用顶栏所选模型，每次发送前检查工具能力。')
+        if not config.GENERAL_ASSISTANT_TOOLS_ENABLED:
+            self._task_btn.setText('工具：设置中已禁用')
+        self._task_btn.setEnabled(config.GENERAL_ASSISTANT_TOOLS_ENABLED and self._input.isEnabled())
+        if authorization:
+            parts = ['工具模型：' + (model or self._active_model)]
+            if authorization.execution:
+                from ai_desktop.services.execution_context import BashPolicy
+                mode = '全部确认' if authorization.execution.policy == BashPolicy.CONFIRM_ALL else '只读允许列表自动'
+                parts += [Path(authorization.execution.workspace).name or '/', mode]
+            if authorization.search:
+                parts.append({'parallel': 'Parallel', 'exa': 'Exa'}[authorization.search.provider])
+            if checking:
+                parts.append('检查模型中…')
+            self._task_status.setText(' · '.join(parts))
+            self._task_status.setToolTip(authorization.execution.workspace if authorization.execution else '仅联网搜索')
+        self._task_status.setVisible(authorization is not None)
+
     def clear_messages(self) -> None:
+        self._run_sources = {}
+        run_id = self._tool_run_id
+        self.finish_tool_run('已停止')
+        if run_id is not None:
+            self.tool_stop_requested.emit(run_id)
+        self._tool_cards.clear()
+        self._task_model_cards.clear()
         self._stream_timer.stop()
         self._scroll_timer.stop()
         self._user_scrolled_up = False
         self._latest_btn.hide()
         self._stream_bubble = None
+        self._stream_container = None
         self._stream_copy_btn = None
         self._stream_regen_btn = None
         self._stream_version_btn = None
@@ -1682,6 +1767,123 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self.clear_pending_images()
 
     # ── 气泡 ───────────────────────────────────────────
+
+    def begin_tool_run(self, run_id):
+        self.finish_tool_run('已停止')
+        self._tool_run_id = run_id
+        self._run_sources = {}
+
+    def show_task_model_event(self, event):
+        if event.run_id != self._tool_run_id:
+            return
+        identity = (event.run_id, event.step_id, event.request_id)
+        if event.kind == RunEventKind.MODEL_STARTED:
+            if identity in self._task_model_cards:
+                return
+            card = TaskStepCard(event, self._msg_container, label_factory=_SelectableMessageLabel)
+            self._task_model_cards[identity] = card
+            self._stream_container = card
+            self._stream_bubble = card.body
+            self._stream_copy_btn = card.copy
+            self._stream_regen_btn = card.regenerate
+            self._stream_version_btn = card.version
+            self._stream_text = self._stream_buffer = self._thinking_text = self._thinking_buffer = ''
+            self._stream_timer.start()
+            card.regenerate.clicked.connect(self.regenerate_requested.emit)
+            card.version.clicked.connect(self._show_stream_versions)
+            card.body.code_map = {}
+            card.body.read_selection_requested.connect(self.read_selection_requested.emit)
+            card.body.linkActivated.connect(self._on_link_activated)
+            self._insert_widget(card)
+            self._update_bubble_widths()
+        elif event.kind == RunEventKind.MODEL_FINISHED and identity in self._task_model_cards:
+            card = self._task_model_cards[identity]
+            if card.terminal:
+                return
+            self._flush_stream_buffer()
+            try:
+                output = json.loads(event.payload_json).get('output', {})
+            except (ValueError, TypeError):
+                output = {}
+            if isinstance(output, dict):
+                self._stream_text = output.get('content', '')
+                self._thinking_text = output.get('thinking', '')
+                card.body.setText(self._stream_text)
+                card.set_thinking(self._thinking_text)
+            card.finish('已完成' if event.status == 'succeeded' else '未完成')
+
+    def append_task_stream(self, event):
+        card = self._task_model_cards.get((event.run_id, event.step_id, event.request_id))
+        if event.run_id != self._tool_run_id or card is None or card.terminal:
+            return
+        if event.kind.value == 'thinking':
+            self.append_thinking_chunk(event.text)
+        else:
+            self.append_stream_chunk(event.text)
+
+    def show_tool_event(self, event, workspace=''):
+        if self._tool_run_id != event.run_id:
+            return
+        key = (event.run_id, event.local_call_id)
+        if event.kind == RunEventKind.TOOL_STARTED:
+            if key in self._tool_cards:
+                return
+            card = ToolCard(event, workspace, self._msg_container)
+            card.confirmation_decided.connect(self.command_decided.emit)
+            card.stop_requested.connect(self.tool_stop_requested.emit)
+            self._tool_cards[key] = card
+            # Tool steps precede the final streamed answer, rather than
+            # appearing below the answer already created for this run.
+            index = self._msg_layout.count() - 1
+            if self._stream_bubble is not None and not isinstance(self._stream_container, TaskStepCard):
+                for i in range(1, self._msg_layout.count() - 1):
+                    widget = self._msg_layout.itemAt(i).widget()
+                    if widget and widget.isAncestorOf(self._stream_bubble):
+                        index = i
+                        break
+            if self._stream_container is not None and not any((
+                    self._stream_text, self._stream_buffer, self._thinking_text, self._thinking_buffer)):
+                self._stream_container.hide()
+            self._empty_state.hide()
+            self._msg_layout.insertWidget(index, card)
+        elif key in self._tool_cards:
+            card = self._tool_cards[key]
+            if (card.matches(event) and not card.terminal and event.kind == RunEventKind.TOOL_FINISHED
+                    and event.tool_name == 'web_search' and event.output is not None):
+                try:
+                    record = json.loads(event.output.text)
+                except (ValueError, TypeError):
+                    record = None
+                for source in search_sources(record):
+                    self._run_sources.setdefault(source['source_id'],
+                                                 {**source, 'expires_at': time.time() + RETENTION_SECONDS})
+            card.update_event(event)
+        self._scroll_to_bottom()
+
+    def show_command_confirmation(self, request):
+        if self._tool_run_id != request.run_id:
+            return False
+        card = self._tool_cards.get((request.run_id, request.tool_call_id))
+        if card is None:
+            return False
+        accepted = card.bind_confirmation(request)
+        if accepted:
+            self._scroll_to_bottom()
+        return accepted
+
+    def acknowledge_command(self, request, accepted, approved):
+        card = self._tool_cards.get((request.run_id, request.tool_call_id))
+        if card is not None and not card.terminal and card.confirmation == request:
+            card.response_acknowledged(accepted, approved)
+
+    def finish_tool_run(self, status='任务已结束'):
+        for card in self._task_model_cards.values():
+            if card.identity[0] == self._tool_run_id and not card.terminal:
+                card.finish(status)
+        for card in self._tool_cards.values():
+            if card.identity[0] == self._tool_run_id:
+                card.invalidate(status)
+        self._tool_run_id = None
 
     def _make_bubble(
         self, content: str, is_user: bool, is_html: bool = False,
@@ -1714,9 +1916,9 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         lbl.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse)
         lbl.read_selection_requested.connect(self.read_selection_requested.emit)
 
-        if is_html and code_map:
+        if is_html:
             lbl.linkActivated.connect(self._on_link_activated)
-            lbl.code_map = code_map
+            lbl.code_map = code_map or {}
         if markdown_source is not None:
             lbl._markdown_source = markdown_source
             lbl._thinking_source = ""
@@ -2059,10 +2261,32 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
 
     def _on_link_activated(self, url: str) -> None:
         lbl = self.sender()
+        if url.startswith('source://'):
+            self.purge_expired_audit()
+            source = getattr(lbl, '_search_sources', {}).get(url[len('source://'):])
+            if source:
+                open_source_url(source['url'])
+            return
         code_map = getattr(lbl, "code_map", {})
         code = code_map.get(url, "")
         if code:
             self._copy_to_clipboard(code)
+
+    def purge_expired_audit(self):
+        for card in self._task_model_cards.values():
+            card.purge(time.time())
+        for card in self._tool_cards.values():
+            card.purge_expired_payload()
+        for label in self._msg_container.findChildren(QLabel, 'message_bubble'):
+            sources = getattr(label, '_search_sources', {})
+            kept = {key: source for key, source in sources.items()
+                    if source.get('expires_at') is None or source['expires_at'] > time.time()}
+            if len(kept) != len(sources):
+                label._search_sources = kept
+                body, codes = self._render_assistant_body(label._markdown_source,
+                                                         getattr(label, '_thinking_source', ''), kept)
+                label.setText(self._wrap_assistant_html(body))
+                label.code_map = codes
 
     def _owns_window(self, candidate: QWidget | None) -> bool:
         widget = candidate
@@ -2083,6 +2307,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         if (
             self._auto_hide
             and not self._auto_hide_suspended
+            and self._tool_run_id is None
             and self.isVisible()
             and not self.isActiveWindow()
             and not self._has_active_owned_window()
@@ -2093,6 +2318,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         if event.type() == QEvent.ActivationChange:
             if (
                 self._auto_hide_suspended
+                or self._tool_run_id is not None
                 or self.isActiveWindow()
                 or not self._auto_hide
             ):
@@ -2114,5 +2340,9 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
 
     def hideEvent(self, event) -> None:
         self._ollama_timer.stop()
+        if self._tool_run_id is not None:
+            run_id = self._tool_run_id
+            self.finish_tool_run('已停止')
+            self.tool_stop_requested.emit(run_id)
         self.closed.emit()
         super().hideEvent(event)

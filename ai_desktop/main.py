@@ -24,7 +24,9 @@ from ai_desktop.agent_manager import AgentManager
 from ai_desktop.capture.clipboard_monitor import SelectionCaptureTask
 from ai_desktop.capture.screenshot import ScreenshotResult, ScreenshotStatus
 from ai_desktop.config import Agent
-from ai_desktop.llm.events import ChatResult, ErrorCode, ResultStatus, StreamEvent
+from ai_desktop.llm.events import ChatResult, ErrorCode, EventKind, ResultStatus, StreamEvent
+from ai_desktop.llm.run_types import RunEventKind
+from ai_desktop.llm.run_worker import RunWorker
 from ai_desktop.llm.service_checks import (
     AsyncServiceChecks,
     ImageCapability,
@@ -36,11 +38,13 @@ from ai_desktop.llm.service_checks import (
     model_versions_cache_key,
     normalize_service_url,
 )
-from ai_desktop.llm.streaming_worker import StreamingChatWorker
+from ai_desktop.llm.task_checks import TaskChecks
+from ai_desktop.llm.thinking import ThinkMode, cache_thinking, load_cached_thinking
 from ai_desktop.services.action_service import Action, ActionService
 from ai_desktop.services.model_profiles import ModelProfile, ModelProfileManager
 from ai_desktop.services.ocr_service import AsyncOCRService, OCRResult, OCRStatus
 from ai_desktop.services.speech_service import SpeechService
+from ai_desktop.services.task_admission import TaskAuthorization
 from ai_desktop.settings_manager import SettingsManager
 from ai_desktop.ui import styles
 from ai_desktop.ui.agent_editor import AgentDef, AgentEditor
@@ -52,6 +56,7 @@ from ai_desktop.ui.history_dialog import HistoryDialog
 from ai_desktop.ui.menubar_icon import MenuBarIcon
 from ai_desktop.ui.result_bubble import ResultBubble
 from ai_desktop.ui.settings_dialog import SettingsDialog
+from ai_desktop.ui.task_dialog import TaskDialog
 from ai_desktop.utils import logging as log_util
 from ai_desktop.utils.permissions import PermissionStatus
 from ai_desktop.utils.storage import (
@@ -166,9 +171,17 @@ class ChatController(QObject):
         self._convo_id: int = 0
         self._messages: list[Message] = []
         self._restore_last: bool = True  # 首次打开自动恢复上次对话
-        self._worker: Optional[StreamingChatWorker] = None
+        self._worker: Optional[RunWorker] = None
+        self._task_authorization: TaskAuthorization | None = None
+        self._task_epoch = 0
+        self._pending_task = None
+        self._model_prepare_timer = QTimer(self)
+        self._model_prepare_timer.setSingleShot(True)
+        self._model_prepare_timer.timeout.connect(lambda: self._resume_pending_model(timed_out=True))
+        self._task_checks = TaskChecks(self)
+        self._task_checks.completed.connect(self._on_task_checked)
         self._regenerating_user_id: int = 0
-        self._stale_workers: list[StreamingChatWorker] = []
+        self._stale_workers: list[RunWorker] = []
         self._response_text = ""
         self._dialog: Optional[ChatDialog] = None
         self._chat_geometry = get_setting("chat_window_geometry")
@@ -516,6 +529,7 @@ class ChatController(QObject):
             self._dialog.close_ocr_preview(image_path)
 
     def _on_dialog_closed(self) -> None:
+        self._cancel_pending_task()
         self._on_ocr_cancel_requested()
 
     @staticmethod
@@ -748,8 +762,12 @@ class ChatController(QObject):
             self._dialog.new_convo_requested.connect(self._new_conversation)
             self._dialog.history_requested.connect(self._on_history_requested)
             self._dialog.export_requested.connect(self._on_export_requested)
+            self._dialog.run_history_requested.connect(self._on_run_history_requested)
+            self._dialog.task_settings_requested.connect(self._on_task_settings_requested)
             self._dialog.manage_agents_requested.connect(self._on_manage_agents)
             self._dialog.stop_requested.connect(self._on_stop_requested)
+            self._dialog.command_decided.connect(self._on_command_decided)
+            self._dialog.tool_stop_requested.connect(self._on_tool_stop_requested)
             self._dialog.agent_changed.connect(self._on_agent_changed)
             self._dialog.model_changed.connect(self._on_model_changed)
             self._dialog.service_check_requested.connect(self._refresh_model_list)
@@ -874,26 +892,9 @@ class ChatController(QObject):
     @_safe_slot
     def _on_settings_requested(self) -> None:
         """打开设置面板"""
-        current = {
-            "base_url": config.OLLAMA_BASE_URL,
-            "think": config.OLLAMA_THINK,
-            "timeout": config.OLLAMA_TIMEOUT,
-            "num_ctx": config.OLLAMA_NUM_CTX,
-            "num_predict": config.OLLAMA_NUM_PREDICT,
-            "temperature": config.OLLAMA_TEMPERATURE,
-            "top_p": config.OLLAMA_TOP_P,
-            "top_k": config.OLLAMA_TOP_K,
-            "repeat_penalty": config.OLLAMA_REPEAT_PENALTY,
-            "max_rounds": config.OLLAMA_MAX_ROUNDS,
-            "hotkey": config.HOTKEY,
-            "quick_actions": config.QUICK_ACTIONS_ENABLED,
-            "desktop_pet": config.DESKTOP_PET_ENABLED,
-            "pet_reduce_motion": config.DESKTOP_PET_REDUCE_MOTION,
-            "pet_size": config.DESKTOP_PET_SIZE,
-            "pet_source": config.PET_SOURCE,
-            "pet_name": config.PET_NAME,
-        }
-        dlg = SettingsDialog(current, parent=self._dialog)
+        current = self._settings.current()
+        dlg = SettingsDialog(current, parent=self._dialog, model=self._model,
+                             model_version=self._model_versions.get(self._model, ""))
         dlg.settings_applied.connect(self._on_settings_applied)
         dlg.exec_()
 
@@ -901,6 +902,12 @@ class ChatController(QObject):
     def _on_settings_applied(self, data: dict) -> None:
         """应用设置变更"""
         changed = self._settings.apply(data)
+        if changed:
+            self._cancel_pending_model()
+        if set(changed) & {'base_url', 'execution_workspace', 'bash_policy', 'execution_path', 'task_tools_enabled',
+                           'task_max_model_rounds', 'task_max_tool_calls', 'task_max_search_calls',
+                           'search_provider', 'search_max_results', 'search_timeout', 'search_parallel_mode'}:
+            self._clear_task_authorization()
         if "hotkey" in changed:
             try:
                 self.hotkey.reregister(config.HOTKEY, self._on_global_hotkey)
@@ -956,7 +963,9 @@ class ChatController(QObject):
 
     @_safe_slot
     def _on_agent_changed(self, agent: Agent) -> None:
+        self._clear_task_authorization()
         self._active_agent = self._agent_mgr.switch(agent)
+        self._sync_action_context()
         self._tray.set_active_agent(self._active_agent)
         self._update_model_profile_summary()
         logger.info("Agent switched: %s", self._active_agent.name)
@@ -973,6 +982,7 @@ class ChatController(QObject):
             self._active_agent.id,
             visible_agent.id,
         )
+        self._clear_task_authorization()
         self._active_agent = self._agent_mgr.switch(visible_agent)
         self._tray.set_active_agent(self._active_agent)
         self._update_model_profile_summary()
@@ -981,14 +991,22 @@ class ChatController(QObject):
     @_safe_slot
     def _on_tray_agent(self, agent: Agent) -> None:
         """菜单栏切换 Agent"""
+        self._clear_task_authorization()
         self._active_agent = self._agent_mgr.switch(agent)
         if self._dialog:
             self._dialog.set_active_agent(self._active_agent)
+            self._sync_action_context()
         self._tray.set_active_agent(self._active_agent)
         self._update_model_profile_summary()
         logger.info("Agent switched via tray: %s", self._active_agent.name)
 
     def _on_model_changed(self, model: str) -> None:
+        if model != self._model:
+            if self._worker is not None and self._worker.context.tools:
+                self._stop_worker()
+            self._cancel_pending_task()
+            self._task_epoch += 1
+        self._cancel_pending_model()
         self._model = model
         save_setting("last_model", model)
         self._service_checks.cancel_model_capability()
@@ -997,6 +1015,7 @@ class ChatController(QObject):
         if self._service_state == ServiceState.ONLINE:
             self._refresh_model_capability()
         self._update_model_profile_summary()
+        self._sync_action_context()
         logger.info("Model switched: %s", model)
 
     @_safe_slot
@@ -1085,6 +1104,8 @@ class ChatController(QObject):
             agent_profile_id=(agent or self._active_agent).profile_id,
             action_profile_id=action_profile_id,
             available_models=available_models,
+            thinking_capability=lambda model: load_cached_thinking(
+                config.OLLAMA_BASE_URL, model, self._model_versions.get(model, "")),
         )
 
     def _update_model_profile_summary(self) -> None:
@@ -1142,6 +1163,8 @@ class ChatController(QObject):
             return
         self._capability_check = None
         self._image_capability = result.capability
+        cache_thinking(result.base_url, result.model, result.version, result.thinking)
+        self._update_model_profile_summary()
         if not result.error:
             save_setting(
                 model_capability_cache_key(
@@ -1159,6 +1182,7 @@ class ChatController(QObject):
                 result.model,
                 result.error,
             )
+        self._resume_pending_model()
 
     @_safe_slot
     def _on_service_checked(self, result: ServiceCheckResult) -> None:
@@ -1205,6 +1229,7 @@ class ChatController(QObject):
         if self._startup_service_check == (result.sequence, result.base_url):
             self._startup_service_check = None
             self._show_startup_service_notice(result)
+        self._resume_pending_model()
 
     def start_background_checks(self) -> None:
         """Show first-run guidance and schedule startup network checks."""
@@ -1282,6 +1307,7 @@ class ChatController(QObject):
     @_safe_slot
     def _new_conversation(self) -> None:
         self._stop_worker(show_cancelled=False)
+        self._clear_task_authorization()
         self._sync_active_agent_from_dialog()
         self._regenerating_user_id = 0
         self._convo_id = 0
@@ -1294,31 +1320,39 @@ class ChatController(QObject):
     def _sync_action_context(self) -> None:
         if self._dialog:
             self._dialog.set_action_context(self._convo_id != 0, self._action_mode)
+            self._dialog.set_task_authorization(self._task_authorization, model=self._model)
 
     # ── 工作线程管理 ───────────────────────────────────
 
     def _stop_worker(self, *, show_cancelled: bool = True) -> None:
         """Invalidate callbacks and restore the UI before asynchronous cancellation."""
+        self._cancel_pending_task()
         worker = self._worker
         if worker is None:
             return
         if self._regenerating_user_id:
+            current = worker.current_request
             self._record_attempt_outcome(
-                ChatResult(worker.request.request_id, ResultStatus.CANCELLED)
+                ChatResult(current.request_id, ResultStatus.CANCELLED,
+                           run_id=current.run_id, step_id=current.step_id,
+                           conversation_id=current.conversation_id)
             )
             self._regenerating_user_id = 0
         self._worker = None
+        if getattr(worker, '_audit_recorder', None) is not None:
+            worker._audit_recorder.cancelling()
         worker.cancel()
         self._retire_worker(worker)
         self.float_btn.set_responding(False)
         if self._dialog:
+            self._dialog.finish_tool_run('已停止')
             self._dialog.set_thinking(False)
             if show_cancelled:
                 self._dialog.finalize_assistant_stream(self._response_text, False, cancelled=True)
 
-    def _on_worker_finished(self) -> None:
+    def _on_worker_finished(self, worker: RunWorker) -> None:
         """Keep the QThread alive until finished, then release it on the UI thread."""
-        worker = self.sender()
+        worker._finished_observed = True
         if worker is self._worker:
             return  # Result handling will retire it after updating the UI.
         if worker in self._stale_workers:
@@ -1326,10 +1360,13 @@ class ChatController(QObject):
         worker.deleteLater()
         self._finish_stop_if_ready()
 
-    def _retire_worker(self, worker: StreamingChatWorker) -> None:
-        if worker.isFinished():
+    def _retire_worker(self, worker: RunWorker) -> None:
+        # isFinished() can become true before its queued finished callback is
+        # delivered. Deleting here would leave that callback with a stale Qt
+        # sender pointer (a native SIP crash on macOS).
+        if getattr(worker, '_finished_observed', False):
             worker.deleteLater()
-        else:
+        elif worker not in self._stale_workers:
             self._stale_workers.append(worker)
 
     # ── 对话历史 ───────────────────────────────────────
@@ -1351,6 +1388,7 @@ class ChatController(QObject):
                 return
             # 停止当前 worker
             self._stop_worker(show_cancelled=False)
+            self._clear_task_authorization()
             self._regenerating_user_id = 0
             # 恢复对话状态
             self._convo_id = conv.id
@@ -1377,6 +1415,7 @@ class ChatController(QObject):
         if convo_id != self._convo_id:
             return
         self._stop_worker(show_cancelled=False)
+        self._clear_task_authorization()
         self._regenerating_user_id = 0
         self._convo_id = 0
         self._messages = []
@@ -1395,9 +1434,11 @@ class ChatController(QObject):
         md = "# AI 桌面助手 · 对话记录\n\n"
         md += f"**{self._active_agent.icon} {self._active_agent.name}**\n\n"
         md += "---\n\n"
-        for m in self._messages:
+        for m in self._context_messages(self._messages):
             role = "**用户**" if m.role == "user" else "**助手**"
             md += f"{role}: {m.content}\n\n"
+        from ai_desktop.services.audit_store import export_markdown
+        md += export_markdown(self._convo_id)
         try:
             QApplication.clipboard().setText(md)
         except Exception:
@@ -1405,6 +1446,170 @@ class ChatController(QObject):
         if self._dialog:
             self._dialog.flash_export_btn()
         logger.info("Exported %d messages to clipboard", len(self._messages))
+
+    @_safe_slot
+    def _on_run_history_requested(self):
+        if self._dialog:
+            self._dialog.purge_expired_audit()
+        from ai_desktop.ui.run_history_dialog import RunHistoryDialog
+        dialog = RunHistoryDialog(self._convo_id, self._dialog)
+        dialog.exec_()
+
+    def _clear_task_authorization(self):
+        self._task_epoch += 1
+        self._cancel_pending_task()
+        self._task_authorization = None
+        if self._dialog:
+            self._dialog.set_task_authorization(None)
+
+    def _cancel_pending_task(self):
+        pending, self._pending_task = self._pending_task, None
+        self._model_prepare_timer.stop()
+        self._task_checks.cancel()
+        if pending is None:
+            return
+        from ai_desktop.utils import storage
+        if self._dialog:
+            self._dialog.set_thinking(False)
+            self._dialog.set_task_authorization(self._task_authorization, model=self._model)
+            if not pending['regenerate']:
+                self._dialog.restore_draft(pending['text'], list(pending['images']))
+                retry_action = pending.get('kwargs', {}).get('retry_action_id')
+                if retry_action:
+                    self._action_mode = pending['kwargs']['retry_action_mode']
+                    self._sync_action_context()
+                    self._dialog.show_actions(pending['text'], retry_action)
+        storage.release_attachment_paths(pending['retained'])
+
+    def _cancel_pending_model(self):
+        if self._pending_task and self._pending_task.get('kind') == 'model':
+            self._cancel_pending_task()
+
+    def _should_prepare_model(self, resolved):
+        checking = (self._capability_check is not None or
+                    self._service_state == ServiceState.CHECKING and self._service_check_sequence > 0)
+        capability = load_cached_thinking(config.OLLAMA_BASE_URL, resolved.model,
+                                          self._model_versions.get(resolved.model, ''))
+        return (checking and resolved.model == self._model and not capability.known
+                and resolved.think_setting.mode != ThinkMode.MODEL_DEFAULT)
+
+    def _begin_model_prepare(self, text, images, resolved, kwargs=None, *, regenerate=0):
+        from ai_desktop.utils import storage
+        self._pending_task = {'kind': 'model', 'text': text, 'images': tuple(images),
+                              'retained': storage.retain_attachment_paths(images), 'regenerate': regenerate,
+                              'resolved': resolved, 'kwargs': kwargs or {}, 'conversation_id': self._convo_id,
+                              'model': self._model, 'agent_id': self._active_agent.id,
+                              'base_url': config.OLLAMA_BASE_URL, 'epoch': self._task_epoch}
+        if self._dialog:
+            self._dialog.set_thinking(True)
+        self._model_prepare_timer.start(6000)
+
+    def _resume_pending_model(self, *, timed_out=False):
+        pending = self._pending_task
+        if pending is None or pending.get('kind') != 'model':
+            return
+        if (self._stopping or self._worker is not None or self._convo_id != pending['conversation_id']
+                or self._active_agent.id != pending['agent_id'] or self._model != pending['model']
+                or config.OLLAMA_BASE_URL != pending['base_url'] or self._task_epoch != pending['epoch']):
+            self._cancel_pending_task()
+            return
+        checking = (self._service_state == ServiceState.CHECKING and self._service_check_sequence > 0
+                    or self._capability_check is not None)
+        if checking and not timed_out:
+            return
+        if checking or self._service_state in {ServiceState.EMPTY, ServiceState.INVALID, ServiceState.OFFLINE}:
+            self._cancel_pending_task()
+            self._show_notice(QMessageBox.Warning, '模型检查未完成',
+                              '未发送请求，草稿已保留。请检查模型服务后重试。')
+            return
+        capability = load_cached_thinking(config.OLLAMA_BASE_URL, pending['resolved'].model,
+                                          self._model_versions.get(pending['resolved'].model, ''))
+        prepared = pending['resolved'].for_model(pending['resolved'].model, capability)
+        self._pending_task = None
+        self._model_prepare_timer.stop()
+        from ai_desktop.utils import storage
+        try:
+            if self._dialog:
+                self._dialog.set_thinking(False)
+            if pending['regenerate']:
+                user = next((msg for msg in self._messages if msg.id == pending['regenerate']), None)
+                if user:
+                    self._start_regeneration(user, prepared_config=prepared)
+            else:
+                self._on_user_message(pending['text'], list(pending['images']),
+                                      prepared_config=prepared, **pending['kwargs'])
+        finally:
+            storage.release_attachment_paths(pending['retained'])
+
+    @_safe_slot
+    def _on_task_settings_requested(self):
+        if self._worker is not None or self._pending_task is not None:
+            return
+        agent = self._sync_active_agent_from_dialog()
+        if agent.id != 'general_assistant':
+            return
+        if not config.GENERAL_ASSISTANT_TOOLS_ENABLED:
+            self._show_notice(QMessageBox.Warning, '工具已禁用', '请在设置 → 工具执行中允许通用助手启用工具。')
+            return
+        from ai_desktop.services.audit_store import list_runs
+        runs = list_runs(self._convo_id) if self._convo_id else []
+        hint = next((run['config']['execution']['workspace'] for run in runs
+                     if run['config'].get('execution')), '')
+        dialog = TaskDialog(self._task_authorization, workspace_hint=hint, model=self._model, parent=self._dialog)
+        conversation_id = self._convo_id
+        epoch = self._task_epoch
+        selected_model = self._model
+        if dialog.exec_() != dialog.Accepted:
+            return
+        if (self._convo_id != conversation_id or self._active_agent.id != agent.id or self._stopping
+                or self._task_epoch != epoch or self._model != selected_model):
+            return
+        self._task_authorization = dialog.authorization
+        self._task_epoch += 1
+        self._sync_action_context()
+
+    def _begin_task_check(self, text, images, *, regenerate=False):
+        from ai_desktop.utils import storage
+        pending = {'text': text, 'images': tuple(images), 'regenerate': regenerate,
+                   'conversation_id': self._convo_id, 'authorization': self._task_authorization,
+                   'base_url': config.OLLAMA_BASE_URL, 'model': self._model,
+                   'retained': storage.retain_attachment_paths(images)}
+        self._pending_task = pending
+        if self._dialog:
+            self._dialog.set_thinking(True)
+            self._dialog.set_task_authorization(self._task_authorization, model=self._model, checking=True)
+        pending['sequence'] = self._task_checks.check(config.OLLAMA_BASE_URL, self._model)
+
+    @_safe_slot
+    def _on_task_checked(self, sequence, admission, error):
+        pending = self._pending_task
+        if pending is None or pending.get('kind') == 'model' or pending['sequence'] != sequence:
+            return
+        if (self._stopping or self._convo_id != pending['conversation_id'] or self._worker is not None
+                or self._active_agent.id != 'general_assistant'
+                or self._task_authorization is not pending['authorization']
+                or config.OLLAMA_BASE_URL != pending['base_url'] or self._model != pending['model']):
+            self._cancel_pending_task()
+            return
+        self._pending_task = None
+        from ai_desktop.utils import storage
+        try:
+            if self._dialog:
+                self._dialog.set_thinking(False)
+                self._dialog.set_task_authorization(self._task_authorization, model=self._model)
+            if error:
+                if self._dialog and not pending['regenerate']:
+                    self._dialog.restore_draft(pending['text'], list(pending['images']))
+                self._show_notice(QMessageBox.Warning, '工具任务未启动', error)
+                return
+            if pending['regenerate']:
+                user = next((message for message in self._messages if message.id == pending['regenerate']), None)
+                if user:
+                    self._start_regeneration(user, task_admission=admission)
+            else:
+                self._on_user_message(pending['text'], list(pending['images']), task_admission=admission)
+        finally:
+            storage.release_attachment_paths(pending['retained'])
 
     @_safe_slot
     def _on_manage_agents(self) -> None:
@@ -1422,6 +1627,7 @@ class ChatController(QObject):
             profiles=self._profile_mgr.profiles,
             models=self._load_cached_models(config.OLLAMA_BASE_URL),
             actions=self._action_service.actions,
+            global_model=self._model, base_url=config.OLLAMA_BASE_URL, model_versions=self._model_versions,
         )
         editor.agents_saved.connect(self._on_custom_agents_saved)
         editor.profiles_saved.connect(self._on_profiles_saved)
@@ -1435,6 +1641,7 @@ class ChatController(QObject):
     @_safe_slot
     def _on_custom_agents_saved(self, data: list[dict]) -> None:
         """自定义 Agent 保存后刷新"""
+        self._cancel_pending_model()
         self._agent_mgr.save_custom(data)
         self._all_agents = self._agent_mgr.all_agents
         self._custom_agents = self._agent_mgr.custom_agents
@@ -1448,6 +1655,7 @@ class ChatController(QObject):
 
     @_safe_slot
     def _on_profiles_saved(self, profiles: list[ModelProfile]) -> None:
+        self._cancel_pending_model()
         self._profile_mgr.replace_all(profiles)
         self._action_service.reload()
         self._agent_mgr.refresh_profile_assignments()
@@ -1462,6 +1670,7 @@ class ChatController(QObject):
 
     @_safe_slot
     def _on_actions_saved(self, actions: list[Action]) -> None:
+        self._cancel_pending_model()
         self._action_service.replace_all(actions)
         if self._dialog:
             self._dialog.refresh_actions(self._action_service.visible_actions)
@@ -1480,6 +1689,7 @@ class ChatController(QObject):
 
     @_safe_slot
     def _on_agent_profile_changed(self, agent_id: str, profile_id: str | None) -> None:
+        self._cancel_pending_model()
         self._agent_mgr.assign_profile(agent_id, profile_id)
         self._all_agents = self._agent_mgr.all_agents
         self._custom_agents = self._agent_mgr.custom_agents
@@ -1549,7 +1759,8 @@ class ChatController(QObject):
 
     def _version_snapshots(self, user_message_id: int) -> list[dict]:
         return [
-            {"id": version.id, "answer": version.answer, "active": version.active}
+            {"id": version.id, "answer": version.answer, "active": version.active,
+             "task": bool(version.config_snapshot.get('allowed_tools'))}
             for version in list_generations(user_message_id)
             if version.status == "succeeded" and version.answer
         ]
@@ -1579,32 +1790,81 @@ class ChatController(QObject):
 
     @_safe_slot
     def _on_regenerate_requested(self) -> None:
-        if self._worker is not None:
+        if (self._worker is not None or self._pending_task is not None
+                or any(worker.context.tools and worker.isRunning() for worker in self._stale_workers)):
             if self._dialog:
                 self._dialog.flash_busy()
             return
         user_message, assistant_message = self._latest_user_turn()
         if user_message is None or assistant_message is None:
             return
+        source = get_active_generation(user_message.id)
+        if source and source.config_snapshot.get('allowed_tools'):
+            if self._task_authorization is None or self._active_agent.id != 'general_assistant':
+                self._show_notice(QMessageBox.Warning, '请先启用工具', '重新执行任务前，请在输入区检查并启用工具授权。')
+                return
+            if QMessageBox.question(self._dialog, '重新执行任务',
+                                    '这将创建新任务，并可能再次运行命令或产生搜索费用。是否继续？') != QMessageBox.Yes:
+                return
+            self._begin_task_check(user_message.content, user_message.images, regenerate=user_message.id)
+            return
         self._start_regeneration(user_message)
 
-    def _start_regeneration(self, user_message: Message) -> None:
+    def _start_regeneration(self, user_message: Message, *, task_admission=None, prepared_config=None) -> None:
         """Retry the latest user turn without duplicating the stored question."""
+        versions = list_generations(user_message.id)
+        source = next((version for version in versions if version.active), versions[-1] if versions else None)
+        snapshot = source.config_snapshot if source else {}
+        origin = "action" if snapshot.get("origin") == "action" else "chat"
+        request_agent = self._active_agent
+        system_prompt = request_agent.system_prompt
+        action_profile_id = None
+        if origin == 'action':
+            try:
+                plan = self._action_service.build_request_plan(
+                    snapshot.get('action_id'), user_message.content, self._all_agents,
+                )
+            except (LookupError, ValueError) as exc:
+                self._show_notice(QMessageBox.Warning, '无法重新执行快捷动作', html.escape(str(exc)))
+                return
+            request_agent = plan.agent
+            system_prompt = plan.system_prompt
+            action_profile_id = plan.action_profile_id
+            if plan.warnings:
+                self._show_notice(QMessageBox.Warning, '快捷动作已回退',
+                                  '<br>'.join(html.escape(warning) for warning in plan.warnings))
+        resolved = prepared_config or self._resolve_model_config(action_profile_id, request_agent)
+        task_kwargs = {}
+        if snapshot.get('allowed_tools'):
+            try:
+                if self._task_authorization is None:
+                    raise ValueError('请先在输入区启用工具授权。')
+                task_kwargs = self._task_authorization.worker_kwargs(task_admission, config.OLLAMA_BASE_URL,
+                                                                   agent_id=self._active_agent.id, origin=origin,
+                                                                   model=self._model)
+            except ValueError as exc:
+                self._show_notice(QMessageBox.Warning, '工具任务未启动', str(exc))
+                return
+        if not task_kwargs and prepared_config is None and self._should_prepare_model(resolved):
+            self._begin_model_prepare(user_message.content, user_message.images, resolved, regenerate=user_message.id)
+            return
         images = list(user_message.images or [])
-        image_capability = self._image_capability_for_model(self._model)
+        image_capability = ((ImageCapability.SUPPORTED if task_admission.vision_supported else
+                             ImageCapability.UNSUPPORTED)
+                            if task_kwargs else self._image_capability_for_model(resolved.model))
         if images and image_capability == ImageCapability.UNSUPPORTED:
             if self._dialog:
                 self._dialog.focus_model_selector()
             self._show_notice(
                 QMessageBox.Warning,
                 "当前模型不支持图片",
-                f"模型 {html.escape(self._model)} 已声明不支持图片输入。"
+                f"模型 {html.escape(task_kwargs['model'] if task_kwargs else resolved.model)} 已声明不支持图片输入。"
                 "请选择显示“图片 ✓”的模型后重试。",
             )
             return
         if images and image_capability == ImageCapability.UNKNOWN:
             if self._dialog and not self._dialog.confirm_unknown_image_capability(
-                self._model
+                task_kwargs['model'] if task_kwargs else resolved.model
             ):
                 return
         recent = list(self._messages)
@@ -1621,7 +1881,6 @@ class ChatController(QObject):
         max_msgs = config.OLLAMA_MAX_ROUNDS * 2
         if len(context) > max_msgs:
             context = context[-max_msgs:]
-        resolved = self._resolve_model_config(None, self._active_agent)
         if resolved.warnings:
             self._show_notice(
                 QMessageBox.Warning,
@@ -1630,11 +1889,16 @@ class ChatController(QObject):
             )
         self._response_text = ""
         try:
-            worker = StreamingChatWorker(
-                context, self._active_agent.system_prompt, resolved.model, self,
-                conversation_id=self._convo_id, agent_id=self._active_agent.id,
-                think=resolved.think, options=resolved.options,
+            worker_options = {'model': resolved.model, 'think': resolved.think, 'think_setting': resolved.think_setting,
+                              'think_source': resolved.think_source, 'options': resolved.options}
+            worker_options.update(task_kwargs)
+            worker = RunWorker(
+                context, system_prompt, parent=self,
+                conversation_id=self._convo_id, agent_id=request_agent.id,
+                origin=origin, action_id=snapshot.get("action_id") if origin == "action" else None,
+                **worker_options,
             )
+            worker._task_admission = task_admission if task_kwargs else None
         except Exception:
             logger.exception("Failed to start regeneration")
             if self._dialog:
@@ -1643,9 +1907,11 @@ class ChatController(QObject):
         worker.thinking_event.connect(self._on_thinking_event)
         worker.content_event.connect(self._on_stream_event)
         worker.done.connect(self._on_stream_done)
-        worker.finished.connect(self._on_worker_finished)
+        worker.finished.connect(lambda worker=worker: self._on_worker_finished(worker), Qt.QueuedConnection)
+        self._connect_tool_feedback(worker)
         if self._dialog:
-            self._dialog.begin_assistant_stream()
+            if not worker.context.tools:
+                self._dialog.begin_assistant_stream()
             self._dialog.set_thinking(True)
         self._worker = worker
         self._regenerating_user_id = user_message.id
@@ -1669,30 +1935,23 @@ class ChatController(QObject):
                 versions = []
             regen_available = assistant_message is not None
             if versions:
-                active_id = next(
-                    (item["id"] for item in versions if item.get("active")), None,
-                )
-                if active_id is not None and assistant_message is not None:
-                    for message in self._messages:
-                        if message.id == assistant_message.id:
-                            active_answer = next(
-                                (item["answer"] for item in versions if item["id"] == active_id),
-                                message.content,
-                            )
-                            message.content = active_answer
-                            break
                 version_index = next(
                     (index for index, item in enumerate(versions) if item.get("active")),
                     len(versions) - 1,
                 )
-        for message in self._messages:
+        from ai_desktop.services.audit_store import cleanup
+        cleanup()
+        pending_user = None
+        for message in self._context_messages(self._messages):
             if message.role == "user":
+                pending_user = message.id
                 self._dialog.add_user_message(
                     message.content,
                     images=message.images,
                     missing_images=message.missing_images,
                 )
             elif message.role == "assistant":
+                selected = get_active_generation(pending_user) if pending_user is not None else None
                 is_latest = (
                     assistant_message is not None and message.id == assistant_message.id
                 )
@@ -1701,6 +1960,9 @@ class ChatController(QObject):
                     versions=versions if is_latest else None,
                     version_index=version_index if is_latest else -1,
                     regen_available=regen_available and is_latest,
+                    sources=self._stored_sources(message_id=message.id,
+                                                 generation_id=selected.id if selected else None,
+                                                 cleanup_first=False),
                 )
 
     @_safe_slot
@@ -1757,12 +2019,17 @@ class ChatController(QObject):
             ):
                 message.content = selected.answer
         if self._dialog and not self._dialog.show_generation(
-            selected.id, selected.answer
+            selected.id, selected.answer, sources=self._stored_sources(generation_id=selected.id)
         ):
             self._render_messages()
         else:
             self._refresh_regenerate_state()
         logger.info("Answer version switched to generation %d", selected.id)
+
+    @staticmethod
+    def _stored_sources(*, message_id=None, generation_id=None, cleanup_first=True):
+        from ai_desktop.services.audit_store import sources_for_message
+        return sources_for_message(message_id, generation_id=generation_id, cleanup_first=cleanup_first)
 
     @_safe_slot
     def _on_action_requested(
@@ -1777,7 +2044,7 @@ class ChatController(QObject):
         self._action_mode = mode
         save_setting("action_conversation_mode", mode)
         self._sync_action_context()
-        if self._worker is not None:
+        if self._worker is not None or self._pending_task is not None:
             if self._dialog:
                 self._dialog.set_input_text(material)
                 self._dialog.show_actions(material, action_id)
@@ -1904,23 +2171,57 @@ class ChatController(QObject):
         retry_action_id: str | None = None,
         retry_action_mode: str = "new",
         request_agent: Agent | None = None,
+        task_admission=None,
+        prepared_config=None,
     ) -> None:
         images = images or []
         if self._stopping or self._stopped:
             return
-        if self._worker is not None:
+        if self._worker is not None or self._pending_task is not None:
             if self._dialog:
                 self._dialog.restore_draft(text, images)
                 self._dialog.flash_busy()
             return
         self._result_bubble.hide()
         request_agent = request_agent or self._sync_active_agent_from_dialog()
-        resolved = self._resolve_model_config(action_profile_id, request_agent)
-        image_capability = self._image_capability_for_model(resolved.model)
+        if any(worker.context.tools and worker.isRunning() for worker in self._stale_workers):
+            if self._dialog:
+                self._dialog.restore_draft(text, images)
+            self._show_notice(QMessageBox.Warning, '上一任务正在停止', '请等待执行进程退出后再发送。')
+            return
+        task = self._task_authorization if not retry_action_id and request_agent.id == 'general_assistant' else None
+        if task is not None and task_admission is None:
+            self._begin_task_check(text, images)
+            return
+        task_kwargs = {}
+        if task_admission is not None:
+            try:
+                if task is None:
+                    raise ValueError('工具授权已关闭，请重新启用后发送。')
+                task_kwargs = task.worker_kwargs(task_admission, config.OLLAMA_BASE_URL,
+                                                 agent_id=request_agent.id, origin='chat', model=self._model)
+            except ValueError as exc:
+                if self._dialog:
+                    self._dialog.restore_draft(text, images)
+                self._show_notice(QMessageBox.Warning, '工具任务未启动', str(exc))
+                return
+        resolved = prepared_config or self._resolve_model_config(action_profile_id, request_agent)
+        if not task_kwargs and prepared_config is None and self._should_prepare_model(resolved):
+            self._begin_model_prepare(text, images, resolved, {
+                'system_prompt': system_prompt, 'action_profile_id': action_profile_id,
+                'retry_action_id': retry_action_id, 'retry_action_mode': retry_action_mode,
+                'request_agent': request_agent,
+            })
+            return
+        if task_kwargs:
+            resolved = replace(resolved, model=task_kwargs['model'], think=task_kwargs['think'], warnings=())
+        image_capability = ((ImageCapability.SUPPORTED if task_admission.vision_supported else
+                             ImageCapability.UNSUPPORTED)
+                            if task_kwargs else self._image_capability_for_model(resolved.model))
         if (
             images
             and image_capability == ImageCapability.UNSUPPORTED
-            and resolved.model != self._model
+            and resolved.model != self._model and not task_kwargs
         ):
             inherited_capability = self._image_capability_for_model(self._model)
             if inherited_capability != ImageCapability.UNSUPPORTED:
@@ -1928,9 +2229,10 @@ class ChatController(QObject):
                     f"配置模型 {resolved.model} 不支持图片，"
                     f"本次已继承全局模型 {self._model}。"
                 )
+                resolved = resolved.for_model(self._model, load_cached_thinking(
+                    config.OLLAMA_BASE_URL, self._model, self._model_versions.get(self._model, "")))
                 resolved = replace(
                     resolved,
-                    model=self._model,
                     warnings=resolved.warnings + (warning,),
                 )
                 image_capability = inherited_capability
@@ -1987,18 +2289,25 @@ class ChatController(QObject):
             )
 
             self._response_text = ""
-            worker = StreamingChatWorker(
-                recent, system_prompt or request_agent.system_prompt, resolved.model, self,
+            worker_options = {'model': resolved.model, 'think': resolved.think, 'think_setting': resolved.think_setting,
+                              'think_source': resolved.think_source, 'options': resolved.options}
+            worker_options.update(task_kwargs)
+            worker = RunWorker(
+                recent, system_prompt or request_agent.system_prompt, parent=self,
                 conversation_id=self._convo_id, agent_id=request_agent.id,
-                think=resolved.think, options=resolved.options,
+                origin="action" if retry_action_id else "chat", action_id=retry_action_id,
+                **worker_options,
             )
+            worker._task_admission = task_admission if task_kwargs else None
             worker.thinking_event.connect(self._on_thinking_event)
             worker.content_event.connect(self._on_stream_event)
             worker.done.connect(self._on_stream_done)
-            worker.finished.connect(self._on_worker_finished)
+            worker.finished.connect(lambda worker=worker: self._on_worker_finished(worker), Qt.QueuedConnection)
+            self._connect_tool_feedback(worker)
             if self._dialog:
                 self._dialog.add_user_message(text, images=user_msg.images)
-                self._dialog.begin_assistant_stream()
+                if not worker.context.tools:
+                    self._dialog.begin_assistant_stream()
                 self._dialog.set_thinking(True)
             self._worker = worker
             worker.start()
@@ -2051,30 +2360,127 @@ class ChatController(QObject):
     @_safe_slot
     def _on_thinking_event(self, event: StreamEvent) -> None:
         worker = self._worker
-        if worker is None or event.request_id != worker.request.request_id:
+        if worker is not None and worker.context.tools:
+            self._task_stream_event(worker, event)
+            return
+        if worker is None or not worker.accept_event(event):
             return
         if self._dialog:
             self._dialog.append_thinking_chunk(event.text)
 
+    def _connect_tool_feedback(self, worker):
+        if self._dialog:
+            self._dialog.purge_expired_audit()
+        from ai_desktop.services.run_audit import RunAudit
+        audit = RunAudit(worker.context, self._last_request_user_id(worker), self,
+                         admission=getattr(worker, '_task_admission', None))
+        worker._audit_recorder = audit
+        audit.failed.connect(self._on_audit_failed)
+        worker.run_event.connect(audit.observe)
+        worker.done.connect(audit.complete)
+        worker.finished.connect(audit.deleteLater)
+        worker.run_event.connect(lambda event, worker=worker: self._on_run_event(event, worker), Qt.QueuedConnection)
+        worker.confirmation_requested.connect(
+            lambda request, worker=worker: self._on_command_confirmation(request, worker), Qt.QueuedConnection)
+        if worker.context.tools and self._dialog:
+            self._dialog.begin_tool_run(worker.request.run_id)
+
+    def _on_audit_failed(self, run_id):
+        if self._worker is not None and self._worker.request.run_id == run_id:
+            self._stop_worker()
+            self._show_notice(QMessageBox.Warning, '运行记录保存失败', '任务已停止，请检查本地磁盘和数据库状态。')
+
+    @_safe_slot
+    def _on_run_event(self, event, source_worker):
+        worker = self._worker
+        if (worker is None or source_worker is not worker
+                or worker.request.conversation_id != self._convo_id or not worker.accept_run_event(event)):
+            return
+        if self._dialog and event.kind in {RunEventKind.TOOL_STARTED, RunEventKind.TOOL_UPDATED,
+                                          RunEventKind.TOOL_FINISHED}:
+            workspace = worker.context.execution.workspace if worker.context.execution else ''
+            self._dialog.show_tool_event(event, workspace)
+        elif self._dialog and worker.context.tools:
+            if event.kind == RunEventKind.MODEL_STARTED:
+                self._response_text = ''
+            elif event.kind == RunEventKind.MODEL_FINISHED:
+                try:
+                    self._response_text = json.loads(event.payload_json)['output']['content']
+                except (ValueError, TypeError, KeyError):
+                    pass
+            self._dialog.show_task_model_event(event)
+
+    @_safe_slot
+    def _on_command_confirmation(self, request, source_worker):
+        worker = self._worker
+        if (worker is None or source_worker is not worker or worker._cancelled.is_set()
+                or not worker.current_request.matches(request) or request.conversation_id != self._convo_id):
+            return
+        if self._dialog is None or not self._dialog.isVisible():
+            self._stop_worker()
+            return
+        if not self._dialog.show_command_confirmation(request):
+            worker.confirmations.respond(request, False)
+
+    @_safe_slot
+    def _on_command_decided(self, request, approved):
+        worker = self._worker
+        accepted = False
+        if (worker is not None and not worker._cancelled.is_set() and worker.current_request.matches(request)
+                and request.conversation_id == self._convo_id and worker.confirmations is not None
+                and self._dialog is not None and self._dialog.isVisible()
+                and self._dialog._tool_run_id == request.run_id):
+            accepted = worker.confirmations.respond(request, approved)
+        if self._dialog:
+            self._dialog.acknowledge_command(request, accepted, approved)
+
+    def _on_tool_stop_requested(self, run_id):
+        if self._worker is not None and self._worker.request.run_id == run_id:
+            self._stop_worker()
+
     @_safe_slot
     def _on_stream_event(self, event: StreamEvent) -> None:
         worker = self._worker
-        if worker is None or event.request_id != worker.request.request_id:
+        if worker is not None and worker.context.tools:
+            self._task_stream_event(worker, event)
+            return
+        if worker is None or not worker.accept_event(event):
             return
         self._response_text += event.text
         if self._dialog:
             self._dialog.append_stream_chunk(event.text)
 
-    def _request_config_snapshot(self, worker: StreamingChatWorker) -> dict:
+    def _task_stream_event(self, worker, event):
+        if (event.run_id != worker.request.run_id or event.conversation_id != self._convo_id
+                or event.seq <= getattr(worker, '_last_task_stream_seq', 0)):
+            return
+        worker._last_task_stream_seq = event.seq
+        if event.kind == EventKind.CONTENT:
+            self._response_text += event.text
+        if self._dialog:
+            self._dialog.append_task_stream(event)
+
+    def _request_config_snapshot(self, worker: RunWorker) -> dict:
         return {
+            "run_id": worker.request.run_id,
+            "step_id": worker.current_request.step_id,
+            "initial_request_id": worker.request.request_id,
+            "origin": worker.request.origin,
+            "action_id": worker.request.action_id,
             "agent_id": worker.request.agent_id,
             "model": worker.request.model,
+            "allowed_tools": [tool.name for tool in worker.context.tools],
+            "admission": worker._task_admission.record() if getattr(worker, '_task_admission', None) else None,
             "think": worker.request.think,
+            "think_setting": worker.request.think_setting.record(),
+            "think_source": worker.request.think_source,
+            "execution": worker.context.execution.record() if worker.context.execution else None,
+            "search": worker.context.search_settings.record() if worker.context.search_settings else None,
             "keep_alive": worker.request.keep_alive,
             "options": dict(worker.request.options),
         }
 
-    def _last_request_user_id(self, worker: StreamingChatWorker) -> int:
+    def _last_request_user_id(self, worker: RunWorker) -> int:
         return next(
             (
                 message.id
@@ -2087,7 +2493,7 @@ class ChatController(QObject):
     def _record_attempt_outcome(self, result: ChatResult) -> None:
         """Keep failed/cancelled retries visible without replacing the active answer."""
         worker = self._worker
-        if worker is None or result.request_id != worker.request.request_id:
+        if worker is None or not worker.current_request.matches(result):
             return
         status = (
             "cancelled"
@@ -2098,17 +2504,18 @@ class ChatController(QObject):
         if not user_message_id:
             return
         if any(
-            version.request_id == worker.request.request_id
+            version.request_id == worker.current_request.request_id
             for version in list_generations(user_message_id)
         ):
             return
         try:
             save_generation(
                 user_message_id,
-                worker.request.request_id,
-                config_snapshot=self._request_config_snapshot(worker),
+                worker.current_request.request_id,
+                config_snapshot={**self._request_config_snapshot(worker), "run_status": result.status.value,
+                                 "done_reason": result.turn.done_reason if result.turn else None},
                 status=status,
-                answer="",
+                answer=result.text if result.status == ResultStatus.LIMITED else "",
                 assistant_message_id=None,
                 active=False,
             )
@@ -2118,7 +2525,7 @@ class ChatController(QObject):
     @_safe_slot
     def _on_stream_done(self, result: ChatResult) -> None:
         worker = self._worker
-        if worker is None or result.request_id != worker.request.request_id:
+        if worker is None or not worker.current_request.matches(result):
             return
         if worker.request.conversation_id != self._convo_id:
             self._stop_worker()
@@ -2138,7 +2545,7 @@ class ChatController(QObject):
                     self._messages.append(assistant_msg)
                     save_generation(
                         regenerating,
-                        worker.request.request_id,
+                        worker.current_request.request_id,
                         config_snapshot=self._request_config_snapshot(worker),
                         status="succeeded",
                         answer=text,
@@ -2152,7 +2559,7 @@ class ChatController(QObject):
                     if user_message_id:
                         save_generation(
                             user_message_id,
-                            worker.request.request_id,
+                            worker.current_request.request_id,
                             config_snapshot=self._request_config_snapshot(worker),
                             status="succeeded",
                             answer=text,
@@ -2168,6 +2575,7 @@ class ChatController(QObject):
             self._dialog.finalize_assistant_stream(
                 text, ok, error=result.error, cancelled=result.status == ResultStatus.CANCELLED,
             )
+            self._dialog.finish_tool_run('已停止' if result.status == ResultStatus.CANCELLED else '任务已结束')
 
         self._regenerating_user_id = 0
         self._refresh_regenerate_state()
@@ -2195,6 +2603,8 @@ class ChatController(QObject):
         self._worker = None
         self._retire_worker(worker)
         self._finish_stop_if_ready()
+        if self._dialog:
+            self._dialog.purge_expired_audit()
 
     def _show_result_bubble(self, result: ChatResult) -> bool:
         if (
@@ -2204,7 +2614,13 @@ class ChatController(QObject):
         ):
             return False
 
-        if result.ok:
+        if result.status == ResultStatus.LIMITED:
+            kind = "action"
+            title = "达到输出上限"
+            source = result.error
+            fallback = "部分回复已保留，可调整输出上限后重试。"
+            timeout_ms = 9000
+        elif result.ok:
             kind = "success"
             title = "任务完成"
             source = result.text
@@ -2273,6 +2689,11 @@ def _open_input_monitoring_prefs() -> None:
 
 
 def main() -> None:
+    if "--harness-acceptance" in sys.argv[1:]:
+        from ai_desktop.diagnostics.harness_acceptance import main as acceptance_main
+        args = sys.argv[1:].copy()
+        args.remove("--harness-acceptance")
+        raise SystemExit(acceptance_main(args))
     if "--version" in sys.argv[1:]:
         print(__version__)
         return
@@ -2287,6 +2708,15 @@ def main() -> None:
         from ai_desktop.services.speech_service import probe_speech_runtime
 
         print(json.dumps(probe_speech_runtime(), ensure_ascii=False))
+        return
+    if "--execution-runtime" in sys.argv[1:]:
+        from ai_desktop.services.bash_executor import probe_execution_runtime
+        print(json.dumps(probe_execution_runtime()))
+        return
+    if "--search-runtime" in sys.argv[1:]:
+        from ai_desktop.services.search_credentials import probe_search_runtime
+
+        print(json.dumps(probe_search_runtime(), ensure_ascii=False))
         return
 
     log_util.setup()
@@ -2431,6 +2861,17 @@ def main() -> None:
         controller._dialog.set_auto_hide(False)
         controller._dialog.add_user_message("Fluent UI smoke")
         controller._dialog.add_assistant_message("**界面已就绪** · Fluent Light")
+        from ai_desktop.ui.tool_card import probe_search_card, probe_tool_card
+        probe_tool_card(controller._dialog)
+        logger.info("Fluent command card initialized and invalidated without execution")
+        probe_search_card(controller._dialog)
+        logger.info("Fluent search card and verified citations initialized without network")
+        from ai_desktop.ui.run_history_dialog import probe_run_audit
+        probe_run_audit(controller._dialog)
+        logger.info("Audit schema retention and read-only history verified without tools")
+        from ai_desktop.ui.task_dialog import probe_task_entry
+        probe_task_entry(controller._dialog)
+        logger.info("Explicit task authorization and model-step cards verified without execution")
         _smoke_settings = SettingsDialog({}, parent=controller._dialog)
         _smoke_settings.show()
         controller.shutdown_started.connect(_smoke_settings.close)

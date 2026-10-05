@@ -1,0 +1,26 @@
+{
+  "model": "qwen3.5:9b-mlx",
+  "real_local_model": true,
+  "native_qt": true,
+  "qt_platform": "cocoa",
+  "paid_search_used": false,
+  "user_data_isolated": true,
+  "execution": "frozen-app",
+  "global_hotkeys_started": false,
+  "complete": true,
+  "cases": [
+    {
+      "case": "model_switch_tools",
+      "status": "passed",
+      "models_used": [
+        "qwen3.5:9b-mlx",
+        "qwen3.8:27b-mlx"
+      ],
+      "grant_preserved_on_model_switch": true,
+      "new_conversation_tools_disabled": true,
+      "model_identity_matched": true,
+      "seconds": 21.119
+    }
+  ],
+  "passed": true
+}

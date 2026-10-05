@@ -10,9 +10,12 @@ from PyQt5.QtGui import QColor, QImage
 from PyQt5.QtWidgets import QLabel
 
 import ai_desktop.utils.storage as storage
+from ai_desktop import config
 from ai_desktop.llm.events import ChatResult, EventKind, ResultStatus, StreamEvent
+from ai_desktop.llm.run_worker import RunWorker
 from ai_desktop.llm.service_checks import ImageCapability
-from ai_desktop.main import ChatController, StreamingChatWorker
+from ai_desktop.llm.thinking import ThinkingCapability, cache_thinking
+from ai_desktop.main import ChatController
 from ai_desktop.services.action_service import Action
 from ai_desktop.services.model_profiles import ModelProfile
 from ai_desktop.ui.chat_dialog import ChatDialog
@@ -32,6 +35,9 @@ def controller(qtbot, tmp_db):
         ctl.float_btn.frameGeometry.return_value = QRect(700, 300, 116, 122)
         ctl.float_btn.mapToGlobal.return_value = QPoint(700, 300)
         ctl._dialog = ChatDialog(ctl._all_agents, ctl._active_agent, [ctl._model], ctl._model)
+        for model in [ctl._model, "profile-model", "text-model", "action-model"]:
+            cache_thinking(config.OLLAMA_BASE_URL,
+                           model, "", ThinkingCapability((False, True), True, True))
         ctl._image_capability = ImageCapability.SUPPORTED
         ctl._dialog.set_image_capability(ImageCapability.SUPPORTED)
         ctl._dialog.message_sent.connect(ctl._on_user_message)
@@ -56,6 +62,72 @@ def assert_input_ready(controller):
     controller.float_btn.set_responding.assert_called_with(False)
 
 
+def test_length_preserves_partial_attempt_without_activating_it(qtbot, controller, ollama_server):
+    send_and_wait(qtbot, controller, ollama_server, [
+        {"message": {"content": "partial answer"}, "done": True, "done_reason": "length"},
+    ])
+    user = next(message for message in controller._messages if message.role == "user")
+    versions = storage.list_generations(user.id)
+    assert len(versions) == 1
+    assert versions[0].status == "failed" and versions[0].answer == "partial answer"
+    assert versions[0].config_snapshot["run_status"] == "limited"
+    assert not versions[0].active
+    assert not any(message.role == "assistant" for message in controller._messages)
+    assert "partial answer" in bubble_text(controller)
+    assert "达到输出上限" in bubble_text(controller)
+    assert len(ollama_server.requests) == 1
+    assert_input_ready(controller)
+
+
+def test_current_request_other_step_and_duplicate_chunk_ignored(controller):
+    with patch.object(RunWorker, "start"):
+        controller._on_user_message("scope test")
+    request = controller._worker.request
+    event = StreamEvent(request.request_id, EventKind.CONTENT, "valid", run_id=request.run_id,
+                        step_id=request.step_id, conversation_id=request.conversation_id, seq=1)
+    controller._on_stream_event(replace(event, step_id="old-step", text="stale"))
+    controller._on_stream_event(event)
+    controller._on_stream_event(event)
+    assert controller._response_text == "valid"
+    worker, controller._worker = controller._worker, None
+    worker.release_attachments()
+    worker.deleteLater()
+
+
+def test_action_origin_survives_regeneration(qtbot, controller, ollama_server):
+    ollama_server.enqueue({"message": {"content": "translation"}, "done": True})
+    controller._on_action_requested("translate", "hello", "new")
+    assert controller._worker.request.origin == "action"
+    qtbot.waitUntil(lambda: controller._worker is None and not controller._stale_workers, timeout=3000)
+    user = next(message for message in controller._messages if message.role == "user")
+    with patch.object(RunWorker, "start"):
+        controller._start_regeneration(user)
+    assert controller._worker.request.origin == "action"
+    assert controller._worker.request.action_id == "translate"
+    worker, controller._worker = controller._worker, None
+    worker.release_attachments()
+    worker.deleteLater()
+
+
+def test_explicit_input_recovery_uses_new_identity_and_saves_answer(qtbot, controller, ollama_server):
+    send_and_wait(qtbot, controller, ollama_server, [{"message": {"content": "old answer"}, "done": True}])
+    ollama_server.enqueue({"error": "input length 9000 exceeds context length 8192"})
+    ollama_server.enqueue({"message": {"content": "recovered answer"}, "done": True})
+    controller._on_user_message("current question")
+    original = controller._worker.request
+    qtbot.waitUntil(lambda: controller._worker is None and not controller._stale_workers, timeout=3000)
+    user = next(message for message in reversed(controller._messages) if message.role == "user")
+    version = storage.get_active_generation(user.id)
+    assert version.answer == "recovered answer"
+    assert version.request_id != original.request_id
+    assert version.config_snapshot["initial_request_id"] == original.request_id
+    assert version.config_snapshot["step_id"] == original.step_id
+    assert len(ollama_server.requests) == 3
+    last = ollama_server.requests[-1]["payload"]["messages"]
+    assert last == [last[0], {"role": "user", "content": "current question"}]
+    assert_input_ready(controller)
+
+
 def bubble_text(controller):
     return "\n".join(label.text() for label in controller._dialog._msg_container.findChildren(QLabel))
 
@@ -66,7 +138,7 @@ def test_controller_freezes_agent_profile_into_worker_request(controller):
     )
     controller._agent_mgr.assign_profile(controller._active_agent.id, profile.id)
 
-    with patch.object(StreamingChatWorker, "start"):
+    with patch.object(RunWorker, "start"):
         controller._on_user_message("profile question")
 
     worker = controller._worker
@@ -120,7 +192,7 @@ def test_profile_model_without_vision_inherits_global_model_for_image(
 
     with patch.object(controller, "_image_capability_for_model", side_effect=capability):
         with patch.object(controller, "_show_notice") as notice:
-            with patch.object(StreamingChatWorker, "start"):
+            with patch.object(RunWorker, "start"):
                 controller._on_user_message("看图", [str(image)])
 
     worker = controller._worker
@@ -154,7 +226,7 @@ def test_quick_action_creates_dedicated_conversation_and_uses_action_profile(
     old = storage.create_conversation("code_expert", "old")
     controller._on_conversation_selected(old.id)
 
-    with patch.object(StreamingChatWorker, "start"):
+    with patch.object(RunWorker, "start"):
         controller._on_action_requested("translate", "raw material", "new")
 
     worker = controller._worker
@@ -185,7 +257,7 @@ def test_quick_action_can_continue_current_conversation_without_switching_agent(
     controller._on_conversation_selected(old.id)
     active_agent = controller._active_agent
 
-    with patch.object(StreamingChatWorker, "start"):
+    with patch.object(RunWorker, "start"):
         controller._on_action_requested("translate", "raw material", "current")
 
     worker = controller._worker
@@ -515,9 +587,11 @@ def test_late_events_after_stop_cannot_change_replacement_request(qtbot, control
     controller._on_user_message("second")
     new = controller._worker
     # Emit queued old signals before processing finished / deferred deletion.
-    old.thinking_chunk.emit("old thinking")
-    old.content_event.emit(StreamEvent(old_id, EventKind.CONTENT, "old chunk"))
-    old.done.emit(ChatResult(old_id, ResultStatus.SUCCEEDED, "old answer"))
+    identity = {'run_id': old.request.run_id, 'step_id': old.request.step_id,
+                'conversation_id': old.request.conversation_id}
+    old.thinking_event.emit(StreamEvent(old_id, EventKind.THINKING, 'old thinking', seq=1, **identity))
+    old.content_event.emit(StreamEvent(old_id, EventKind.CONTENT, 'old chunk', seq=2, **identity))
+    old.done.emit(ChatResult(old_id, ResultStatus.SUCCEEDED, 'old answer', **identity))
     assert controller._worker is new
     assert not controller._dialog._input.isEnabled()
     assert "old" not in bubble_text(controller)
@@ -616,7 +690,7 @@ def test_stop_during_background_image_preparation_restores_ui_without_posting(
 def test_repeated_requests_release_qthread_objects(qtbot, controller, ollama_server):
     for index in range(12):
         send_and_wait(qtbot, controller, ollama_server, [{"message": {"content": str(index)}, "done": True}])
-    qtbot.waitUntil(lambda: not controller.findChildren(StreamingChatWorker))
+    qtbot.waitUntil(lambda: not controller.findChildren(RunWorker))
     assert len(ollama_server.requests) == 12
     assert len(get_conversation(controller._convo_id).messages) == 24
 
@@ -660,7 +734,7 @@ def test_worker_setup_failure_rolls_back_message_in_existing_conversation(qtbot,
     storage.save_message(conversation.id, "user", "kept")
     controller._on_conversation_selected(conversation.id)
     controller._dialog._input.setPlainText("retry me")
-    monkeypatch.setattr("ai_desktop.main.StreamingChatWorker", MagicMock(side_effect=RuntimeError("cannot start")))
+    monkeypatch.setattr("ai_desktop.main.RunWorker", MagicMock(side_effect=RuntimeError("cannot start")))
     controller._dialog._on_send()
     assert [message.content for message in get_conversation(conversation.id).messages] == ["kept"]
     assert [message.content for message in controller._messages] == ["kept"]
@@ -814,3 +888,27 @@ def test_follow_up_locks_older_answer_versions(qtbot, controller, ollama_server)
     ]
     assert len(storage.list_generations(first_user_id)) == 2
     assert follow_count == 1
+
+
+def test_image_model_fallback_revalidates_named_thinking(controller, tmp_path):
+    from ai_desktop.llm.thinking import ThinkMode, ThinkSetting
+    cache_thinking(config.OLLAMA_BASE_URL, 'text-model', '',
+                   ThinkingCapability(('xhigh',), 'xhigh', True))
+    profile = controller._profile_mgr.save(ModelProfile('named','命名档位','text-model',
+                                                        ThinkSetting(ThinkMode.NAMED,'xhigh')))
+    controller._agent_mgr.assign_profile(controller._active_agent.id, profile.id)
+    image = tmp_path / 'input.png'
+    image.write_bytes(b'placeholder')
+    with patch.object(controller,'_image_capability_for_model',
+                      side_effect=lambda model: ImageCapability.UNSUPPORTED if model == 'text-model'
+                      else ImageCapability.SUPPORTED), patch.object(RunWorker,'start'):
+        controller._on_user_message('look', [str(image)])
+    worker = controller._worker
+    assert worker.request.model == controller._model and worker.request.think is None
+    assert worker.request.think_setting.level == 'xhigh'
+    snapshot = controller._request_config_snapshot(worker)
+    assert snapshot['think'] is None and snapshot['think_setting'] == {'mode':'named','level':'xhigh'}
+    assert snapshot['think_source'] == '命名档位'
+    controller._worker = None
+    worker.release_attachments()
+    worker.deleteLater()

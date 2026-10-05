@@ -1,0 +1,337 @@
+{
+  "ollama_version": "0.34.3",
+  "model": "qwen3.5:9b-mlx",
+  "digest": "203e30078279db51132b9e026ceb7bb21330e5b1af67ef190671b375c9770404",
+  "tools_are_synthetic": true,
+  "observations": [
+    {
+      "kind": "chat",
+      "status": "succeeded",
+      "text": "OK",
+      "error": "",
+      "latency_seconds": 0.356,
+      "model_rounds": 1,
+      "model_requests": 1,
+      "calls": [],
+      "events": [
+        {
+          "run_id": "5d707b673c3b45dfb2655e122328ca1e",
+          "conversation_id": 42,
+          "step_id": "d562f66c66ed42e8aa327dd89a3906c3",
+          "request_id": "788fce0c95f945fab1619dcca0a5a034",
+          "seq": 1,
+          "kind": "started",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "5d707b673c3b45dfb2655e122328ca1e",
+          "conversation_id": 42,
+          "step_id": "d562f66c66ed42e8aa327dd89a3906c3",
+          "request_id": "788fce0c95f945fab1619dcca0a5a034",
+          "seq": 2,
+          "kind": "model_started",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "5d707b673c3b45dfb2655e122328ca1e",
+          "conversation_id": 42,
+          "step_id": "d562f66c66ed42e8aa327dd89a3906c3",
+          "request_id": "788fce0c95f945fab1619dcca0a5a034",
+          "seq": 3,
+          "kind": "content",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "5d707b673c3b45dfb2655e122328ca1e",
+          "conversation_id": 42,
+          "step_id": "d562f66c66ed42e8aa327dd89a3906c3",
+          "request_id": "788fce0c95f945fab1619dcca0a5a034",
+          "seq": 4,
+          "kind": "model_finished",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": "succeeded"
+        },
+        {
+          "run_id": "5d707b673c3b45dfb2655e122328ca1e",
+          "conversation_id": 42,
+          "step_id": "d562f66c66ed42e8aa327dd89a3906c3",
+          "request_id": "788fce0c95f945fab1619dcca0a5a034",
+          "seq": 5,
+          "kind": "finished",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": "succeeded"
+        }
+      ]
+    },
+    {
+      "kind": "simulated_tools",
+      "status": "succeeded",
+      "text": "Title: Python Documentation  \nURL: https://docs.python.org/3/",
+      "error": "",
+      "latency_seconds": 3.567,
+      "model_rounds": 2,
+      "model_requests": 2,
+      "calls": [
+        {
+          "name": "web_search",
+          "args": {
+            "query": "official Python documentation site",
+            "objective": "Find the official Python documentation website, including its title and URL."
+          }
+        }
+      ],
+      "events": [
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "a0b2313e1f5244c8b6c87fab33ea1167",
+          "request_id": "9e7657d4c254444184a6a9d3a2762e86",
+          "seq": 1,
+          "kind": "started",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "a0b2313e1f5244c8b6c87fab33ea1167",
+          "request_id": "9e7657d4c254444184a6a9d3a2762e86",
+          "seq": 2,
+          "kind": "model_started",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "a0b2313e1f5244c8b6c87fab33ea1167",
+          "request_id": "9e7657d4c254444184a6a9d3a2762e86",
+          "seq": 3,
+          "kind": "model_finished",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": "succeeded"
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "a0b2313e1f5244c8b6c87fab33ea1167",
+          "request_id": "9e7657d4c254444184a6a9d3a2762e86",
+          "seq": 4,
+          "kind": "tool_started",
+          "local_call_id": "32ca362300b2483d82237f9697fca07a",
+          "provider_call_id": "call_ff8nmc9a",
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "a0b2313e1f5244c8b6c87fab33ea1167",
+          "request_id": "9e7657d4c254444184a6a9d3a2762e86",
+          "seq": 5,
+          "kind": "tool_finished",
+          "local_call_id": "32ca362300b2483d82237f9697fca07a",
+          "provider_call_id": "call_ff8nmc9a",
+          "status": "succeeded"
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 6,
+          "kind": "model_started",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 7,
+          "kind": "content",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 8,
+          "kind": "content",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 9,
+          "kind": "content",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 10,
+          "kind": "content",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 11,
+          "kind": "content",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 12,
+          "kind": "content",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 13,
+          "kind": "content",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 14,
+          "kind": "content",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 15,
+          "kind": "content",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 16,
+          "kind": "content",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 17,
+          "kind": "content",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 18,
+          "kind": "content",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 19,
+          "kind": "content",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 20,
+          "kind": "content",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": ""
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 21,
+          "kind": "model_finished",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": "succeeded"
+        },
+        {
+          "run_id": "bf6facfd6ed549a998e720a7ccd57b0e",
+          "conversation_id": 42,
+          "step_id": "46ee3d51cc7e417592905f2889f3285e",
+          "request_id": "2d81ad0b831649cf901523e7f3a4ce8a",
+          "seq": 22,
+          "kind": "finished",
+          "local_call_id": null,
+          "provider_call_id": null,
+          "status": "succeeded"
+        }
+      ]
+    }
+  ]
+}

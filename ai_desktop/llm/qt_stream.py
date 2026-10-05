@@ -6,8 +6,9 @@ from collections.abc import Iterator
 from PyQt5.QtCore import QObject, QTimer, QUrl, pyqtSignal, pyqtSlot
 from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 
-from ai_desktop.llm.chat_client import StreamProtocolError, _exception_error, _response_message
+from ai_desktop.llm.chat_client import _exception_error
 from ai_desktop.llm.events import ChatResult, ErrorCode, EventKind, RequestContext, ResultStatus, StreamEvent
+from ai_desktop.llm.ollama_protocol import StreamProtocolError, TurnAssembler
 
 logger = logging.getLogger(__name__)
 
@@ -15,15 +16,27 @@ logger = logging.getLogger(__name__)
 class NDJSONDecoder:
     """Buffer bytes until a whole UTF-8 JSON line is available, including EOF."""
 
-    def __init__(self, request_id: str):
-        self.request_id = request_id
+    def __init__(self, request_id: str | RequestContext):
+        self.request = request_id if isinstance(request_id, RequestContext) else None
+        self.request_id = self.request.request_id if self.request else request_id
         self._buffer = bytearray()
         self.terminal = False
+        self.assembler = TurnAssembler()
+        self._seq = 0
+
+    def _event(self, kind, text="", code=None, turn=None):
+        self._seq += 1
+        req = self.request
+        return StreamEvent(self.request_id, kind, text, code, turn,
+                           req.run_id if req else "", req.step_id if req else "",
+                           req.conversation_id if req else 0, self._seq)
 
     def feed(self, data: bytes, *, final: bool = False) -> Iterator[StreamEvent]:
         if self.terminal:
             return
         self._buffer.extend(data)
+        if len(self._buffer) > TurnAssembler.MAX_BYTES:
+            raise StreamProtocolError("NDJSON buffer too large")
         while not self.terminal:
             end = self._buffer.find(b"\n")
             if end < 0:
@@ -35,17 +48,19 @@ class NDJSONDecoder:
             if not line:
                 continue
             value = json.loads(line.decode("utf-8"))
-            message, error = _response_message(value)
+            message, error = self.assembler.accept(value)
             if error:
                 self.terminal = True
-                yield StreamEvent(self.request_id, EventKind.ERROR, error, ErrorCode.SERVER)
+                yield self._event(EventKind.ERROR, error, ErrorCode.SERVER)
                 break
             for field, kind in (("thinking", EventKind.THINKING), ("content", EventKind.CONTENT)):
                 if message.get(field):
-                    yield StreamEvent(self.request_id, kind, message[field])
+                    yield self._event(kind, message[field])
             if value.get("done"):
                 self.terminal = True
-                yield StreamEvent(self.request_id, EventKind.COMPLETE)
+                turn = self.assembler.turn
+                kind = EventKind.LIMITED if turn.done_reason == "length" else EventKind.COMPLETE
+                yield self._event(kind, turn=turn)
         if self.terminal:
             self._buffer.clear()
         elif final:
@@ -64,12 +79,13 @@ class QtChatTransport(QObject):
     stream_event = pyqtSignal(object)
     done = pyqtSignal(object)
 
-    def __init__(self, request: RequestContext):
+    def __init__(self, request: RequestContext, *, allow_tools: bool = False):
         super().__init__()
         self.request = request
+        self._allow_tools = allow_tools
         self._manager = QNetworkAccessManager(self)
         self._reply = None
-        self._decoder = NDJSONDecoder(request.request_id)
+        self._decoder = NDJSONDecoder(request)
         self._text = ""
         self.result = None
         self._started = False
@@ -100,6 +116,9 @@ class QtChatTransport(QObject):
     @pyqtSlot()
     def cancel(self) -> None:
         self._finish(ResultStatus.CANCELLED)
+
+    def limit(self) -> None:
+        self._finish(ResultStatus.LIMITED, "任务达到活动时间上限。")
 
     def _connection_timeout(self) -> None:
         self._finish(ResultStatus.FAILED, "连接 Ollama 超时，请检查服务地址。", ErrorCode.TIMEOUT)
@@ -139,7 +158,12 @@ class QtChatTransport(QObject):
                 if event.kind == EventKind.ERROR:
                     self._finish(ResultStatus.FAILED, event.text, event.error_code)
                 elif event.kind == EventKind.COMPLETE:
-                    self._finish(ResultStatus.SUCCEEDED)
+                    if event.turn.tool_calls and not self._allow_tools:
+                        self._finish(ResultStatus.FAILED, "本次对话未授权工具调用。", ErrorCode.PROTOCOL)
+                    else:
+                        self._finish(ResultStatus.SUCCEEDED)
+                elif event.kind == EventKind.LIMITED:
+                    self._finish(ResultStatus.LIMITED, "达到输出上限，回复尚未完成。")
         except Exception as exc:
             code, error = _exception_error(exc)
             logger.warning("Stream %s failed: %s", self.request.request_id, code.value,
@@ -177,7 +201,9 @@ class QtChatTransport(QObject):
         if self.result is not None:
             return
         # Set the result first: abort can synchronously re-enter finished.
-        self.result = ChatResult(self.request.request_id, status, self._text, error, code)
+        self.result = ChatResult(self.request.request_id, status, self._text, error, code,
+                                 self._decoder.assembler.turn, self.request.run_id, self.request.step_id,
+                                 self.request.conversation_id)
         self._connect_timer.stop()
         self._idle_timer.stop()
         if self._reply is not None:

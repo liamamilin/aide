@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 
 from ai_desktop.agent_manager import AgentManager
+from ai_desktop.llm.thinking import ThinkingCapability
 from ai_desktop.services.action_service import (
     BUILTIN_ACTIONS,
     Action,
@@ -144,6 +145,8 @@ def test_action_profile_uses_existing_precedence_layer(tmp_db):
         global_model="global",
         agent_profile_id="agent",
         action_profile_id="action",
+        thinking_capability=ThinkingCapability(
+            (False, True), True, True),
     )
     assert resolved.think is False
     assert resolved.temperature == 0.8
