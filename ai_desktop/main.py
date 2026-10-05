@@ -44,7 +44,7 @@ from ai_desktop.services.action_service import Action, ActionService
 from ai_desktop.services.model_profiles import ModelProfile, ModelProfileManager
 from ai_desktop.services.ocr_service import AsyncOCRService, OCRResult, OCRStatus
 from ai_desktop.services.speech_service import SpeechService
-from ai_desktop.services.task_admission import TaskAuthorization
+from ai_desktop.services.task_admission import TaskAuthorization, TaskModelSettings
 from ai_desktop.settings_manager import SettingsManager
 from ai_desktop.ui import styles
 from ai_desktop.ui.agent_editor import AgentDef, AgentEditor
@@ -904,6 +904,10 @@ class ChatController(QObject):
         changed = self._settings.apply(data)
         if changed:
             self._cancel_pending_model()
+        if set(changed) & {'timeout', 'num_ctx', 'num_predict', 'temperature', 'top_p', 'top_k',
+                           'repeat_penalty', 'max_rounds', 'think'}:
+            # Preserve the tool grant, but never finish discovery against stale parameters.
+            self._cancel_pending_task()
         if set(changed) & {'base_url', 'execution_workspace', 'bash_policy', 'execution_path', 'task_tools_enabled',
                            'task_max_model_rounds', 'task_max_tool_calls', 'task_max_search_calls',
                            'search_provider', 'search_max_results', 'search_timeout', 'search_parallel_mode'}:
@@ -1555,14 +1559,17 @@ class ChatController(QObject):
         runs = list_runs(self._convo_id) if self._convo_id else []
         hint = next((run['config']['execution']['workspace'] for run in runs
                      if run['config'].get('execution')), '')
-        dialog = TaskDialog(self._task_authorization, workspace_hint=hint, model=self._model, parent=self._dialog)
+        model_settings = TaskModelSettings.from_config(self._resolve_model_config(agent=agent))
+        dialog = TaskDialog(self._task_authorization, workspace_hint=hint, model=self._model,
+                            settings=model_settings, parent=self._dialog)
         conversation_id = self._convo_id
         epoch = self._task_epoch
         selected_model = self._model
         if dialog.exec_() != dialog.Accepted:
             return
         if (self._convo_id != conversation_id or self._active_agent.id != agent.id or self._stopping
-                or self._task_epoch != epoch or self._model != selected_model):
+                or self._task_epoch != epoch or self._model != selected_model
+                or model_settings != TaskModelSettings.from_config(self._resolve_model_config(agent=agent))):
             return
         self._task_authorization = dialog.authorization
         self._task_epoch += 1
@@ -1573,12 +1580,14 @@ class ChatController(QObject):
         pending = {'text': text, 'images': tuple(images), 'regenerate': regenerate,
                    'conversation_id': self._convo_id, 'authorization': self._task_authorization,
                    'base_url': config.OLLAMA_BASE_URL, 'model': self._model,
+                   'model_settings': TaskModelSettings.from_config(self._resolve_model_config()),
                    'retained': storage.retain_attachment_paths(images)}
         self._pending_task = pending
         if self._dialog:
             self._dialog.set_thinking(True)
             self._dialog.set_task_authorization(self._task_authorization, model=self._model, checking=True)
-        pending['sequence'] = self._task_checks.check(config.OLLAMA_BASE_URL, self._model)
+        pending['sequence'] = self._task_checks.check(config.OLLAMA_BASE_URL, self._model,
+                                                     settings=pending['model_settings'])
 
     @_safe_slot
     def _on_task_checked(self, sequence, admission, error):
@@ -1588,7 +1597,8 @@ class ChatController(QObject):
         if (self._stopping or self._convo_id != pending['conversation_id'] or self._worker is not None
                 or self._active_agent.id != 'general_assistant'
                 or self._task_authorization is not pending['authorization']
-                or config.OLLAMA_BASE_URL != pending['base_url'] or self._model != pending['model']):
+                or config.OLLAMA_BASE_URL != pending['base_url'] or self._model != pending['model']
+                or pending['model_settings'] != TaskModelSettings.from_config(self._resolve_model_config())):
             self._cancel_pending_task()
             return
         self._pending_task = None
@@ -1656,6 +1666,7 @@ class ChatController(QObject):
     @_safe_slot
     def _on_profiles_saved(self, profiles: list[ModelProfile]) -> None:
         self._cancel_pending_model()
+        self._cancel_pending_task()
         self._profile_mgr.replace_all(profiles)
         self._action_service.reload()
         self._agent_mgr.refresh_profile_assignments()
@@ -1690,6 +1701,7 @@ class ChatController(QObject):
     @_safe_slot
     def _on_agent_profile_changed(self, agent_id: str, profile_id: str | None) -> None:
         self._cancel_pending_model()
+        self._cancel_pending_task()
         self._agent_mgr.assign_profile(agent_id, profile_id)
         self._all_agents = self._agent_mgr.all_agents
         self._custom_agents = self._agent_mgr.custom_agents
@@ -1841,10 +1853,14 @@ class ChatController(QObject):
                     raise ValueError('请先在输入区启用工具授权。')
                 task_kwargs = self._task_authorization.worker_kwargs(task_admission, config.OLLAMA_BASE_URL,
                                                                    agent_id=self._active_agent.id, origin=origin,
-                                                                   model=self._model)
+                                                                   model=self._model,
+                                                                   settings=TaskModelSettings.from_config(resolved))
             except ValueError as exc:
                 self._show_notice(QMessageBox.Warning, '工具任务未启动', str(exc))
                 return
+        if task_kwargs:
+            resolved = replace(resolved, model=task_kwargs['model'], think=task_kwargs['think'],
+                               warnings=task_admission.warnings)
         if not task_kwargs and prepared_config is None and self._should_prepare_model(resolved):
             self._begin_model_prepare(user_message.content, user_message.images, resolved, regenerate=user_message.id)
             return
@@ -2194,18 +2210,19 @@ class ChatController(QObject):
             self._begin_task_check(text, images)
             return
         task_kwargs = {}
+        resolved = prepared_config or self._resolve_model_config(action_profile_id, request_agent)
         if task_admission is not None:
             try:
                 if task is None:
                     raise ValueError('工具授权已关闭，请重新启用后发送。')
                 task_kwargs = task.worker_kwargs(task_admission, config.OLLAMA_BASE_URL,
-                                                 agent_id=request_agent.id, origin='chat', model=self._model)
+                                                 agent_id=request_agent.id, origin='chat', model=self._model,
+                                                 settings=TaskModelSettings.from_config(resolved))
             except ValueError as exc:
                 if self._dialog:
                     self._dialog.restore_draft(text, images)
                 self._show_notice(QMessageBox.Warning, '工具任务未启动', str(exc))
                 return
-        resolved = prepared_config or self._resolve_model_config(action_profile_id, request_agent)
         if not task_kwargs and prepared_config is None and self._should_prepare_model(resolved):
             self._begin_model_prepare(text, images, resolved, {
                 'system_prompt': system_prompt, 'action_profile_id': action_profile_id,
@@ -2214,7 +2231,8 @@ class ChatController(QObject):
             })
             return
         if task_kwargs:
-            resolved = replace(resolved, model=task_kwargs['model'], think=task_kwargs['think'], warnings=())
+            resolved = replace(resolved, model=task_kwargs['model'], think=task_kwargs['think'],
+                               warnings=task_admission.warnings)
         image_capability = ((ImageCapability.SUPPORTED if task_admission.vision_supported else
                              ImageCapability.UNSUPPORTED)
                             if task_kwargs else self._image_capability_for_model(resolved.model))

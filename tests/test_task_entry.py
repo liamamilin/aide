@@ -7,6 +7,7 @@ import pytest
 
 from ai_desktop import config
 from ai_desktop.llm.events import ChatResult, ResultStatus
+from ai_desktop.llm.model_options import global_options
 from ai_desktop.llm.task_checks import TaskChecks
 from ai_desktop.services import audit_store
 from ai_desktop.services.execution_context import BashPolicy, ExecutionSnapshot, load_workspace_policy
@@ -14,7 +15,6 @@ from ai_desktop.services.search_credentials import SearchCredentials
 from ai_desktop.services.task_admission import (
     TASK_DIGEST,
     TASK_MODEL,
-    TASK_OPTIONS,
     TASK_SERVICE_VERSION,
     TaskAdmission,
     TaskAuthorization,
@@ -30,6 +30,15 @@ from tests import test_request_results as requests
 from tests.test_search_execution import search_server as search_server
 
 controller = requests.controller
+
+
+@pytest.fixture(autouse=True)
+def bounded_task_fixture(monkeypatch):
+    # These tests exercise small tool workflows; product parameters are no
+    # longer overridden by an independent 8192/1024 task profile.
+    monkeypatch.setattr(config, 'OLLAMA_NUM_CTX', 8192)
+    monkeypatch.setattr(config, 'OLLAMA_NUM_PREDICT', 1024)
+    monkeypatch.setattr(config, 'OLLAMA_THINK', False)
 
 
 def discovery(model=TASK_MODEL):
@@ -143,7 +152,7 @@ def test_authorization_scope_expiry_workspace_and_exact_options(tmp_path):
     authorization = TaskAuthorization(ExecutionSnapshot.create(tmp_path))
     admission = validate_discovery('http://localhost:11434', *discovery())
     params = authorization.worker_kwargs(admission, admission.base_url, agent_id='general_assistant', origin='chat')
-    assert params['options'] == dict(TASK_OPTIONS) and params['think'] is False and params['exact_options']
+    assert params['options'] == global_options() and params['think'] is False and params['exact_options']
     for agent, origin in [('code_expert', 'chat'), ('general_assistant', 'action')]:
         with pytest.raises(ValueError):
             authorization.worker_kwargs(admission, admission.base_url, agent_id=agent, origin=origin)
@@ -198,7 +207,7 @@ def test_real_ui_entry_and_controller_tool_loop(qtbot, controller, tmp_path, oll
     idle(qtbot, controller)
     chats = [req['payload'] for req in ollama_server.requests if req['path'] == '/api/chat']
     assert len(chats) == 2 and chats[0]['model'] == TASK_MODEL
-    assert chats[0]['think'] is False and chats[0]['options'] == dict(TASK_OPTIONS)
+    assert chats[0]['think'] is False and chats[0]['options'] == global_options()
     assert [tool['function']['name'] for tool in chats[0]['tools']] == ['bash']
     assert chats[-1]['messages'][-1]['role'] == 'tool' and 'AMBER-731' in chats[-1]['messages'][-1]['content']
     assert original == (config.OLLAMA_NUM_CTX, config.OLLAMA_NUM_PREDICT, config.OLLAMA_THINK)

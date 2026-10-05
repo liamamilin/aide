@@ -18,7 +18,7 @@ from pathlib import Path
 DIAGNOSTIC_MODULE = 'ai_desktop.diagnostics.harness_acceptance'
 CASES = ('ordinary_send_and_regenerate', 'bash_readonly', 'bash_approve', 'bash_reject', 'bash_hide',
          'cancel_then_new_conversation', 'restart_and_readonly_history', 'window_layout_and_restore',
-         'model_switch_tools', 'settings_tab_navigation', 'settings_task_limits') + tuple(
+         'model_switch_tools', 'settings_tab_navigation', 'settings_task_limits', 'task_model_settings') + tuple(
     'action_'+mode+'_'+action for mode in ('current', 'new')
     for action in ('translate', 'explain', 'summarize', 'rewrite'))
 
@@ -94,9 +94,9 @@ def acceptance(output, only=None, model='qwen3.5:9b-mlx'):
     # No hotkey listeners, selection capture or controller.start() in this diagnostic.
     # Actual FloatButton, ChatDialog, task panel, workers and native windows are used.
     ChatController = controller_class()
+    from ai_desktop.llm.model_options import global_options
     from ai_desktop.services import audit_store
     from ai_desktop.services.model_profiles import ModelProfile
-    from ai_desktop.services.task_admission import TASK_OPTIONS
     from ai_desktop.ui.fluent import initialize
     from ai_desktop.ui.task_dialog import TaskDialog
     from ai_desktop.utils import storage
@@ -120,7 +120,8 @@ def acceptance(output, only=None, model='qwen3.5:9b-mlx'):
     (workspace/'note.txt').write_text('verification_code: ACCEPTANCE-READ-5741\n')
     report = {'model': model,
               'real_local_model': only not in {'restart_and_readonly_history', 'window_layout_and_restore',
-                                               'settings_tab_navigation', 'settings_task_limits'},
+                                               'settings_tab_navigation', 'settings_task_limits',
+                                               'task_model_settings'},
               'native_qt': app.platformName() not in {'offscreen', 'minimal'},
               'qt_platform': app.platformName(),
               'paid_search_used': False, 'user_data_isolated': True,
@@ -273,7 +274,7 @@ def acceptance(output, only=None, model='qwen3.5:9b-mlx'):
         idle()
         run = audit_store.list_runs(ctl._convo_id)[0]
         assert run['status'] == 'succeeded' and 'ACCEPTANCE-READ-5741' in answer()
-        assert run['config']['options'] == dict(TASK_OPTIONS)
+        assert run['config']['options'] == global_options()
         assert any(step['tool_name'] == 'bash' for step in run['steps'])
         return {'status': 'passed', 'run_status': run['status'], 'model_steps':
                 len([step for step in run['steps'] if step['kind'] == 'model'])}
@@ -484,6 +485,76 @@ def acceptance(output, only=None, model='qwen3.5:9b-mlx'):
         return {'models_used': selected, 'grant_preserved_on_model_switch': True,
                 'new_conversation_tools_disabled': True, 'model_identity_matched': True}
 
+    def task_model_settings():
+        from ai_desktop.llm.chat_client import _payload
+        from ai_desktop.llm.run_worker import RunWorker
+        from ai_desktop.services.execution_context import ExecutionSnapshot
+        from ai_desktop.services.task_admission import TaskAuthorization, TaskModelSettings, validate_discovery
+        from ai_desktop.ui.fluent import ScrollArea
+        from ai_desktop.ui.settings_dialog import SettingsDialog
+
+        general()
+        values = {'num_ctx': 81920, 'num_predict': 20477, 'temperature': 0.35,
+                  'top_p': 0.85, 'top_k': 40, 'repeat_penalty': 1.1}
+        settings = SettingsDialog(ctl._settings.current(), parent=ctl._dialog, credentials=object(), model=model)
+        settings.settings_applied.connect(ctl._on_settings_applied)
+        panel = None
+        worker = None
+        try:
+            settings.show()
+            app.processEvents()
+            for key, value in values.items():
+                settings._widgets[key].setValue(value)
+            for route in ['model', 'generation']:
+                settings._pivot.setCurrentItem(route)
+                wait(lambda: settings._pivot.slideAni.state() == 0, timeout=3)
+                app.processEvents()
+                if output:
+                    preview = Path(output).parent/'previews'/('task-parameters-'+route+'.png')
+                    preview.parent.mkdir(parents=True, exist_ok=True)
+                    assert settings.grab().save(str(preview))
+            settings._save_button.click()
+            assert settings.result() == settings.Accepted
+            ctl._settings.load()
+            snapshot = TaskModelSettings.from_config(ctl._resolve_model_config())
+            assert dict(snapshot.options) == values
+            panel = TaskDialog(model=model, settings=snapshot, parent=ctl._dialog)
+            panel.resize(560, 800)
+            panel.show()
+            app.processEvents()
+            assert '上下文 81920' in panel._profile_summary.text()
+            assert '输出 20477' in panel._profile_summary.text()
+            scroll = panel.findChild(ScrollArea)
+            scroll.verticalScrollBar().setValue(scroll.verticalScrollBar().maximum())
+            app.processEvents()
+            if output:
+                preview = Path(output).parent/'previews'/'task-parameters-authorization.png'
+                preview.parent.mkdir(parents=True, exist_ok=True)
+                assert panel.grab().save(str(preview))
+            # Synthetic discovery verifies wiring without loading an 81920-token
+            # model or accessing credentials. Real HTTP is covered by pytest.
+            admission = validate_discovery(config.OLLAMA_BASE_URL, {'version': 'fixture'},
+                {'models': [{'name': model, 'digest': 'fixture'}]},
+                {'capabilities': ['tools', 'completion'], 'thinking': {'values': [False, True]},
+                 'model_info': {'fixture.context_length': 131072}}, model=model, settings=snapshot)
+            authorization = TaskAuthorization(execution=ExecutionSnapshot.create(workspace))
+            kwargs = authorization.worker_kwargs(admission, config.OLLAMA_BASE_URL,
+                agent_id='general_assistant', origin='chat', model=model, settings=snapshot)
+            worker = RunWorker([], 'Parameter wiring fixture', agent_id='general_assistant', **kwargs)
+            payload = _payload(worker.request, True)
+            assert payload['options'] == admission.record()['options'] == values
+            assert payload['think'] is False and payload['model'] == model
+            return {'saved_and_reloaded': values, 'preview_matches_request_and_admission': True,
+                    'request_think': payload['think'], 'discovery': 'synthetic',
+                    'model_or_tools_executed': False, 'credential_access': False}
+        finally:
+            settings.close()
+            if panel:
+                panel.close()
+            if worker:
+                worker.release_attachments()
+                worker.deleteLater()
+
     def restart():
         synthetic = not ctl._convo_id
         if synthetic:
@@ -506,6 +577,8 @@ def acceptance(output, only=None, model='qwen3.5:9b-mlx'):
         return {**value, 'synthetic_history_fixture': synthetic}
 
     try:
+        if only == 'task_model_settings':
+            case('task_model_settings', task_model_settings)
         if only == 'settings_task_limits':
             case('settings_task_limits', settings_limits)
         if only == 'settings_tab_navigation':

@@ -13,6 +13,7 @@ from urllib3.exceptions import TimeoutError as HTTPTimeoutError
 
 from ai_desktop import config
 from ai_desktop.llm.events import ErrorCode, RequestContext, RequestMessage
+from ai_desktop.llm.model_options import global_options
 from ai_desktop.llm.ollama_protocol import StreamProtocolError
 from ai_desktop.llm.thinking import ThinkMode, ThinkSetting, normalize_think, resolve_think
 from ai_desktop.utils import images as image_utils
@@ -95,14 +96,7 @@ class ChatClient:
         if think_setting is None:
             think_setting = (ThinkSetting(ThinkMode.NAMED, think) if isinstance(think, str) else
                              normalize_think(think))
-        resolved_options: dict[str, int | float] = {
-            "num_predict": config.OLLAMA_NUM_PREDICT,
-            "num_ctx": config.OLLAMA_NUM_CTX,
-            "temperature": config.OLLAMA_TEMPERATURE,
-            "top_p": config.OLLAMA_TOP_P,
-            "top_k": config.OLLAMA_TOP_K,
-            "repeat_penalty": config.OLLAMA_REPEAT_PENALTY,
-        }
+        resolved_options = global_options()
         resolved_options.update(options or {})
         return RequestContext(
             request_id=uuid.uuid4().hex,

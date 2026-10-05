@@ -101,6 +101,7 @@ def begin_run(context, user_message_id, *, admission=None):
     if row is None or row['conversation_id'] != request.conversation_id or row['role'] != 'user':
         raise ValueError('Audit run must belong to its user message')
     snapshot = {'model': request.model, 'think': request.think, 'think_setting': request.think_setting.record(),
+                'think_source': request.think_source,
                 'options': dict(request.options), 'allowed_tools': [tool.name for tool in context.tools],
                 'limits': asdict(context.limits),
                 'execution': context.execution.record() if context.execution else None,

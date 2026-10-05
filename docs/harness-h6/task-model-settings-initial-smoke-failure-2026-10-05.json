@@ -1,0 +1,9 @@
+{
+  "execution": "frozen-app",
+  "phase": "isolated synthetic tool UI smoke",
+  "status": "failed",
+  "cause": "The synthetic discovery probe inherited global num_ctx=8192 and num_predict=20480 after removal of the fixed tool profile.",
+  "product_model_or_tool_executed": false,
+  "user_settings_modified": false,
+  "correction": "Use an explicit 8192/512 immutable snapshot only within probe_task_entry; add regression ensuring globals remain unchanged."
+}

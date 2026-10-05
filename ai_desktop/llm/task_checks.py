@@ -4,7 +4,7 @@ import json
 from PyQt5.QtCore import QObject, QTimer, QUrl, pyqtSignal
 from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkProxy, QNetworkReply, QNetworkRequest
 
-from ai_desktop.services.task_admission import TASK_MODEL, local_service_url, validate_discovery
+from ai_desktop.services.task_admission import TASK_MODEL, TaskModelSettings, local_service_url, validate_discovery
 
 
 class TaskChecks(QObject):
@@ -24,12 +24,13 @@ class TaskChecks(QObject):
         self._data = bytearray()
         self._values = []
 
-    def check(self, base_url, model=TASK_MODEL):
+    def check(self, base_url, model=TASK_MODEL, *, settings=None):
         self.cancel()
         self._sequence += 1
         self._active = True
         self._values = []
         self._model = model
+        self._settings = settings or TaskModelSettings.from_config()
         try:
             self._base_url = local_service_url(base_url)
         except ValueError as exc:
@@ -103,7 +104,7 @@ class TaskChecks(QObject):
             self._next()
             return
         try:
-            result = validate_discovery(self._base_url, *self._values, model=self._model)
+            result = validate_discovery(self._base_url, *self._values, model=self._model, settings=self._settings)
         except ValueError as exc:
             self._finish(None, str(exc))
         else:
