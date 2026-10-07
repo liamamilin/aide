@@ -1,0 +1,46 @@
+{
+  "date": "2026-10-07",
+  "scope": "wake/session and permission recovery",
+  "tests": {
+    "passed": 1318,
+    "warnings": 2,
+    "seconds": 39.51,
+    "ruff": "passed",
+    "diff_check": "passed"
+  },
+  "build": {
+    "version": "1.5.0",
+    "app": "dist/AI桌面助手.app",
+    "size": "867M",
+    "strict_deep_signature": "passed",
+    "release_preflight": "passed",
+    "isolated_smoke": "passed",
+    "schema0_upgrade_smoke": "passed",
+    "frozen_source_modules_matched": 54,
+    "credential_helper_identity_and_bytes_unchanged": true
+  },
+  "native_acceptance": {
+    "source": "desktop-recovery-source-2026-10-07.json",
+    "packaged": "desktop-recovery-packaged-2026-10-07.json",
+    "selection_regression": "selection-after-recovery-packaged-2026-10-07.json",
+    "passed": true,
+    "workspace_notifications": "synthetic, native center"
+  },
+  "credentials": "credential-after-recovery-build-2026-10-07.json",
+  "search_http_attempts": 0,
+  "system_permissions_changed": false,
+  "user_clipboard_accessed": false,
+  "physical_sleep_wake_verified": false,
+  "physical_multidisplay_verified": false,
+  "physical_cross_app_copy_verified": false,
+  "remaining": [
+    "physical keyboard and cross-application copy",
+    "physical sleep/wake and TCC changes",
+    "real multiple displays/Spaces",
+    "installation over previous version"
+  ],
+  "git_commit_created": false,
+  "pushed": false,
+  "dmg_updated": false,
+  "published": false
+}

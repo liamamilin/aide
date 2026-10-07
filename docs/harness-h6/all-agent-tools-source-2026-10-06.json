@@ -1,0 +1,58 @@
+{
+  "model": "qwen3.5:9b-mlx",
+  "real_local_model": true,
+  "native_qt": true,
+  "qt_platform": "cocoa",
+  "paid_search_used": false,
+  "user_data_isolated": true,
+  "execution": "source",
+  "global_hotkeys_started": false,
+  "complete": true,
+  "cases": [
+    {
+      "case": "all_agent_tools",
+      "status": "passed",
+      "roles": [
+        {
+          "agent_id": "general_assistant",
+          "model_steps": 2,
+          "actual_bash": true,
+          "role_prompt_preserved": true
+        },
+        {
+          "agent_id": "code_expert",
+          "model_steps": 2,
+          "actual_bash": true,
+          "role_prompt_preserved": true
+        },
+        {
+          "agent_id": "translator",
+          "model_steps": 2,
+          "actual_bash": true,
+          "role_prompt_preserved": true
+        },
+        {
+          "agent_id": "summarizer",
+          "model_steps": 2,
+          "actual_bash": true,
+          "role_prompt_preserved": true
+        },
+        {
+          "agent_id": "polisher",
+          "model_steps": 2,
+          "actual_bash": true,
+          "role_prompt_preserved": true
+        },
+        {
+          "agent_id": "acceptance-researcher",
+          "model_steps": 2,
+          "actual_bash": true,
+          "role_prompt_preserved": true
+        }
+      ],
+      "new_conversation_clears_authorization": true,
+      "seconds": 15.935
+    }
+  ],
+  "passed": true
+}

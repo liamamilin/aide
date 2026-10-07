@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-06",
+  "execution": "frozen-app",
+  "provider": "parallel",
+  "model": "qwen3.5:9b-mlx",
+  "passed": false,
+  "report_complete": false,
+  "paid_search_used": false,
+  "search_http_attempts": 0,
+  "failure": "SecItemCopyMatching blocked in worker despite no-interaction query; acceptance deadline and shutdown expired, Qt aborted with running thread",
+  "native_stack_location": "ai_desktop/services/search_credentials.py:get / Security.SecItemCopyMatching",
+  "fix": "Bound background native read in pipe-only disposable process; prohibit legacy Keychain interaction there; timeout/cancel kill and reap child",
+  "user_settings_modified": false,
+  "keychain_acl_modified": false
+}

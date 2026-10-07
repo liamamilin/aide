@@ -10,7 +10,7 @@ import json
 import logging
 
 from ai_desktop import config
-from ai_desktop.capture.hotkey_listener import validate_hotkey
+from ai_desktop.capture.nsevent_monitor import validate_hotkey
 from ai_desktop.llm.thinking import ThinkSetting, load_think_setting, normalize_think
 from ai_desktop.services.execution_context import (
     ExecutionSnapshot,
@@ -45,7 +45,7 @@ _SETTING_MAP = [
     ("search_max_results", "SEARCH_MAX_RESULTS", int),
     ("search_timeout", "SEARCH_TIMEOUT",         int),
     ("search_parallel_mode", "SEARCH_PARALLEL_MODE", str),
-    ("task_tools_enabled", "GENERAL_ASSISTANT_TOOLS_ENABLED", bool),
+    ("task_tools_enabled", "CHAT_TOOLS_ENABLED", bool),
     ("task_max_model_rounds", "TASK_MAX_MODEL_ROUNDS", int),
     ("task_max_tool_calls", "TASK_MAX_TOOL_CALLS", int),
     ("task_max_search_calls", "TASK_MAX_SEARCH_CALLS", int),
@@ -73,6 +73,7 @@ _DB_KEY_MAP = {
     "search_max_results": "search_max_results",
     "search_timeout": "search_timeout",
     "search_parallel_mode": "search_parallel_mode",
+    # Keep the existing persistent key so old disabled preferences stay disabled.
     "task_tools_enabled": "general_assistant_tools_enabled",
     "task_max_model_rounds": "task_max_model_rounds",
     "task_max_tool_calls": "task_max_tool_calls",
@@ -117,6 +118,8 @@ class SettingsManager:
                         setattr(config, attr, val.lower() == "true")
                     else:
                         converted = conv(val)
+                        if dict_key == 'hotkey' and not validate_hotkey(converted):
+                            raise ValueError('Unsupported native hotkey')
                         _validate_search(dict_key, converted)
                         if dict_key == "pet_size" and converted not in _PET_SIZES:
                             raise ValueError("invalid pet size")

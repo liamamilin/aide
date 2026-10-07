@@ -1,0 +1,23 @@
+{
+  "model": "qwen3.5:9b-mlx",
+  "real_local_model": true,
+  "native_qt": true,
+  "qt_platform": "cocoa",
+  "paid_search_authorized": true,
+  "paid_search_used": false,
+  "search_http_attempts": 0,
+  "search_http_results": [],
+  "user_data_isolated": true,
+  "execution": "frozen-app",
+  "global_hotkeys_started": false,
+  "complete": true,
+  "cases": [
+    {
+      "case": "search_exa",
+      "status": "failed",
+      "error": "AssertionError: Search failed: credentials_unavailable",
+      "seconds": 4.275
+    }
+  ],
+  "passed": false
+}

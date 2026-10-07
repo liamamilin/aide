@@ -2,7 +2,6 @@
 AI 桌面助手 —— 全局配置
 """
 from dataclasses import dataclass
-from types import MappingProxyType
 
 from ai_desktop.llm.thinking import ThinkMode, ThinkSetting
 
@@ -27,10 +26,10 @@ SEARCH_MAX_RESULTS: int = 5
 SEARCH_TIMEOUT: int = 30
 SEARCH_PARALLEL_MODE: str = "basic"
 
-# Role grants are independent of Agent/profile fields. Admission and the
-# executor/approval pipeline must also be ready before a run receives tools.
-AGENT_TOOL_GRANTS = MappingProxyType({"general_assistant": frozenset({"bash", "web_search"})})
-GENERAL_ASSISTANT_TOOLS_ENABLED: bool = True  # 仅允许用户主动授权；每个会话默认关闭工具
+# All conversation roles share the same registry. Actual access requires
+# explicit authorization for the current Agent/conversation and fresh admission.
+CHAT_TOOL_NAMES = frozenset({"bash", "web_search"})
+CHAT_TOOLS_ENABLED: bool = True  # 仅允许用户主动授权；每个会话默认关闭工具
 TASK_MAX_MODEL_ROUNDS: int = 8
 TASK_MAX_TOOL_CALLS: int = 16
 TASK_MAX_SEARCH_CALLS: int = 6  # 搜索也计入工具调用总数

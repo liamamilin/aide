@@ -1,0 +1,30 @@
+{
+  "model": "qwen3.8:27b-mlx",
+  "real_local_model": true,
+  "native_qt": true,
+  "qt_platform": "cocoa",
+  "paid_search_authorized": true,
+  "paid_search_used": true,
+  "search_http_attempts": 1,
+  "search_http_results": [
+    {
+      "provider": "parallel",
+      "http_status": 200,
+      "error_type": "",
+      "source_count": 1
+    }
+  ],
+  "user_data_isolated": true,
+  "execution": "source",
+  "global_hotkeys_started": false,
+  "complete": true,
+  "cases": [
+    {
+      "case": "search_parallel",
+      "status": "failed",
+      "error": "AssertionError: wrapped C/C++ object of type _SelectableMessageLabel has been deleted",
+      "seconds": 10.175
+    }
+  ],
+  "passed": false
+}

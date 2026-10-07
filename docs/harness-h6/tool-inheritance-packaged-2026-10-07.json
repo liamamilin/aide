@@ -1,0 +1,39 @@
+{
+  "model": "qwen3.5:9b-mlx",
+  "real_local_model": false,
+  "native_qt": true,
+  "qt_platform": "cocoa",
+  "paid_search_authorized": false,
+  "paid_search_used": false,
+  "search_http_attempts": 0,
+  "search_http_results": [],
+  "user_data_isolated": true,
+  "execution": "frozen-app",
+  "global_hotkeys_started": false,
+  "complete": true,
+  "cases": [
+    {
+      "case": "tool_settings_inheritance",
+      "status": "passed",
+      "roles_checked": [
+        "general_assistant",
+        "code_expert",
+        "translator",
+        "summarizer",
+        "polisher",
+        "inheritance-fixture"
+      ],
+      "new_conversation_inherits": true,
+      "agent_switch_inherits": true,
+      "history_uses_current_settings": true,
+      "fresh_process_loads_settings": true,
+      "disable_applies_to_future_scopes": true,
+      "pending_task_restored": false,
+      "model_or_tools_executed": false,
+      "credential_access": false,
+      "user_data_isolated": true,
+      "seconds": 1.314
+    }
+  ],
+  "passed": true
+}

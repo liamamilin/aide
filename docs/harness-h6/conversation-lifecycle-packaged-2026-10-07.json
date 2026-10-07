@@ -1,0 +1,32 @@
+{
+  "model": "qwen3.5:9b-mlx",
+  "real_local_model": false,
+  "native_qt": true,
+  "qt_platform": "cocoa",
+  "paid_search_authorized": false,
+  "paid_search_used": false,
+  "search_http_attempts": 0,
+  "search_http_results": [],
+  "user_data_isolated": true,
+  "execution": "frozen-app",
+  "global_hotkeys_started": false,
+  "complete": true,
+  "cases": [
+    {
+      "case": "conversation_lifecycle",
+      "status": "passed",
+      "clear_and_recreate_cycles": 20,
+      "hover_enter_leave_verified": true,
+      "retired_controls_not_accessed": true,
+      "deferred_widgets_deleted": true,
+      "input_after_recreation": true,
+      "synthetic_qt_events": true,
+      "physical_screenshot_cancel_verified": false,
+      "model_or_tools_executed": false,
+      "credential_access": false,
+      "user_clipboard_accessed": false,
+      "seconds": 0.792
+    }
+  ],
+  "passed": true
+}

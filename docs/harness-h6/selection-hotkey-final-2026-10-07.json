@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-07",
+  "scope": "selection hotkey reliability",
+  "tests": {
+    "passed": 1305,
+    "warnings": 2,
+    "seconds": 37.86,
+    "ruff": "passed",
+    "diff_check": "passed"
+  },
+  "build": {
+    "version": "1.5.0",
+    "app": "dist/AI桌面助手.app",
+    "size": "867M",
+    "strict_deep_signature": "passed",
+    "release_preflight": "passed",
+    "isolated_smoke": "passed",
+    "schema0_upgrade_smoke": "passed",
+    "frozen_source_modules_matched": 51,
+    "credential_helper_identity_unchanged": true
+  },
+  "native_acceptance": {
+    "source": "selection-hotkey-source-2026-10-07.json",
+    "packaged": "selection-hotkey-packaged-2026-10-07.json",
+    "passed": true,
+    "production_quartz_probe_available": true
+  },
+  "credentials": "credential-after-selection-build-2026-10-07.json",
+  "search_http_attempts": 0,
+  "physical_cross_app_copy_verified": false,
+  "remaining": [
+    "physical keyboard and cross-application copy",
+    "sleep/wake and TCC",
+    "real multiple displays/Spaces",
+    "installation over previous version"
+  ],
+  "git_commit_created": false,
+  "pushed": false,
+  "dmg_updated": false,
+  "published": false
+}

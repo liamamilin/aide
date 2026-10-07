@@ -44,7 +44,7 @@ def check_accessibility() -> bool:
         return bool(lib.AXIsProcessTrusted())
     except Exception as e:
         logger.warning("check_accessibility failed: %s", e)
-        return True  # 不阻塞启动
+        return False  # 检测失败不代表已授权；应用内监听仍可用
 
 
 def check_input_monitoring() -> bool:
@@ -55,7 +55,7 @@ def check_input_monitoring() -> bool:
         return bool(lib.CGPreflightListenEventAccess())
     except Exception as e:
         logger.warning("check_input_monitoring failed: %s", e)
-        return True  # 不阻塞启动
+        return False  # 检测失败不代表已授权；应用内监听仍可用
 
 
 def check_all() -> PermissionStatus:

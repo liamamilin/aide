@@ -1,0 +1,32 @@
+{
+  "model": "qwen3.8:27b-mlx",
+  "real_local_model": false,
+  "native_qt": true,
+  "qt_platform": "cocoa",
+  "paid_search_used": false,
+  "user_data_isolated": true,
+  "execution": "source",
+  "global_hotkeys_started": false,
+  "complete": true,
+  "cases": [
+    {
+      "case": "task_model_settings",
+      "status": "passed",
+      "saved_and_reloaded": {
+        "num_ctx": 81920,
+        "num_predict": 20477,
+        "temperature": 0.35,
+        "top_p": 0.85,
+        "top_k": 40,
+        "repeat_penalty": 1.1
+      },
+      "preview_matches_request_and_admission": true,
+      "request_think": false,
+      "discovery": "synthetic",
+      "model_or_tools_executed": false,
+      "credential_access": false,
+      "seconds": 0.982
+    }
+  ],
+  "passed": true
+}

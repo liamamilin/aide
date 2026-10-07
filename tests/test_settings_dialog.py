@@ -122,9 +122,10 @@ class TestSettingsDialogValidation:
             with qtbot.assertNotEmitted(dialog.settings_applied, wait=500):
                 dialog._on_save()
 
-    def test_invalid_hotkey_rejected(self, qtbot, dialog):
+    @pytest.mark.parametrize('hotkey', ['invalid-hotkey', '<cmd>+<ctrl>+unsupported', '<cmd>+l+x'])
+    def test_invalid_hotkey_rejected(self, qtbot, dialog, hotkey):
         """Hotkey without proper format → warning, no signal."""
-        dialog._widgets["hotkey"].setText("invalid-hotkey")
+        dialog._widgets["hotkey"].setText(hotkey)
         with patch.object(QMessageBox, "warning", return_value=QMessageBox.Ok):
             with qtbot.assertNotEmitted(dialog.settings_applied, wait=500):
                 dialog._on_save()

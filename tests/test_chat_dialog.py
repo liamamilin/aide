@@ -2,8 +2,10 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from PyQt5.QtCore import Qt
+from PyQt5 import sip
+from PyQt5.QtCore import QCoreApplication, QEvent, Qt
 from PyQt5.QtGui import QTextCursor
+from PyQt5.QtWidgets import QApplication
 
 from ai_desktop.config import Agent
 from ai_desktop.llm.service_checks import ImageCapability, ServiceState
@@ -244,6 +246,52 @@ class TestChatDialogState:
         # Empty-state widget and stretch remain.
         assert dialog._msg_layout.count() == 2
         assert not dialog._empty_state.isHidden()
+
+    def test_user_message_hover_does_not_walk_children(self, dialog, monkeypatch):
+        dialog.add_user_message("hover fixture")
+        bubble = dialog._msg_layout.itemAt(1).widget()
+        from ai_desktop.ui.fluent import TransparentPushButton
+        button = bubble.findChild(TransparentPushButton, "edit_btn_user")
+        monkeypatch.setattr(bubble, "findChildren", lambda *a: pytest.fail("Unsafe child traversal"))
+        QApplication.sendEvent(bubble, QEvent(QEvent.Enter))
+        assert not button.isHidden()
+        QApplication.sendEvent(bubble, QEvent(QEvent.Leave))
+        assert button.isHidden()
+
+    def test_new_conversation_retires_hover_before_deferred_deletion(self, dialog):
+        dialog.add_user_message("old selection")
+        dialog.add_assistant_message("old response")
+        bubble = dialog._msg_layout.itemAt(1).widget()
+        button = bubble._edit_button
+        QApplication.sendEvent(bubble, QEvent(QEvent.Enter))
+        dialog.clear_messages()
+        assert bubble._edit_button is None and bubble.isHidden()
+        # Cocoa can send both events after clearing but before deferred deletion.
+        with patch.object(button, 'setVisible') as visible:
+            QApplication.sendEvent(bubble, QEvent(QEvent.Leave))
+            QApplication.sendEvent(bubble, QEvent(QEvent.Enter))
+            visible.assert_not_called()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        assert sip.isdeleted(bubble) and sip.isdeleted(button)
+        dialog.add_user_message("new selection")
+        assert dialog._msg_layout.count() == 3
+
+    def test_hover_tolerates_edit_button_destroyed_first(self, dialog):
+        dialog.add_user_message("hover fixture")
+        bubble = dialog._msg_layout.itemAt(1).widget()
+        button = bubble._edit_button
+        sip.delete(button)
+        assert bubble._edit_button is None
+        QApplication.sendEvent(bubble, QEvent(QEvent.Leave))
+        QApplication.sendEvent(bubble, QEvent(QEvent.Enter))
+
+    def test_direct_message_deletion_retires_hover(self, dialog):
+        dialog.add_user_message("hover fixture")
+        bubble = dialog._msg_layout.itemAt(1).widget()
+        button = bubble._edit_button
+        bubble.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        assert sip.isdeleted(bubble) and sip.isdeleted(button)
 
     def test_set_active_agent(self, qtbot, dialog):
         """set_active_agent() → combo and compact header context update."""

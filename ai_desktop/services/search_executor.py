@@ -47,7 +47,8 @@ class SearchExecutor:
             return self._output(interrupted, started)
         if self._key is None and self._credential_error is None:
             try:
-                self._key = self._credentials.get(self.settings.provider, interactive=False)
+                self._key = self._credentials.get(self.settings.provider, interactive=False,
+                                                  cancelled=context.cancelled, deadline=context.active_deadline)
                 if not self._key:
                     self._credential_error = SearchResult(
                         error='请在设置的联网搜索页面保存 API 密钥。', error_type='missing_credentials')

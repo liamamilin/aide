@@ -42,7 +42,7 @@ echo "==> Checking packaged English speech runtime"
 "$PYTHON_BIN" -c 'import json, sys; value = json.load(open(sys.argv[1])); assert value == {"engine": "kokoro", "language": "en-us", "status": "ready"}' "$SPEECH_OUTPUT"
 echo "==> Checking packaged search Keychain bridge (no credential access)"
 "$EXECUTABLE" --search-runtime >"$SEARCH_OUTPUT" 2>&1
-"$PYTHON_BIN" -c 'import json, sys; value = json.load(open(sys.argv[1])); assert value == {"keychain_available": True, "providers": ["parallel", "exa"]}' "$SEARCH_OUTPUT"
+"$PYTHON_BIN" -c 'import json, sys; value = json.load(open(sys.argv[1])); assert value["keychain_available"] and value["providers"] == ["parallel", "exa"] and value["stable_broker"]' "$SEARCH_OUTPUT"
 echo "==> Checking packaged Bash runtime with a fixed temporary read-only fixture"
 "$EXECUTABLE" --execution-runtime >"$EXECUTION_OUTPUT" 2>&1
 "$PYTHON_BIN" -c 'import json, sys; value = json.load(open(sys.argv[1])); assert value == {"engine": "bash", "status": "ready", "automatic_mode": "fixed_argv"}' "$EXECUTION_OUTPUT"

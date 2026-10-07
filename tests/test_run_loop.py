@@ -126,8 +126,8 @@ def test_transport_mutation_cannot_change_next_step_snapshot_or_schema():
     assert_single_terminal(loop, events, ResultStatus.SUCCEEDED)
 
 
-@pytest.mark.parametrize("origin,agent_id", [("action", "general_assistant"), ("chat", "translator")])
-def test_action_origin_wins_and_other_agents_are_zero_tools(origin, agent_id):
+@pytest.mark.parametrize("origin,agent_id", [("action", "general_assistant"), ("chat", "")])
+def test_action_origin_and_missing_agent_are_zero_tools(origin, agent_id):
     request = ChatClient().create_request([], origin=origin, agent_id=agent_id)
     spec = ToolSpec.create("bash", lambda args, context: ToolOutput("should not run"))
     context = RunContext.create(request, tools=(spec,), tools_admitted=True)

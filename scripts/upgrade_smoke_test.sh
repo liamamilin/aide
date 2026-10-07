@@ -39,6 +39,15 @@ images = [str(root / "images" / "existing.png"), str(root / "images" / "missing.
 db.execute("INSERT INTO messages VALUES (1, 1, \"user\", \"旧正文\", 2.0, ?)", (json.dumps(images, ensure_ascii=False),))
 db.execute("INSERT INTO settings VALUES (\"custom_agents\", ?)", (json.dumps([{"id": "custom-agent", "name": "旧 Agent"}], ensure_ascii=False),))
 db.execute("INSERT INTO settings VALUES (\"bad_setting\", \"{broken\")")
+settings = {
+    "ollama_num_ctx": "81920", "ollama_num_predict": "20477", "ollama_think": "false",
+    "hotkey": "<cmd>+<ctrl>+l", "search_provider": "exa", "search_max_results": "99",
+    "task_max_model_rounds": "23", "task_max_tool_calls": "47", "task_max_search_calls": "19",
+    "general_assistant_tools_enabled": "false", "desktop_pet_size": "small",
+    "desktop_pet_reduce_motion": "true", "auto_hide": "false", "float_follow_cursor_screen": "false",
+}
+db.executemany("INSERT INTO settings VALUES (?, ?)", settings.items())
+(root / "expected-settings.json").write_text(json.dumps(settings))
 db.commit()
 db.close()
 ' "$DATA_DIR"
@@ -83,6 +92,9 @@ assert db.execute("SELECT title, agent_id FROM conversations").fetchone() == ("�
 assert db.execute("SELECT content FROM messages").fetchone()[0] == "旧正文"
 assert json.loads(db.execute("SELECT value FROM settings WHERE key=\"custom_agents\"").fetchone()[0])[0]["name"] == "旧 Agent"
 assert db.execute("SELECT value FROM settings WHERE key=\"bad_setting\"").fetchone()[0] == "{broken"
+expected_settings = json.loads((root / "expected-settings.json").read_text())
+for key, value in expected_settings.items():
+    assert db.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone() == (value,), key
 assert db.execute("SELECT COUNT(*) FROM attachments").fetchone()[0] == 2
 db.close()
 backups = list((root / "backups").glob("*.sqlite3"))
@@ -91,7 +103,9 @@ backup = sqlite3.connect(backups[0])
 assert backup.execute("PRAGMA user_version").fetchone()[0] == 0
 assert backup.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
 assert backup.execute("SELECT content FROM messages").fetchone()[0] == "旧正文"
+for key, value in expected_settings.items():
+    assert backup.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone() == (value,), key
 backup.close()
 ' "$DATA_DIR" "$EXPECTED_SCHEMA"
 
-echo "==> Packaged schema-0 upgrade and backup verification passed"
+echo "==> Packaged schema-0 upgrade, 14 persistent settings and backup verification passed"

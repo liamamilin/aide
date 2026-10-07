@@ -56,7 +56,7 @@ class FakeSelectionCapture(clipboard_monitor.SelectionCaptureTask):
     def __init__(self, responses, *, copy_action=lambda: True, counts=(2, 2),
                  pasteboard=None):
         self.pasteboard = pasteboard or FakePasteboard(counts)
-        super().__init__(copy_action=copy_action, pasteboard=self.pasteboard)
+        super().__init__(copy_action=copy_action, pasteboard=self.pasteboard, modifier_state=lambda: False)
         self.responses = list(responses)
         self.calls = []
 
@@ -161,7 +161,8 @@ def test_async_capture_uses_plain_text_fallback_for_unreadable_format(qtbot):
         snapshot_error=clipboard_monitor.UnsupportedClipboardFormatError("promised data"),
     )
     with patch.object(clipboard_monitor, "_write_clipboard") as write_clipboard:
-        task = clipboard_monitor.SelectionCaptureTask(pasteboard=pasteboard)
+        task = clipboard_monitor.SelectionCaptureTask(pasteboard=pasteboard, copy_action=lambda: True,
+                                                      modifier_state=lambda: False)
         task.responses = [(True, "selected text", "")]
 
         def start_command(program, arguments, *, timeout_ms, callback, input_text=None):

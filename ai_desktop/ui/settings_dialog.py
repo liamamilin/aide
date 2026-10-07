@@ -8,8 +8,10 @@ from pathlib import Path
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QFileDialog, QFormLayout, QHBoxLayout, QStackedWidget, QVBoxLayout, QWidget
 
+from ai_desktop.capture.nsevent_monitor import validate_hotkey
 from ai_desktop.llm.thinking import ThinkMode, ThinkSetting
 from ai_desktop.services.execution_context import DEFAULT_PATH, BashPolicy, ExecutionSnapshot, load_workspace_policy
+from ai_desktop.services.qt_credentials import CredentialConnectionJob
 from ai_desktop.services.qt_search import SearchJob
 from ai_desktop.services.search_credentials import CredentialError, SearchCredentials
 from ai_desktop.services.web_search import MAX_SEARCH_RESULTS, SearchError, SearchSettings, build_request
@@ -97,7 +99,7 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         ("execution_workspace", "任务工作区", str, ""),
         ("bash_policy", "命令确认策略", str, "readonly_auto"),
         ("execution_path", "命令搜索路径 PATH", str, ":".join(DEFAULT_PATH)),
-        ("task_tools_enabled", "允许通用助手启用工具", bool, True),
+        ("task_tools_enabled", "允许对话 Agent 启用工具", bool, True),
         ("task_max_tool_calls", "每次任务最多工具调用", int, 16),
         ("task_max_search_calls", "其中最多联网搜索", int, 6),
         ("task_max_model_rounds", "每次任务最多模型轮次", int, 8),
@@ -132,6 +134,7 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         self._model_version = model_version
         self._credentials = credentials if credentials is not None else SearchCredentials()
         self._search_job = None
+        self._credential_job = None
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setMinimumSize(640, 540)
         self.resize(720, 640)
@@ -194,12 +197,12 @@ class SettingsDialog(FramelessDragMixin, QDialog):
             if route == "execution":
                 limits_hint = CaptionLabel("限制按每次发送或重新执行计算，搜索也计入工具调用总数。"
                                            "模型每轮可调用多个工具；上述限制或活动时长 5 分钟中任一先到即停止。"
-                                           "修改工具或搜索设置后需为当前对话重新启用工具。")
+                                           "工具设置会沿用到新对话及其他 Agent；修改后下一次任务使用新配置。")
                 limits_hint.setWordWrap(True)
                 layout.addWidget(limits_hint)
                 hint = CaptionLabel("自动执行只适用于允许列表中的字面量命令、已知参数和工作区内路径。"
                                     "其余有效命令需确认；"
-                                    "工作区不是系统沙箱。请在通用助手输入区为当前会话启用工具。")
+                                    "工作区不是系统沙箱。请在聊天输入区为当前角色与会话启用工具。")
                 hint.setWordWrap(True)
                 layout.addWidget(hint)
             if route == "desktop":
@@ -289,6 +292,9 @@ class SettingsDialog(FramelessDragMixin, QDialog):
             form.addRow("", clear)
         layout.addWidget(card)
         row = QHBoxLayout()
+        self._connect_keychain = QPushButton("连接钥匙串")
+        self._connect_keychain.clicked.connect(self._connect_credentials)
+        row.addWidget(self._connect_keychain)
         self._test_button = QPushButton("测试搜索")
         self._test_button.clicked.connect(self._test_search)
         self._cancel_search = QPushButton("停止测试")
@@ -301,7 +307,8 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         self._search_status = CaptionLabel("测试将向所选服务执行一次搜索，可能消耗账户额度。")
         self._search_status.setWordWrap(True)
         layout.addWidget(self._search_status)
-        state = CaptionLabel("在通用助手输入区启用联网搜索后，模型可按任务需要调用所选服务。")
+        state = CaptionLabel("连接钥匙串只检查所选服务的已存密钥，不联网、不计费。"
+                             "首次连接请在系统提示中为 AIDESearchCredentials 选择“始终允许”；后台搜索不会弹授权框。")
         state.setWordWrap(True)
         layout.addWidget(state)
 
@@ -375,7 +382,7 @@ class SettingsDialog(FramelessDragMixin, QDialog):
             self._widgets["base_url"].setFocus()
             QMessageBox.warning(self, "输入错误", "Ollama 服务地址需要以 http:// 或 https:// 开头")
             return
-        if "+" not in data["hotkey"] or not data["hotkey"].startswith("<"):
+        if not validate_hotkey(data["hotkey"]):
             self._widgets["hotkey"].setFocus()
             QMessageBox.warning(self, "输入错误", "快捷键格式无效，例如: <cmd>+<ctrl>+l")
             return
@@ -412,14 +419,14 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         self.accept()
 
     def _test_search(self):
-        if self._search_job is not None:
+        if self._search_job is not None or self._credential_job is not None:
             return
         data = self._collect()
         provider = data["search_provider"]
         try:
             if self._key_delete[provider].isChecked():
                 raise SearchError("取消移除密钥后再测试。")
-            key = self._key_widgets[provider].text() or self._credentials.get(provider)
+            key = self._key_widgets[provider].text() or self._credentials.get(provider, interactive=False)
             settings = SearchSettings(provider, data["search_max_results"], data["search_timeout"],
                                       data["search_parallel_mode"])
             request = build_request(settings, key, "Python official documentation",
@@ -430,6 +437,7 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         self._search_job = SearchJob(request, self)
         self._search_job.finished.connect(self._search_finished)
         self._test_button.setEnabled(False)
+        self._connect_keychain.setEnabled(False)
         self._save_button.setEnabled(False)
         self._cancel_search.show()
         self._search_status.setText(f"正在测试 {provider.title()}…")
@@ -440,6 +448,7 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         if job is not None:
             job.deleteLater()
         self._test_button.setEnabled(True)
+        self._connect_keychain.setEnabled(True)
         self._save_button.setEnabled(True)
         self._cancel_search.hide()
         if result.cancelled:
@@ -450,8 +459,36 @@ class SettingsDialog(FramelessDragMixin, QDialog):
             self._search_status.setText(f"连接成功，返回 {len(result.sources)} 个有效来源。")
 
     def _stop_search(self):
+        if self._credential_job is not None:
+            job, self._credential_job = self._credential_job, None
+            job.result.disconnect(self._credentials_connected)
+            job.cancel()
+            self._credentials_connected("钥匙串连接已停止。")
         if self._search_job is not None:
             self._search_job.cancel()
+
+    def _connect_credentials(self):
+        if self._credential_job is not None or self._search_job is not None:
+            return
+        provider = self._widgets['search_provider'].currentData()
+        self._credential_job = CredentialConnectionJob(self._credentials, provider)
+        self._credential_job.result.connect(self._credentials_connected)
+        self._connect_keychain.setEnabled(False)
+        self._test_button.setEnabled(False)
+        self._save_button.setEnabled(False)
+        self._cancel_search.setText("停止连接")
+        self._cancel_search.show()
+        self._search_status.setText(f"正在连接 {provider.title()} 钥匙串；如出现系统提示，请为密钥助手选择“始终允许”…")
+        self._credential_job.start()
+
+    def _credentials_connected(self, message):
+        self._credential_job = None
+        self._connect_keychain.setEnabled(True)
+        self._test_button.setEnabled(True)
+        self._save_button.setEnabled(True)
+        self._cancel_search.hide()
+        self._cancel_search.setText("停止测试")
+        self._search_status.setText(message)
 
     def done(self, result):
         self._widgets["think"].stop()

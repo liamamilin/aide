@@ -1,0 +1,97 @@
+{
+  "checked_at": "2026-10-06T22:06:26+08:00",
+  "model": "qwen3.8:27b-mlx",
+  "agent_id": "acceptance-researcher",
+  "complete_search_acceptance": false,
+  "ui_layout_fixed": true,
+  "tests": {
+    "full_passed": 1247,
+    "existing_collection_warnings": 2,
+    "new_regressions": 4,
+    "diagnostic_related_passed": 47,
+    "ruff_passed": true,
+    "diff_check_passed": true
+  },
+  "build": {
+    "version": "1.5.0",
+    "size": "867MB",
+    "signing_identity": "AI Desktop Assistant",
+    "signature_verified": true,
+    "preflight_passed": true,
+    "isolated_smoke_passed": true,
+    "database_upgrade_passed": true,
+    "frozen_source_modules": 45,
+    "document_links_checked": 17,
+    "all_matched": true
+  },
+  "layout": {
+    "source_evidence": "answer-layout-source-2026-10-06.json",
+    "frozen_evidence": "answer-layout-packaged-2026-10-06.json",
+    "checks": 9,
+    "passed": true
+  },
+  "source_search": {
+    "parallel": {
+      "evidence": "search-parallel-27b-source-2026-10-06.json",
+      "passed": false,
+      "http_results": [
+        {
+          "provider": "parallel",
+          "http_status": 200,
+          "error_type": "",
+          "source_count": 1
+        }
+      ],
+      "failure_stage": "diagnostic history selected old deferred-delete label; fixed, no paid retry"
+    },
+    "exa": {
+      "evidence": "search-exa-27b-source-2026-10-06.json",
+      "passed": true,
+      "seconds": 9.27,
+      "role_prompt_preserved": true,
+      "new_history_label_verified": true,
+      "citation_verified": true,
+      "http_results": [
+        {
+          "provider": "exa",
+          "http_status": 200,
+          "error_type": "",
+          "source_count": 1
+        }
+      ]
+    }
+  },
+  "frozen_search": {
+    "parallel_evidence": "search-parallel-27b-packaged-2026-10-06.json",
+    "passed": false,
+    "http_attempts": 0,
+    "exa_not_attempted_reason": "Both credentials unavailable on rebuilt App; preflight only"
+  },
+  "credentials": {
+    "evidence": "credential-final-layout-build-2026-10-06.json",
+    "checks": [
+      {
+        "provider": "parallel",
+        "available": false,
+        "return_code": 1,
+        "seconds": 0.866
+      },
+      {
+        "provider": "exa",
+        "available": false,
+        "return_code": 1,
+        "seconds": 0.869
+      }
+    ],
+    "partition_evidence": "keychain-partition-mismatch-2026-10-06.json",
+    "acl_modified": false,
+    "values_logged": false
+  },
+  "paid_http_attempts_this_turn": 2,
+  "paid_http_attempts_phase_total": 6,
+  "user_data_modified": false,
+  "commit": false,
+  "push": false,
+  "dmg_updated": false,
+  "next": "Credential identity stability (Developer ID or fixed native broker), then final frozen 27B and genuine history-label acceptance; real desktop checks remain"
+}

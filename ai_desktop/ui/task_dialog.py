@@ -1,4 +1,4 @@
-"""Default Fluent controls for explicit tool authorization in one conversation."""
+"""Default Fluent controls for saved tool settings shared across conversations."""
 from dataclasses import replace
 
 from PyQt5.QtCore import Qt
@@ -14,7 +14,7 @@ from ai_desktop.services.execution_context import (
     load_workspace_policy,
     save_execution_preferences,
 )
-from ai_desktop.services.task_admission import TASK_MODEL, TaskAuthorization
+from ai_desktop.services.task_admission import TASK_MODEL, TaskAuthorization, TaskModelSettings
 from ai_desktop.services.web_search import SearchError, SearchSettings
 from ai_desktop.ui.fluent import (
     BodyLabel,
@@ -32,8 +32,11 @@ from ai_desktop.ui.fluent import (
 
 
 class TaskDialog(FluentDialog):
-    def __init__(self, current=None, *, workspace_hint='', model=TASK_MODEL, parent=None):
+    def __init__(self, current=None, *, workspace_hint='', model=TASK_MODEL, settings=None,
+                 agent_id='general_assistant', agent_name='', parent=None):
         super().__init__(parent)
+        if current is not None and current.agent_id != agent_id:
+            current = None
         self.authorization = current
         self.admission = None
         self._checking = False
@@ -42,11 +45,13 @@ class TaskDialog(FluentDialog):
         self._candidate = None
         self._base_url = config.OLLAMA_BASE_URL
         self._model = model
+        self._agent_id = agent_id
+        self._model_settings = settings or TaskModelSettings.from_config()
         preferences = load_execution_preferences()
         self._path = preferences['execution_path']
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.addWidget(dialog_title(self, '工具授权'))
+        root.addWidget(dialog_title(self, '工具设置'))
         scroll = ScrollArea(self)
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -54,8 +59,9 @@ class TaskDialog(FluentDialog):
         layout = QVBoxLayout(content)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
-        intro = BodyLabel('授权在当前通用助手对话的后续轮次中有效。新建或切换对话后关闭，需重新启用。'
-                          '工具模型跟随顶栏选择。')
+        intro = BodyLabel(f'当前角色：{agent_name or agent_id}。设置自动沿用到新建、切换对话及其他角色，'
+                          '重启后保留。关闭工具会同时关闭后续对话的工具。'
+                          '工具模型跟随顶栏；每条需确认的命令仍单独确认。')
         intro.setWordWrap(True)
         layout.addWidget(intro)
         layout.addWidget(StrongBodyLabel('本地命令'))
@@ -101,13 +107,13 @@ class TaskDialog(FluentDialog):
         layout.addWidget(hint)
         layout.addWidget(StrongBodyLabel('本次工具任务配置'))
         limits = RunLimits.from_config()
-        profile = BodyLabel(f'{self._model}\n上下文 8192 · 输出 1024 · 思考优先关闭\n'
-                            '不支持关闭思考时使用模型默认。每次发送前检查所选模型的工具能力。\n'
+        self._profile_summary = BodyLabel(self._model_settings.summary(self._model) + '\n'
+                            '每次发送前检查所选模型的工具与思考能力。\n'
                             f'最多 {limits.max_model_rounds} 轮模型、{limits.max_tool_calls} 次工具、'
                             f'其中 {limits.max_search_calls} 次搜索；活动时长 5 分钟。\n'
                             '次数限制可在设置 → 工具执行中调整。')
-        profile.setWordWrap(True)
-        layout.addWidget(profile)
+        self._profile_summary.setWordWrap(True)
+        layout.addWidget(self._profile_summary)
         self._status = CaptionLabel('启用前只检查本机服务，不调用模型或搜索。')
         self._status.setWordWrap(True)
         layout.addWidget(self._status)
@@ -124,7 +130,7 @@ class TaskDialog(FluentDialog):
         cancel = PushButton('取消')
         cancel.clicked.connect(self.reject)
         buttons.addWidget(cancel)
-        self._enable = PrimaryPushButton('启用工具')
+        self._enable = PrimaryPushButton('保存设置' if current else '启用工具')
         self._enable.clicked.connect(self._start_check)
         buttons.addWidget(self._enable)
         root.addLayout(buttons)
@@ -159,14 +165,14 @@ class TaskDialog(FluentDialog):
                          if self._bash.isChecked() else None)
             search = (replace(SearchSettings.from_config(), provider=self._provider.currentData())
                       if self._search.isChecked() else None)
-            self._candidate = TaskAuthorization(execution, search)
+            self._candidate = TaskAuthorization(execution, search, agent_id=self._agent_id)
         except (OSError, ValueError, SearchError) as exc:
             self._status.setText(str(exc))
             return
         self._checking = True
         self._status.setText('正在验证本机服务与模型…')
         self._update_controls()
-        self._checks.check(self._base_url, self._model)
+        self._checks.check(self._base_url, self._model, settings=self._model_settings)
 
     def _on_checked(self, sequence, admission, error):
         self._checking = False
@@ -176,7 +182,8 @@ class TaskDialog(FluentDialog):
             return
         try:
             self._candidate.worker_kwargs(admission, config.OLLAMA_BASE_URL,
-                                          agent_id='general_assistant', origin='chat', model=self._model)
+                                          agent_id=self._agent_id, origin='chat', model=self._model,
+                                          settings=self._model_settings)
             if self._candidate.execution:
                 snapshot = self._candidate.execution
                 save_execution_preferences({'execution_workspace': snapshot.workspace,
@@ -206,11 +213,14 @@ def probe_task_entry(chat):
     from ai_desktop.services.task_admission import TASK_DIGEST, TASK_SERVICE_VERSION, validate_discovery
     from ai_desktop.ui.task_step_card import TaskStepCard
 
+    fixture = TaskModelSettings.from_config()
+    fixture = replace(fixture, options=tuple({**dict(fixture.options), 'num_ctx': 8192, 'num_predict': 512}.items()))
     admission = validate_discovery('http://localhost:11434', {'version': TASK_SERVICE_VERSION},
                                    {'models': [{'name': TASK_MODEL, 'digest': TASK_DIGEST}]},
-                                   {'capabilities': ['tools', 'completion'], 'thinking': {'values': [False, True]}})
+                                   {'capabilities': ['tools', 'completion'], 'thinking': {'values': [False, True]}},
+                                   settings=fixture)
     assert admission.valid('http://localhost:11434')
-    setup = TaskDialog(parent=chat)
+    setup = TaskDialog(parent=chat, settings=fixture)
     assert not setup._enable.isEnabled() and setup.authorization is None
     setup.show()
     setup.reject()

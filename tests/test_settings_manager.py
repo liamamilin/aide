@@ -82,12 +82,14 @@ class TestSettingsManagerLoad:
         _reset_config()
         storage.save_setting("ollama_timeout", "not_a_number")
         storage.save_setting("desktop_pet_size", "giant")
+        storage.save_setting("hotkey", "<cmd>+<ctrl>+unsupported")
         config.DESKTOP_PET_SIZE = "medium"
         mgr = SettingsManager()
         mgr.load()
         # Should keep default (120), not crash
         assert config.OLLAMA_TIMEOUT == 120
         assert config.DESKTOP_PET_SIZE == "medium"
+        assert config.HOTKEY == _ORIG_DEFAULTS['HOTKEY']
 
     def test_load_skips_empty_values(self):
         _reset_config()

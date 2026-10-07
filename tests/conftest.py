@@ -3,8 +3,10 @@
 Provides:
 - qapp: session-scoped QApplication (required by pytest-qt)
 - tmp_db: function-scoped temp SQLite database with monkey-patching
+- _isolated_session_data: session-scoped temporary data root for every test
 """
 import os
+import shutil
 import tempfile
 import threading
 from pathlib import Path
@@ -14,9 +16,42 @@ from PyQt5.QtWidgets import QApplication
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import ai_desktop.utils.storage as storage
+# Tests must never reach the user's real database or attachments. This must be
+# set before storage is imported, because DB_PATH is resolved exactly once at
+# import time. Assign rather than setdefault: an AIDE_DATA_DIR already present
+# in the developer's shell must not redirect the suite back to real user data.
+# Both storage._resolve_db_path and images._app_support_dir honour this
+# variable, so init_db()'s attachment collection also stays inside the
+# temporary root instead of scanning the real attachments directory.
+_SESSION_DATA_DIR = tempfile.mkdtemp(prefix="aide-tests-")
+os.environ["AIDE_DATA_DIR"] = _SESSION_DATA_DIR
+
+import ai_desktop.utils.storage as storage  # noqa: E402 - DB_PATH resolves once at import
 
 _ORIG_DB_PATH = storage.DB_PATH
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_session_data():
+    """Give every test an initialised schema without touching user data.
+
+    Without this, a test that reads settings without requesting tmp_db only
+    passes where a real database happens to exist. On a fresh CI runner
+    _resolve_db_path returns a path that does not exist yet, _conn creates an
+    empty file, and the first settings read fails with "no such table".
+    """
+    # resolve() on both sides: mkdtemp returns /var/folders/... which is a
+    # symlink to /private/var/folders/... on macOS.
+    try:
+        assert Path(storage.DB_PATH).resolve().parent == Path(_SESSION_DATA_DIR).resolve(), \
+            "测试数据库必须位于会话临时目录内"
+        storage.init_db()
+        yield
+    finally:
+        # try/finally, not a plain post-yield block: if the guard above fails the
+        # generator never yields, and the temporary root would be left behind.
+        storage.close_db()
+        shutil.rmtree(_SESSION_DATA_DIR, ignore_errors=True)
 
 
 @pytest.fixture(scope="session")

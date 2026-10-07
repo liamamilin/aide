@@ -1,0 +1,52 @@
+{
+  "date": "2026-10-06",
+  "version": "1.5.0",
+  "tests": {
+    "passed": 1243,
+    "warnings": 2,
+    "new_regressions": 68
+  },
+  "ruff": "passed",
+  "diff_check": "passed",
+  "app_size": "867M",
+  "stable_signing_identity": "AI Desktop Assistant",
+  "strict_codesign": "passed",
+  "release_preflight": "passed",
+  "smoke": {
+    "ocr": true,
+    "english_speech": true,
+    "keychain_bridge_no_credentials": true,
+    "fixed_temporary_bash_fixture": true,
+    "fluent_cards_and_authorization": true,
+    "audit_retention_history": true,
+    "schema_5": true,
+    "schema_0_upgrade_backup": true
+  },
+  "frozen_source_modules": 44,
+  "frozen_source_equal": true,
+  "document_links_checked": 17,
+  "source_live_search": {
+    "parallel": "passed",
+    "exa": "passed"
+  },
+  "paid_http_attempts_this_batch": 2,
+  "frozen_live_search": {
+    "parallel": "blocked: credentials_unavailable",
+    "exa": "blocked: credentials_unavailable"
+  },
+  "frozen_search_http_attempts": 0,
+  "frozen_failure_exits_cleanly": true,
+  "remaining": "System Keychain access for signed App, then finite frozen 9B/27B provider cases; desktop checks",
+  "user_settings_modified": false,
+  "keychain_acl_modified": false,
+  "dmg_updated": false,
+  "commit": false,
+  "push": false,
+  "frozen_credential_reader_probe": {
+    "return_code": 1,
+    "reply_bytes": 0,
+    "key_returned": false,
+    "parent_channel_validated": true,
+    "native_access_reason": "not exposed; foreground Keychain confirmation pending"
+  }
+}
