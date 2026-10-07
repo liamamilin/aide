@@ -1,0 +1,39 @@
+{
+  "checked_at": "2026-10-06T21:32:13+08:00",
+  "execution": "frozen-app",
+  "passed": true,
+  "providers": {
+    "parallel": {
+      "model": "qwen3.5:9b-mlx",
+      "agent_id": "code_expert",
+      "seconds": 11.812,
+      "http_attempts": 1,
+      "http_status": 200,
+      "verified_citation": true,
+      "history_citation_restored": true,
+      "history_tools_executed": false,
+      "evidence": "search-parallel-packaged-authorized-2026-10-06.json"
+    },
+    "exa": {
+      "model": "qwen3.5:9b-mlx",
+      "agent_id": "code_expert",
+      "seconds": 7.394,
+      "http_attempts": 1,
+      "http_status": 200,
+      "verified_citation": true,
+      "history_citation_restored": true,
+      "history_tools_executed": false,
+      "evidence": "search-exa-packaged-authorized-2026-10-06.json"
+    }
+  },
+  "http_attempts_this_recheck": 2,
+  "new_code_changes": false,
+  "frozen_source_modules_checked": 44,
+  "frozen_source_equal": true,
+  "user_settings_modified": false,
+  "credential_values_logged": false,
+  "remaining": "27B live search sample and real desktop checks",
+  "visual_followup": "Parallel preview shows possible last-line clipping; functional citation data verified, settled layout still to inspect",
+  "commit": false,
+  "push": false
+}

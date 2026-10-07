@@ -16,6 +16,11 @@ from ai_desktop.services.execution_context import ExecutionSnapshot
 from ai_desktop.services.web_search import SearchSettings
 
 
+def chat_tools_eligible(agent_id, origin):
+    return (origin == 'chat' and isinstance(agent_id, str) and bool(agent_id.strip())
+            and agent_id.strip() == agent_id and not any(ord(char) < 32 for char in agent_id))
+
+
 class RunEventKind(str, Enum):
     STARTED = "started"
     MODEL_STARTED = "model_started"
@@ -158,7 +163,7 @@ class RunContext:
             raise ValueError("Invalid tool registry")
         if self.request.origin not in {"chat", "action"}:
             raise ValueError("Unknown run origin")
-        if self.tools and (self.request.origin == "action" or self.request.agent_id != "general_assistant"):
+        if self.tools and not chat_tools_eligible(self.request.agent_id, self.request.origin):
             raise ValueError("This origin or agent cannot use tools")
         if not self.tools and self.limits.max_model_rounds != 1:
             raise ValueError("Zero-tool runs are single-round")
@@ -171,10 +176,9 @@ class RunContext:
                execution: ExecutionSnapshot | None = None, search_settings: SearchSettings | None = None):
         if type(tools_admitted) is not bool:
             raise ValueError("Admission must be explicit")
-        # Origin wins even if an Action is explicitly bound to general_assistant.
-        allowed = tools_admitted and request.origin == "chat" and request.agent_id == "general_assistant"
-        names = config.AGENT_TOOL_GRANTS.get(request.agent_id, frozenset())
-        granted = tuple(tool for tool in tools if tool.name in names) if allowed else ()
+        # Action origin is always tool-free, independent of its bound role.
+        allowed = tools_admitted and chat_tools_eligible(request.agent_id, request.origin)
+        granted = tuple(tool for tool in tools if tool.name in config.CHAT_TOOL_NAMES) if allowed else ()
         return cls(request, granted, (limits or RunLimits()) if granted else
                    RunLimits(max_model_rounds=1, active_seconds=None), execution if granted else None,
                    search_settings if any(tool.name == 'web_search' for tool in granted) else None)

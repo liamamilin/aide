@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
 from ai_desktop.llm.model_options import global_options
-from ai_desktop.llm.run_types import RunLimits
+from ai_desktop.llm.run_types import RunLimits, chat_tools_eligible
 from ai_desktop.llm.thinking import ThinkSetting, normalize_think, parse_thinking, resolve_think
 from ai_desktop.services.execution_context import ExecutionSnapshot
 from ai_desktop.services.web_search import SearchSettings
@@ -127,8 +127,11 @@ def validate_discovery(base_url, version, tags, show, *, model=TASK_MODEL, setti
 class TaskAuthorization:
     execution: ExecutionSnapshot | None = None
     search: SearchSettings | None = None
+    agent_id: str = 'general_assistant'
 
     def __post_init__(self):
+        if not chat_tools_eligible(self.agent_id, 'chat'):
+            raise ValueError('工具授权需要有效的对话 Agent。')
         if self.execution is None and self.search is None:
             raise ValueError('请至少选择一个工具。')
         if self.execution is not None and not isinstance(self.execution, ExecutionSnapshot):
@@ -138,10 +141,12 @@ class TaskAuthorization:
 
     def worker_kwargs(self, admission, base_url, *, agent_id, origin, model=None, settings=None):
         from ai_desktop import config
-        if not config.GENERAL_ASSISTANT_TOOLS_ENABLED:
-            raise ValueError('设置中已关闭通用助手工具，请在工具执行页重新启用。')
-        if agent_id != 'general_assistant' or origin != 'chat':
-            raise ValueError('此 Agent 或快捷动作不能使用工具。')
+        if not config.CHAT_TOOLS_ENABLED:
+            raise ValueError('设置中已关闭对话工具，请在工具执行页重新启用。')
+        if not chat_tools_eligible(agent_id, origin):
+            raise ValueError('快捷动作或无效角色不能使用工具。')
+        if agent_id != self.agent_id:
+            raise ValueError('工具授权属于另一个 Agent，请为当前角色重新启用。')
         if not isinstance(admission, TaskAdmission) or not admission.valid(base_url, model):
             raise ValueError('模型准入检查已失效，请重新检查后发送。')
         if settings is not None and admission.settings != settings:
@@ -156,5 +161,5 @@ class TaskAuthorization:
                 'execution': self.execution, 'search_settings': self.search}
 
     def record(self):
-        return {'execution': self.execution.record() if self.execution else None,
+        return {'agent_id': self.agent_id, 'execution': self.execution.record() if self.execution else None,
                 'search': self.search.record() if self.search else None}

@@ -1,0 +1,32 @@
+{
+  "model": "qwen3.5:9b-mlx",
+  "real_local_model": false,
+  "native_qt": true,
+  "qt_platform": "cocoa",
+  "paid_search_authorized": false,
+  "paid_search_used": false,
+  "search_http_attempts": 0,
+  "search_http_results": [],
+  "user_data_isolated": true,
+  "execution": "frozen-app",
+  "global_hotkeys_started": false,
+  "complete": true,
+  "cases": [
+    {
+      "case": "selection_hotkey",
+      "status": "passed",
+      "native_local_event_dispatch": true,
+      "repeat_and_extra_modifier_ignored": true,
+      "held_modifiers_waited_over_180ms": true,
+      "qt_event_loop_responsive": true,
+      "cjk_and_english_input_matches": true,
+      "private_clipboard_formats_restored": true,
+      "stopped_callback_ignored": true,
+      "user_clipboard_accessed": false,
+      "global_listener_started": false,
+      "physical_cross_app_copy_verified": false,
+      "seconds": 0.385
+    }
+  ],
+  "passed": true
+}

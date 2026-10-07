@@ -1,0 +1,31 @@
+{
+  "checked_at": "2026-10-06T22:05:45+08:00",
+  "current_app_cdhash": "9bc0acf4180143fad61927a6eec8b1fd74c0fd92",
+  "team_identifier": "not set",
+  "items": [
+    {
+      "provider": "parallel",
+      "item_reference_status": 0,
+      "trusted_app_path_present": true,
+      "allowed_partitions": [
+        "cdhash:f401d729f0cdb41103923b1fab540f933bb267b5",
+        "cdhash:1da5278a899ae6459d5ebf3e452f1a583d9e5386"
+      ],
+      "current_app_partition_allowed": false
+    },
+    {
+      "provider": "exa",
+      "item_reference_status": 0,
+      "trusted_app_path_present": true,
+      "allowed_partitions": [
+        "cdhash:f401d729f0cdb41103923b1fab540f933bb267b5",
+        "cdhash:1da5278a899ae6459d5ebf3e452f1a583d9e5386"
+      ],
+      "current_app_partition_allowed": false
+    }
+  ],
+  "credential_values_read": false,
+  "acl_modified": false,
+  "search_http_requests": 0,
+  "reference": "https://github.com/apple-oss-distributions/Security/blob/main/securityd/src/clientid.cpp"
+}

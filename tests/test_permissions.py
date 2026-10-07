@@ -30,3 +30,10 @@ def test_permission_status_all_granted():
     assert PermissionStatus(True, False).all_granted is False
     assert PermissionStatus(False, True).all_granted is False
     assert PermissionStatus(False, False).all_granted is False
+
+
+def test_native_probe_failure_is_not_reported_as_permission_granted(monkeypatch):
+    def unavailable(_path):
+        raise OSError('fixture framework unavailable')
+    monkeypatch.setattr('ai_desktop.utils.permissions.ctypes.cdll.LoadLibrary', unavailable)
+    assert check_all() == PermissionStatus(False, False)

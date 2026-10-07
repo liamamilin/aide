@@ -5,6 +5,7 @@ credentials come from an immutable application snapshot, not model arguments.
 No implicit retries, provider fallback, extraction, or shared search sessions.
 """
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from urllib.parse import urlsplit
 
@@ -12,6 +13,8 @@ ENDPOINTS = {"parallel": "https://api.parallel.ai/v1/search", "exa": "https://ap
 PARALLEL_MODES = frozenset({"turbo", "fast", "basic", "advanced"})
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_SEARCH_RESULTS = 99
+# At most 99 searches with 99 sources each in the bounded run contract.
+MAX_RUN_SOURCE_ID = 99 * MAX_SEARCH_RESULTS
 
 
 class SearchError(Exception):
@@ -114,6 +117,28 @@ def safe_source_url(url):
                 and not any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in url))
     except ValueError:
         return False
+
+
+def normalized_sources(record):
+    """Share the same bounded source validation in live cards and history."""
+    if not isinstance(record, dict) or record.get('provider') not in ENDPOINTS:
+        return []
+    values = record.get('sources')
+    if not isinstance(values, list):
+        return []
+    sources, seen = [], set()
+    for source in values[:MAX_SEARCH_RESULTS]:
+        if not isinstance(source, dict):
+            continue
+        identity = source.get('source_id')
+        if (not isinstance(identity, str) or not re.fullmatch(r'S[1-9][0-9]{0,3}', identity)
+                or int(identity[1:]) > MAX_RUN_SOURCE_ID or identity in seen
+                or not isinstance(source.get('title'), str) or len(source['title']) > 300
+                or not safe_source_url(source.get('url')) or '[REDACTED]' in source['url']):
+            continue
+        seen.add(identity)
+        sources.append(dict(source))
+    return sources
 
 
 def parse_response(settings: SearchSettings, raw: bytes) -> SearchResult:

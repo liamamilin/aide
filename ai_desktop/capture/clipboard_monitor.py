@@ -35,6 +35,14 @@ _PLAIN_TEXT_TYPES = (
 )
 
 
+def copy_modifiers_pressed() -> bool:
+    """Read only modifier state; never record keys or synthesize key releases."""
+    from Quartz import CGEventSourceFlagsState, kCGEventSourceStateCombinedSessionState
+
+    from ai_desktop.capture.nsevent_monitor import SHORTCUT_MODIFIERS
+    return bool(CGEventSourceFlagsState(kCGEventSourceStateCombinedSessionState) & SHORTCUT_MODIFIERS)
+
+
 class UnsupportedClipboardFormatError(RuntimeError):
     """The current clipboard cannot be snapshotted without losing a format."""
 
@@ -265,9 +273,14 @@ class SelectionCaptureTask(QObject):
 
     def __init__(self, parent: QObject | None = None, *,
                  copy_action: Callable[[], bool] | None = None,
-                 pasteboard=None) -> None:
+                 pasteboard=None, modifier_state: Callable[[], bool] | None = None,
+                 release_wait_ms: int = 1500) -> None:
         super().__init__(parent)
         self._copy_action = copy_action or _try_cmd_c_via_pynput
+        self._modifier_state = modifier_state or copy_modifiers_pressed
+        self._release_wait_ms = release_wait_ms
+        self._release_deadline = 0.0
+        self.failure_reason = ''
         self._pasteboard = pasteboard or NativePasteboard()
         self._process: QProcess | None = None
         self._command_callback = None
@@ -294,6 +307,29 @@ class SelectionCaptureTask(QObject):
         if self._started or self._terminal:
             return
         self._started = True
+        self._release_deadline = time.monotonic() + self._release_wait_ms / 1000
+        self._wait_for_modifier_release()
+
+    def _wait_for_modifier_release(self) -> None:
+        if self._cancelled or self._terminal:
+            return
+        try:
+            pressed = self._modifier_state()
+        except Exception:
+            self.failure_reason = 'modifier_state_unavailable'
+            logger.warning('Cannot inspect copy modifier state; selection copy stopped')
+            self._complete('')
+            return
+        if pressed:
+            if time.monotonic() >= self._release_deadline:
+                self.failure_reason = 'modifiers_held'
+                self._complete('')
+            else:
+                self._wait_for_clipboard(20, self._wait_for_modifier_release)
+            return
+        self._snapshot_and_copy()
+
+    def _snapshot_and_copy(self) -> None:
         try:
             self._snapshot = self._pasteboard.snapshot()
         except Exception as exc:
@@ -344,6 +380,17 @@ class SelectionCaptureTask(QObject):
         if self._cancelled:
             self._complete("")
             return
+        # Reading promised clipboard formats may take time. Check again at the
+        # injection boundary in case a modifier was pressed during the snapshot.
+        try:
+            if self._modifier_state():
+                self.failure_reason = 'modifiers_held'
+                self._complete('')
+                return
+        except Exception:
+            self.failure_reason = 'modifier_state_unavailable'
+            self._complete('')
+            return
         try:
             copy_started = self._copy_action()
         except Exception:
@@ -357,6 +404,17 @@ class SelectionCaptureTask(QObject):
 
     def _run_osascript_copy(self) -> None:
         if self._cancelled:
+            self._restore_and_complete()
+            return
+        # Modifiers may have been pressed again while awaiting the first copy.
+        # Do not issue a second copy with an unexpected keyboard chord.
+        try:
+            if self._modifier_state():
+                self.failure_reason = 'modifiers_held'
+                self._restore_and_complete()
+                return
+        except Exception:
+            self.failure_reason = 'modifier_state_unavailable'
             self._restore_and_complete()
             return
         self._used_fallback = True

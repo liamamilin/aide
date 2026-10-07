@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 
 from ai_desktop.services.audit_store import RETENTION_SECONDS
 from ai_desktop.services.command_confirmation import CommandConfirmation
+from ai_desktop.services.web_search import normalized_sources as search_sources
 from ai_desktop.services.web_search import safe_source_url
 from ai_desktop.ui.fluent import (
     BodyLabel,
@@ -44,21 +45,6 @@ def open_source_url(url):
     if safe_source_url(url):
         return QDesktopServices.openUrl(QUrl(url))
     return False
-
-
-def search_sources(record):
-    """Accept only bounded, normalized metadata from a search tool result."""
-    import re
-    if not isinstance(record, dict) or record.get('provider') not in {'parallel', 'exa'}:
-        return []
-    values = record.get('sources')
-    if not isinstance(values, list):
-        return []
-    return [dict(source) for source in values[:5] if isinstance(source, dict)
-            and isinstance(source.get('source_id'), str)
-            and re.fullmatch(r'S(?:[1-9]|[12][0-9]|30)', source['source_id'])
-            and isinstance(source.get('title'), str) and len(source['title']) <= 300
-            and safe_source_url(source.get('url')) and '[REDACTED]' not in source['url']]
 
 
 def plain_label(cls, text, parent):

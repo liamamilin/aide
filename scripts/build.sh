@@ -83,6 +83,13 @@ else
         --entitlements "${ROOT}/scripts/entitlements.plist" \
         --sign "$SIGN_IDENTITY" "$APP"
 fi
+# Install the cached helper AFTER deep signing. Deep re-signing this binary
+# would change its CodeDirectory and defeat stable file-Keychain authorization.
+"$PYTHON_BIN" scripts/build_credential_broker.py --root "$ROOT" --app "$APP" --identity "$SIGN_IDENTITY"
+if [ "$SIGN_IDENTITY" != "-" ]; then
+    codesign --force --options runtime --entitlements "${ROOT}/scripts/entitlements.plist" \
+        --sign "$SIGN_IDENTITY" "$APP"
+fi
 codesign --verify --deep --strict --verbose=2 "$APP"
 "$PYTHON_BIN" scripts/release_check.py --bundle "$APP" --version "$VERSION"
 

@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-07",
+  "context": "new conversation then screenshot shortcut during desktop acceptance",
+  "exception": "EXC_BAD_ACCESS / SIGBUS",
+  "python_fault_site": "ai_desktop/ui/chat_dialog.py:eventFilter:Leave:findChildren",
+  "native_stack": [
+    "qtcore_do_find_children",
+    "dispatchEnterLeave",
+    "sendSyntheticEnterLeave",
+    "QWidget destructor"
+  ],
+  "private_report_copied": false,
+  "user_conversation_or_screen_content_recorded": false,
+  "fix": "Remove message event filters; direct edit control reference; retire before deferred deletion",
+  "original_failure_preserved": true
+}

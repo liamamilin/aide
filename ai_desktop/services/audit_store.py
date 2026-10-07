@@ -294,21 +294,15 @@ def sources_for_message(message_id=None, *, generation_id=None, cleanup_first=Tr
                         WHERE r.generation_id=? AND s.tool_name='web_search' AND s.status='succeeded'
                         AND s.payload_purged_at IS NULL ORDER BY s.step_index''', (generation_id,))
     # Lazy import avoids pulling GUI widgets into database migration/CLI tools.
-    from ai_desktop.services.web_search import safe_source_url
+    from ai_desktop.services.web_search import normalized_sources
     sources = {}
     for row in rows:
         try:
             record = json.loads(json.loads(row[0])['output'])
-            values = record['sources']
         except (ValueError, TypeError, KeyError):
             continue
-        if not isinstance(values, list):
-            continue
-        for source in values[:5]:
-            if (isinstance(source, dict) and re.fullmatch(r'S(?:[1-9]|[12][0-9]|30)', str(source.get('source_id', '')))
-                    and safe_source_url(source.get('url')) and MASK not in source['url']
-                    and isinstance(source.get('title'), str)):
-                sources.setdefault(source['source_id'], {**source, 'expires_at': row['payload_expires_at']})
+        for source in normalized_sources(record):
+            sources.setdefault(source['source_id'], {**source, 'expires_at': row['payload_expires_at']})
     return sources
 
 

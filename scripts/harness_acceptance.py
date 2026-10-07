@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Launch native acceptance in an isolated source or frozen-app process.
 
-Uses local 9B/27B fixtures, no global hotkeys or paid search. Examples:
+Uses local 9B/27B fixtures, no global hotkeys. Paid search requires explicit opt-in. Examples:
   python3 scripts/harness_acceptance.py --only restart_and_readonly_history
   python3 scripts/harness_acceptance.py --packaged dist/AI桌面助手.app --output /tmp/acceptance.json
 """
@@ -22,6 +22,8 @@ def main(argv=None):
     parser.add_argument('--output', type=Path)
     parser.add_argument('--model', help='Local fixture model: 9B (default) or qwen3.8:27b-mlx')
     parser.add_argument('--only', help='One acceptance case; see module --help for available cases')
+    parser.add_argument('--allow-paid-search', action='store_true', help='Opt in to one live search request')
+    parser.add_argument('--search-agent', help='Role used by the selected search case')
     args = parser.parse_args(argv)
     command = [sys.executable, '-m', MODULE]
     if args.packaged:
@@ -37,6 +39,10 @@ def main(argv=None):
         command += ['--model', args.model]
     if args.only:
         command += ['--only', args.only]
+    if args.allow_paid_search:
+        command += ['--allow-paid-search']
+    if args.search_agent:
+        command += ['--search-agent', args.search_agent]
     with tempfile.TemporaryDirectory(prefix='aide-acceptance-') as directory:
         root = Path(directory).resolve()
         environ = dict(os.environ, AIDE_ACCEPTANCE_ROOT=str(root),

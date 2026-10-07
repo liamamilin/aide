@@ -1,4 +1,5 @@
 """Cancellable, bounded search HTTP request in the calling Qt event loop."""
+from PyQt5 import sip
 from PyQt5.QtCore import QObject, QTimer, QUrl, pyqtSignal
 from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkProxy, QNetworkReply, QNetworkRequest
 
@@ -19,6 +20,7 @@ class SearchJob(QObject):
         super().__init__(parent)
         self.request = request
         self.result = None
+        self.http_status = None
         self._reply = None
         self._data = bytearray()
         self._manager = QNetworkAccessManager(self)
@@ -49,7 +51,7 @@ class SearchJob(QObject):
         self._finish(SearchResult(error="任务活动时长已用完。", error_type="active_limit"))
 
     def _read(self):
-        if self.result is not None:
+        if self.result is not None or self._reply is None or sip.isdeleted(self._reply):
             return
         self._data.extend(bytes(self._reply.readAll()))
         if len(self._data) > MAX_RESPONSE_BYTES:
@@ -58,10 +60,14 @@ class SearchJob(QObject):
     def _done(self):
         if self.result is not None:
             return
+        if self._reply is None or sip.isdeleted(self._reply):
+            self._finish(SearchResult(error='搜索连接已关闭，请重试。', error_type='network'))
+            return
         self._read()
         if self.result is not None:
             return
         status = self._reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)
+        self.http_status = status
         if status and status != 200:
             code = int(status)
             kind = {401: "authentication", 403: "authentication", 402: "quota", 429: "rate_limit"}.get(
@@ -81,9 +87,14 @@ class SearchJob(QObject):
             return
         self.result = result
         self._timer.stop()
-        if self._reply is not None:
-            if not self._reply.isFinished():
-                self._reply.abort()
-            self._reply.deleteLater()
+        # Qt can destroy a reply before a cancellation poll gets here. Detach
+        # first so reentrant abort/finished callbacks cannot reuse it, and
+        # always notify the waiting event loop even if the native reply is gone.
+        reply, self._reply = self._reply, None
+        if reply is not None and not sip.isdeleted(reply):
+            if not reply.isFinished():
+                reply.abort()
+            if not sip.isdeleted(reply):
+                reply.deleteLater()
         self._data.clear()
         self.finished.emit(result)

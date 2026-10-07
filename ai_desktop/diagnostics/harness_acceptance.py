@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Opt-in native Qt / real local 9B acceptance, isolated from user data.
 
-Uses explicitly selected local fixture models and temporary fixtures. Never reads search
-credentials or calls paid providers. Run: python3 scripts/harness_acceptance.py
+Uses selected local models and isolated data. Default cases never access search
+credentials; an explicit --allow-paid-search and one search case permit at most
+one live provider request. Run: python3 scripts/harness_acceptance.py
 """
 import argparse
 import faulthandler
@@ -15,10 +16,14 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
+from ai_desktop.diagnostics.search_acceptance import PAID_CASES, validate_paid_case
+
 DIAGNOSTIC_MODULE = 'ai_desktop.diagnostics.harness_acceptance'
 CASES = ('ordinary_send_and_regenerate', 'bash_readonly', 'bash_approve', 'bash_reject', 'bash_hide',
          'cancel_then_new_conversation', 'restart_and_readonly_history', 'window_layout_and_restore',
-         'model_switch_tools', 'settings_tab_navigation', 'settings_task_limits', 'task_model_settings') + tuple(
+         'model_switch_tools', 'settings_tab_navigation', 'settings_task_limits', 'task_model_settings',
+         'all_agent_tools', 'answer_layout', 'selection_hotkey', 'desktop_recovery',
+         'conversation_lifecycle') + PAID_CASES + tuple(
     'action_'+mode+'_'+action for mode in ('current', 'new')
     for action in ('translate', 'explain', 'summarize', 'rewrite'))
 
@@ -82,7 +87,8 @@ def resume_probe(directory, conversation_id, interrupted_id):
     print(json.dumps({'restart': 'passed', 'history_executed_tools': False, 'authorization_restored': False}))
 
 
-def acceptance(output, only=None, model='qwen3.5:9b-mlx'):
+def acceptance(output, only=None, model='qwen3.5:9b-mlx', *, allow_paid_search=False, search_agent='code_expert'):
+    validate_paid_case(only, allow_paid_search)
     root = isolated_root()
     from PyQt5.QtCore import QEventLoop, QTimer
     from PyQt5.QtWidgets import QApplication
@@ -121,10 +127,12 @@ def acceptance(output, only=None, model='qwen3.5:9b-mlx'):
     report = {'model': model,
               'real_local_model': only not in {'restart_and_readonly_history', 'window_layout_and_restore',
                                                'settings_tab_navigation', 'settings_task_limits',
-                                               'task_model_settings'},
+                                               'task_model_settings', 'answer_layout', 'selection_hotkey',
+                                               'desktop_recovery', 'conversation_lifecycle'},
               'native_qt': app.platformName() not in {'offscreen', 'minimal'},
               'qt_platform': app.platformName(),
-              'paid_search_used': False, 'user_data_isolated': True,
+              'paid_search_authorized': allow_paid_search, 'paid_search_used': False,
+              'search_http_attempts': 0, 'search_http_results': [], 'user_data_isolated': True,
               'execution': 'frozen-app' if getattr(sys, 'frozen', False) else 'source',
               'global_hotkeys_started': False, 'complete': False, 'cases': []}
 
@@ -182,18 +190,21 @@ def acceptance(output, only=None, model='qwen3.5:9b-mlx'):
         ctl._dialog.set_input_text(text)
         ctl._dialog._send_btn.click()
 
-    def general():
+    def select_role(agent_id):
         ctl._dialog.new_convo_requested.emit()
-        agent = next(a for a in ctl._all_agents if a.id == 'general_assistant')
+        agent = next(a for a in ctl._all_agents if a.id == agent_id)
         ctl._dialog.set_active_agent(agent)
         ctl._on_agent_changed(agent)
         ctl._dialog.show()
 
+    def general():
+        select_role('general_assistant')
+
     def answer():
         return next((msg.content for msg in reversed(ctl._messages) if msg.role == 'assistant'), '')
 
-    def enable(policy='readonly_auto'):
-        general()
+    def enable(policy='readonly_auto', agent_id='general_assistant', search_provider=None):
+        select_role(agent_id)
         guard = QTimer()
         guard.setSingleShot(True)
         opened = []
@@ -205,7 +216,10 @@ def acceptance(output, only=None, model='qwen3.5:9b-mlx'):
             if panel in opened:
                 return
             opened.append(panel)
-            panel._bash.setChecked(True)
+            panel._bash.setChecked(search_provider is None)
+            panel._search.setChecked(search_provider is not None)
+            if search_provider:
+                panel._provider.setCurrentIndex(panel._provider.findData(search_provider))
             panel._workspace.setText(str(workspace))
             panel._policy.setCurrentIndex(panel._policy.findData(policy))
             panel._enable.click()
@@ -221,6 +235,115 @@ def acceptance(output, only=None, model='qwen3.5:9b-mlx'):
             chooser.stop()
             guard.stop()
         assert ctl._task_authorization is not None, 'Task panel did not grant tools'
+        assert ctl._task_authorization.agent_id == agent_id
+
+    def live_search(provider):
+        from PyQt5.QtWidgets import QLabel
+
+        from ai_desktop.diagnostics.search_acceptance import SearchTrace
+        from ai_desktop.services.web_search import normalized_sources
+        from ai_desktop.ui.tool_card import ToolCard
+
+        config.SEARCH_MAX_RESULTS = 1
+        config.SEARCH_TIMEOUT = 30
+        config.SEARCH_PARALLEL_MODE = 'basic'
+        config.TASK_MAX_MODEL_ROUNDS = 2
+        config.TASK_MAX_TOOL_CALLS = 1
+        config.TASK_MAX_SEARCH_CALLS = 1
+        if search_agent == 'acceptance-researcher':
+            ctl._on_custom_agents_saved([{'id': search_agent, 'name': '资料研究', 'icon': '📚',
+                                         'system_prompt': '你是资料研究助手。准确回答材料中的事实，用中文简明回复。'}])
+        enable(agent_id=search_agent, search_provider=provider)
+        assert ctl._task_authorization.execution is None
+        with SearchTrace() as trace:
+            try:
+                send('请调用 web_search 搜索 Python official documentation，'
+                     '只搜索一次。根据搜索结果用一句中文说明 Python 官方文档的用途，'
+                     '引用真实来源编号 [S1]。不要自行编造网址。')
+                idle()
+            finally:
+                report['paid_search_used'] = trace.attempts > 0
+                report['search_http_attempts'] = trace.attempts
+                report['search_http_results'] = trace.results
+        run = audit_store.list_runs(ctl._convo_id)[0]
+        searches = [step for step in run['steps'] if step['tool_name'] == 'web_search']
+        assert len(searches) == 1, 'Model did not issue exactly one search'
+        tool_result = json.loads(searches[0]['payload']['output'])
+        assert not tool_result['error_type'], f'Search failed: {tool_result["error_type"]}'
+        assert trace.attempts == 1 and len(trace.results) == 1 and trace.results[0]['http_status'] == 200
+        assert run['status'] == 'succeeded' and run['agent_id'] == search_agent
+        assert run['config']['model'] == model and run['config']['allowed_tools'] == ['web_search']
+        assert run['config']['search']['provider'] == provider
+        model_steps = [s for s in run['steps'] if s['kind'] == 'model']
+        assert len(model_steps) == 2
+        assert all(step['payload']['input'][0]['content'].startswith(
+            ctl._active_agent.system_prompt+'\n\n[工具使用规则]') for step in model_steps), 'Role prompt changed'
+        sources = normalized_sources(tool_result)
+        assert sources and sources[0]['source_id'] == 'S1', 'Search returned no usable source'
+        assert '[S1]' in answer(), 'Final answer omitted the verified source'
+        text = answer()
+        labels = ctl._dialog.findChildren(QLabel)
+        label = next(label for label in labels if getattr(label, '_markdown_source', '') == text)
+        assert 'source://S1' in label.text() and label._search_sources['S1']['url'] == sources[0]['url']
+        cards = ctl._dialog.findChildren(ToolCard)
+        card = next(card for card in cards if card.tool_name == 'web_search')
+        assert card.source_buttons and card.source_buttons[0].toolTip() == sources[0]['url']
+        assert '找到 1 个来源' in card.status.text() and provider.title() in card.summary.text()
+        from ai_desktop.diagnostics.answer_layout import fits, measure
+
+        answer_card = label.parentWidget()
+        wait(lambda: fits(label, answer_card), timeout=3)
+        answer_geometry = measure(label)
+        report['search_validation'] = {'agent_id': search_agent, 'provider': provider,
+                                       'role_prompt_preserved': True, 'model_steps': 2,
+                                       'verified_citation': True, 'answer_layout': answer_geometry}
+        conversation_id = ctl._convo_id
+        preview = None
+        if output:
+            preview = Path(output).parent/'previews'/(Path(output).stem+'.png')
+            preview.parent.mkdir(parents=True, exist_ok=True)
+            assert ctl._dialog.grab().save(str(preview))
+        previous_labels = set(labels)
+        ctl._on_conversation_selected(conversation_id)
+        assert ctl._task_authorization is None and ctl._worker is None
+        from ai_desktop.diagnostics.answer_layout import restored_answer
+
+        wait(lambda: restored_answer(ctl._dialog, text, previous_labels) is not None, timeout=3)
+        restored = restored_answer(ctl._dialog, text, previous_labels)
+        assert 'source://S1' in restored.text() and restored._search_sources['S1']['url'] == sources[0]['url']
+        wait(lambda: restored.height() >= restored.heightForWidth(restored.width()), timeout=3)
+        assert len(audit_store.list_runs(conversation_id)) == 1 and trace.attempts == 1
+        return {'agent_id': search_agent, 'provider': provider, 'model_steps': 2, 'role_prompt_preserved': True,
+                'search_http_attempts': trace.attempts, 'source_ids': [s['source_id'] for s in sources],
+                'source_urls': [s['url'] for s in sources], 'verified_citation': True,
+                'history_citation_restored': True, 'history_tools_executed': False,
+                'answer_layout': answer_geometry, 'history_answer_layout': measure(restored),
+                'preview': str(preview) if preview else None}
+
+    def all_agent_tools():
+        ctl._on_custom_agents_saved([{'id': 'acceptance-researcher', 'name': '资料研究', 'icon': '📚',
+                                     'system_prompt': '你是资料研究助手。准确回答材料中的事实，用中文简明回复。'}])
+        roles = []
+        for agent_id in ['general_assistant', 'code_expert', 'translator', 'summarizer',
+                         'polisher', 'acceptance-researcher']:
+            enable(agent_id=agent_id)
+            agent = ctl._active_agent
+            send('请先使用 bash 执行 cat note.txt，读取并回复文件中的 verification_code。'
+                 '不要根据记忆猜测，不要修改文件。')
+            idle()
+            run = audit_store.list_runs(ctl._convo_id)[0]
+            assert run['agent_id'] == agent_id and run['status'] == 'succeeded', f'{agent_id}: {run["status"]}'
+            assert run['config']['model'] == model and run['config']['options'] == global_options(), agent_id
+            assert 'ACCEPTANCE-READ-5741' in answer(), f'{agent_id}: missing marker, answer={answer()[:160]}'
+            assert any(step['tool_name'] == 'bash' for step in run['steps']), f'{agent_id}: no Bash call'
+            steps = [step for step in run['steps'] if step['kind'] == 'model']
+            assert all(step['payload']['input'][0]['content'].startswith(
+                agent.system_prompt+'\n\n[工具使用规则]') for step in steps), f'{agent_id}: changed role prompt'
+            roles.append({'agent_id': agent_id, 'model_steps': len(steps), 'actual_bash': True,
+                          'role_prompt_preserved': True})
+            ctl._dialog.new_convo_requested.emit()
+            assert ctl._task_authorization is None
+        return {'roles': roles, 'new_conversation_clears_authorization': True}
 
     def ordinary():
         general()
@@ -577,6 +700,28 @@ def acceptance(output, only=None, model='qwen3.5:9b-mlx'):
         return {**value, 'synthetic_history_fixture': synthetic}
 
     try:
+        if only == 'conversation_lifecycle':
+            from ai_desktop.diagnostics.conversation_lifecycle import acceptance as lifecycle_acceptance
+            case('conversation_lifecycle', lambda: lifecycle_acceptance(
+                ctl._dialog, lambda predicate: wait(predicate, timeout=3)))
+        if only == 'desktop_recovery':
+            from ai_desktop.diagnostics.desktop_recovery import acceptance as recovery_acceptance
+            case('desktop_recovery', lambda: recovery_acceptance(
+                ctl, lambda predicate: wait(predicate, timeout=3)))
+        if only == 'selection_hotkey':
+            from ai_desktop.diagnostics.selection_hotkey import acceptance as selection_acceptance
+            case('selection_hotkey', lambda: selection_acceptance(
+                ctl, lambda predicate: wait(predicate, timeout=3)))
+        if only == 'answer_layout':
+            from ai_desktop.diagnostics.answer_layout import acceptance as layout_acceptance
+
+            preview_dir = Path(output).parent/'previews'/Path(output).stem if output else None
+            case('answer_layout', lambda: layout_acceptance(
+                ctl._dialog, lambda predicate: wait(predicate, timeout=3), preview_dir))
+        if only in PAID_CASES:
+            case(only, lambda: live_search(only.removeprefix('search_')))
+        if only == 'all_agent_tools':
+            case('all_agent_tools', all_agent_tools)
         if only == 'task_model_settings':
             case('task_model_settings', task_model_settings)
         if only == 'settings_task_limits':
@@ -606,7 +751,9 @@ def acceptance(output, only=None, model='qwen3.5:9b-mlx'):
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(report, ensure_ascii=False, indent=2)+'\n')
     print(json.dumps({'passed': report['passed'], 'cases': len(report['cases']),
-                      'real_local_model': report['real_local_model'], 'paid_search_used': False}), flush=True)
+                      'real_local_model': report['real_local_model'],
+                      'paid_search_used': report['paid_search_used'],
+                      'search_http_attempts': report['search_http_attempts']}), flush=True)
     return 0 if report['passed'] else 1
 
 def main(argv=None):
@@ -615,18 +762,24 @@ def main(argv=None):
     parser.add_argument('--output', type=Path)
     parser.add_argument('--model', choices=['qwen3.5:9b-mlx', 'qwen3.8:27b-mlx'], default='qwen3.5:9b-mlx')
     parser.add_argument('--only', choices=CASES, help='Rerun one acceptance case')
+    parser.add_argument('--allow-paid-search', action='store_true', help='Permit one live search in one search case')
+    parser.add_argument('--search-agent', choices=['general_assistant', 'code_expert', 'translator',
+                                                 'summarizer', 'polisher', 'acceptance-researcher'],
+                        default='code_expert')
     parser.add_argument('--resume-probe', help=argparse.SUPPRESS)
     parser.add_argument('--conversation-id', type=int, help=argparse.SUPPRESS)
     parser.add_argument('--interrupted-id', help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     try:
+        validate_paid_case(args.only, args.allow_paid_search)
         isolated_root()
     except ValueError as exc:
         parser.error(str(exc))
     if args.resume_probe:
         resume_probe(args.resume_probe, args.conversation_id, args.interrupted_id)
         return 0
-    return acceptance(args.output, args.only, args.model)
+    return acceptance(args.output, args.only, args.model, allow_paid_search=args.allow_paid_search,
+                      search_agent=args.search_agent)
 
 
 if __name__ == '__main__':

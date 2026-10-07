@@ -1,0 +1,112 @@
+{
+  "model": "qwen3.5:9b-mlx",
+  "real_local_model": false,
+  "native_qt": true,
+  "qt_platform": "cocoa",
+  "paid_search_authorized": false,
+  "paid_search_used": false,
+  "search_http_attempts": 0,
+  "search_http_results": [],
+  "user_data_isolated": true,
+  "execution": "source",
+  "global_hotkeys_started": false,
+  "complete": true,
+  "cases": [
+    {
+      "case": "answer_layout",
+      "status": "passed",
+      "checks": [
+        {
+          "fixture": "citation",
+          "window": [
+            450,
+            570
+          ],
+          "width": 373,
+          "height": 96,
+          "required_height": 96
+        },
+        {
+          "fixture": "citation",
+          "window": [
+            400,
+            460
+          ],
+          "width": 328,
+          "height": 96,
+          "required_height": 96
+        },
+        {
+          "fixture": "citation",
+          "window": [
+            900,
+            700
+          ],
+          "width": 760,
+          "height": 64,
+          "required_height": 64
+        },
+        {
+          "fixture": "citation",
+          "window": [
+            450,
+            570
+          ],
+          "width": 373,
+          "height": 96,
+          "required_height": 96
+        },
+        {
+          "fixture": "structured",
+          "window": [
+            450,
+            570
+          ],
+          "width": 373,
+          "height": 352,
+          "required_height": 352
+        },
+        {
+          "fixture": "structured",
+          "window": [
+            400,
+            460
+          ],
+          "width": 328,
+          "height": 352,
+          "required_height": 352
+        },
+        {
+          "fixture": "structured",
+          "window": [
+            900,
+            700
+          ],
+          "width": 760,
+          "height": 320,
+          "required_height": 320
+        },
+        {
+          "fixture": "structured",
+          "window": [
+            450,
+            570
+          ],
+          "width": 373,
+          "height": 352,
+          "required_height": 352
+        },
+        {
+          "fixture": "history",
+          "width": 373,
+          "height": 96,
+          "required_height": 96
+        }
+      ],
+      "model_or_tools_executed": false,
+      "credential_access": false,
+      "seconds": 0.416
+    }
+  ],
+  "passed": true
+}

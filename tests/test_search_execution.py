@@ -36,7 +36,7 @@ class Credentials:
         self.key, self.error = key, error
         self.reads = []
 
-    def get(self, provider, *, interactive):
+    def get(self, provider, *, interactive, cancelled=None, deadline=None):
         self.reads.append((provider, interactive))
         if self.error:
             raise RuntimeError('secret-in-native-error')
@@ -157,8 +157,8 @@ def test_config_snapshot_is_frozen_and_nonsecret(monkeypatch):
 
 
 @pytest.mark.parametrize('origin,agent,admitted', [('action', 'general_assistant', True),
-    ('chat', 'code_expert', True), ('chat', 'general_assistant', False)])
-def test_action_role_and_default_chat_never_construct_search(tmp_db, monkeypatch, origin, agent, admitted):
+    ('chat', '', True), ('chat', 'general_assistant', False)])
+def test_action_missing_role_and_unadmitted_chat_never_construct_search(tmp_db, monkeypatch, origin, agent, admitted):
     def fail(*args, **kwargs):
         raise AssertionError('Unexpected Keychain read')
     monkeypatch.setattr(SearchCredentials, 'get', fail)

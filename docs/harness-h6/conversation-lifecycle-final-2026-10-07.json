@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-07",
+  "scope": "conversation teardown crash and real desktop acceptance",
+  "tests": {
+    "passed": 1322,
+    "seconds": 44.34,
+    "warnings": 2,
+    "chat_dialog": 75,
+    "release_pipeline_after_script_change": 7,
+    "ruff": "passed",
+    "diff_check": "passed",
+    "first_full_run_native_svg_crash": "not reproduced in serial full rerun; cause undetermined"
+  },
+  "build": {
+    "version": "1.5.0",
+    "size": "867M",
+    "signature_and_preflight": "passed",
+    "isolated_startup_smoke": "passed",
+    "schema0_upgrade": "passed",
+    "preserved_settings_and_backup": 14,
+    "frozen_source_modules_matched": 55,
+    "credential_helper_identity_and_bytes_unchanged": true
+  },
+  "native_acceptance": {
+    "source": "conversation-lifecycle-source-2026-10-07.json",
+    "packaged": "conversation-lifecycle-packaged-2026-10-07.json",
+    "selection_regression": "selection-after-lifecycle-packaged-2026-10-07.json",
+    "recovery_regression": "recovery-after-lifecycle-packaged-2026-10-07.json"
+  },
+  "real_desktop": {
+    "original_new_conversation_then_screenshot_path_no_longer_crashes": true,
+    "screenshot_deadline_recovery_verified": true,
+    "window_maximize_restore_control_states_verified": true,
+    "cross_app_automated_key_delivery_verified": false,
+    "physical_chinese_selection_and_screenshot_cancel": {
+      "status": "passed",
+      "evidence": "user explicitly confirmed both normal"
+    },
+    "pet_popup_menu_automation_completed": false
+  },
+  "credentials": "credential-after-lifecycle-build-2026-10-07.json",
+  "search_http_attempts": 0,
+  "model_generation_calls": 0,
+  "system_permissions_changed": false,
+  "user_history_or_drafts_deleted": false,
+  "remaining": [
+    "full cross-application matrix, focus and IME",
+    "real sleep/wake and permission revoke/regrant",
+    "real multiple monitors/Spaces and hidden pet restore",
+    "cover install at /Applications",
+    "DMG/commit/push after gates"
+  ],
+  "commit_created": false,
+  "pushed": false,
+  "dmg_updated": false,
+  "published": false
+}

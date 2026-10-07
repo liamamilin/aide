@@ -1,0 +1,43 @@
+{
+  "model": "qwen3.5:9b-mlx",
+  "real_local_model": true,
+  "native_qt": true,
+  "qt_platform": "cocoa",
+  "paid_search_authorized": true,
+  "paid_search_used": true,
+  "search_http_attempts": 1,
+  "search_http_results": [
+    {
+      "provider": "exa",
+      "http_status": 200,
+      "error_type": "",
+      "source_count": 1
+    }
+  ],
+  "user_data_isolated": true,
+  "execution": "source",
+  "global_hotkeys_started": false,
+  "complete": true,
+  "cases": [
+    {
+      "case": "search_exa",
+      "status": "passed",
+      "agent_id": "code_expert",
+      "provider": "exa",
+      "model_steps": 2,
+      "search_http_attempts": 1,
+      "source_ids": [
+        "S1"
+      ],
+      "source_urls": [
+        "https://docs.python.org/3/"
+      ],
+      "verified_citation": true,
+      "history_citation_restored": true,
+      "history_tools_executed": false,
+      "preview": "/Users/milin/2026/AI桌面助手/docs/harness-h6/previews/search-exa-source-2026-10-06.png",
+      "seconds": 7.318
+    }
+  ],
+  "passed": true
+}

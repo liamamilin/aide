@@ -1,0 +1,35 @@
+{
+  "model": "qwen3.5:9b-mlx",
+  "real_local_model": false,
+  "native_qt": true,
+  "qt_platform": "cocoa",
+  "paid_search_authorized": false,
+  "paid_search_used": false,
+  "search_http_attempts": 0,
+  "search_http_results": [],
+  "user_data_isolated": true,
+  "execution": "source",
+  "global_hotkeys_started": false,
+  "complete": true,
+  "cases": [
+    {
+      "case": "desktop_recovery",
+      "status": "passed",
+      "native_workspace_observers": 2,
+      "synthetic_workspace_notifications": true,
+      "wake_and_session_events_coalesced": true,
+      "local_handles_preserved": true,
+      "hidden_pet_stays_hidden": true,
+      "offscreen_windows_recovered": true,
+      "shutdown_removes_observers_and_timers": true,
+      "late_notification_ignored": true,
+      "system_permissions_changed": false,
+      "user_clipboard_accessed": false,
+      "global_listener_started": false,
+      "physical_sleep_wake_verified": false,
+      "physical_multidisplay_verified": false,
+      "seconds": 0.402
+    }
+  ],
+  "passed": true
+}

@@ -22,6 +22,7 @@ from PyQt5.QtWidgets import QApplication, QSystemTrayIcon
 from ai_desktop import __version__, config
 from ai_desktop.agent_manager import AgentManager
 from ai_desktop.capture.clipboard_monitor import SelectionCaptureTask
+from ai_desktop.capture.hotkey_recovery import HotkeyRecovery
 from ai_desktop.capture.screenshot import ScreenshotResult, ScreenshotStatus
 from ai_desktop.config import Agent
 from ai_desktop.llm.events import ChatResult, ErrorCode, EventKind, ResultStatus, StreamEvent
@@ -260,6 +261,7 @@ class ChatController(QObject):
         self._shutdown_workers: list[QThread] = []
         self._stopping = False
         self._stopped = False
+        self._hotkey_recovery: HotkeyRecovery | None = None
         self._service_checks = AsyncServiceChecks(self)
         self._service_checks.service_checked.connect(self._on_service_checked)
         self._service_checks.model_capability_checked.connect(
@@ -303,14 +305,11 @@ class ChatController(QObject):
             return
         init_db()
         if os.environ.get("AIDE_SMOKE_TEST") != "1":
-            try:
-                self.hotkey.start()
-            except Exception as e:
-                logger.warning("Failed to start hotkey listener: %s", e)
-            try:
-                self.hotkey_img.start()
-            except Exception as e:
-                logger.warning("Failed to start screenshot hotkey listener: %s", e)
+            if self._hotkey_recovery is None:
+                self._hotkey_recovery = HotkeyRecovery(
+                    {'selection': self.hotkey, 'screenshot': self.hotkey_img}, self)
+                self._hotkey_recovery.environment_restored.connect(self._schedule_screen_recovery)
+            self._hotkey_recovery.start()
         self.float_btn.show()
         pin_to_all_spaces(self.float_btn)
         self._tray.set_float_entry_visible(True, self.float_btn.pet_enabled)
@@ -325,6 +324,8 @@ class ChatController(QObject):
             self._finish_stop_if_ready()
             return
         self._stopping = True
+        if self._hotkey_recovery is not None:
+            self._hotkey_recovery.stop()
         self.shutdown_started.emit()
         self._window_state_timer.stop()
         self._screen_recovery_timer.stop()
@@ -540,12 +541,9 @@ class ChatController(QObject):
         )
 
     def _on_hotkey_triggered(self, _text: str) -> None:
-        """主线程：等待修饰键释放后启动异步文本捕获。
-
-        延迟 100ms 等待热键修饰键释放后再模拟复制，
-        避免 Controller 模拟的 ⌘C 事件与仍按住的热键修饰键冲突。
-        """
-        if not self._stopping:
+        """Coalesce triggers; the capture task waits for actual modifier release."""
+        if (not self._stopping and not self._stopped and self._selection_capture is None
+                and not self._selection_delay_timer.isActive()):
             self._selection_delay_timer.start(100)
 
     @_safe_slot
@@ -680,8 +678,17 @@ class ChatController(QObject):
         read_selection = self._pending_read_selection
         self._pending_read_selection = False
         self.float_btn.set_listening(False)
+        failure_reason = getattr(task, 'failure_reason', '')
         task.deleteLater()
         if self._stopping or self._stopped:
+            self._finish_stop_if_ready()
+            return
+        if not text and failure_reason in {'modifiers_held', 'modifier_state_unavailable'}:
+            message = ('请松开 Command、Control、Option 和 Shift 后，再触发选区操作。'
+                       if failure_reason == 'modifiers_held' else '暂时无法读取键盘状态，请重试选区操作。')
+            self.float_btn.show_result(False)
+            if not self._show_speech_feedback('error', '选区读取', message, timeout_ms=7000):
+                self._tray.showMessage('选区读取', message, QSystemTrayIcon.Warning, 5000)
             self._finish_stop_if_ready()
             return
         if read_selection:
@@ -967,7 +974,7 @@ class ChatController(QObject):
 
     @_safe_slot
     def _on_agent_changed(self, agent: Agent) -> None:
-        self._clear_task_authorization()
+        self._clear_task_authorization(cancel_running=True)
         self._active_agent = self._agent_mgr.switch(agent)
         self._sync_action_context()
         self._tray.set_active_agent(self._active_agent)
@@ -986,7 +993,7 @@ class ChatController(QObject):
             self._active_agent.id,
             visible_agent.id,
         )
-        self._clear_task_authorization()
+        self._clear_task_authorization(cancel_running=True)
         self._active_agent = self._agent_mgr.switch(visible_agent)
         self._tray.set_active_agent(self._active_agent)
         self._update_model_profile_summary()
@@ -995,7 +1002,7 @@ class ChatController(QObject):
     @_safe_slot
     def _on_tray_agent(self, agent: Agent) -> None:
         """菜单栏切换 Agent"""
-        self._clear_task_authorization()
+        self._clear_task_authorization(cancel_running=True)
         self._active_agent = self._agent_mgr.switch(agent)
         if self._dialog:
             self._dialog.set_active_agent(self._active_agent)
@@ -1459,7 +1466,9 @@ class ChatController(QObject):
         dialog = RunHistoryDialog(self._convo_id, self._dialog)
         dialog.exec_()
 
-    def _clear_task_authorization(self):
+    def _clear_task_authorization(self, *, cancel_running=False):
+        if cancel_running and self._worker is not None and self._worker.context.tools:
+            self._stop_worker()
         self._task_epoch += 1
         self._cancel_pending_task()
         self._task_authorization = None
@@ -1550,10 +1559,8 @@ class ChatController(QObject):
         if self._worker is not None or self._pending_task is not None:
             return
         agent = self._sync_active_agent_from_dialog()
-        if agent.id != 'general_assistant':
-            return
-        if not config.GENERAL_ASSISTANT_TOOLS_ENABLED:
-            self._show_notice(QMessageBox.Warning, '工具已禁用', '请在设置 → 工具执行中允许通用助手启用工具。')
+        if not config.CHAT_TOOLS_ENABLED:
+            self._show_notice(QMessageBox.Warning, '工具已禁用', '请在设置 → 工具执行中允许对话 Agent 启用工具。')
             return
         from ai_desktop.services.audit_store import list_runs
         runs = list_runs(self._convo_id) if self._convo_id else []
@@ -1561,7 +1568,7 @@ class ChatController(QObject):
                      if run['config'].get('execution')), '')
         model_settings = TaskModelSettings.from_config(self._resolve_model_config(agent=agent))
         dialog = TaskDialog(self._task_authorization, workspace_hint=hint, model=self._model,
-                            settings=model_settings, parent=self._dialog)
+                            settings=model_settings, agent_id=agent.id, agent_name=agent.name, parent=self._dialog)
         conversation_id = self._convo_id
         epoch = self._task_epoch
         selected_model = self._model
@@ -1579,6 +1586,7 @@ class ChatController(QObject):
         from ai_desktop.utils import storage
         pending = {'text': text, 'images': tuple(images), 'regenerate': regenerate,
                    'conversation_id': self._convo_id, 'authorization': self._task_authorization,
+                   'agent_id': self._active_agent.id,
                    'base_url': config.OLLAMA_BASE_URL, 'model': self._model,
                    'model_settings': TaskModelSettings.from_config(self._resolve_model_config()),
                    'retained': storage.retain_attachment_paths(images)}
@@ -1595,7 +1603,7 @@ class ChatController(QObject):
         if pending is None or pending.get('kind') == 'model' or pending['sequence'] != sequence:
             return
         if (self._stopping or self._convo_id != pending['conversation_id'] or self._worker is not None
-                or self._active_agent.id != 'general_assistant'
+                or self._active_agent.id != pending['agent_id']
                 or self._task_authorization is not pending['authorization']
                 or config.OLLAMA_BASE_URL != pending['base_url'] or self._model != pending['model']
                 or pending['model_settings'] != TaskModelSettings.from_config(self._resolve_model_config())):
@@ -1652,6 +1660,7 @@ class ChatController(QObject):
     def _on_custom_agents_saved(self, data: list[dict]) -> None:
         """自定义 Agent 保存后刷新"""
         self._cancel_pending_model()
+        self._clear_task_authorization(cancel_running=True)
         self._agent_mgr.save_custom(data)
         self._all_agents = self._agent_mgr.all_agents
         self._custom_agents = self._agent_mgr.custom_agents
@@ -1660,6 +1669,7 @@ class ChatController(QObject):
             self._dialog.refresh_agents(self._all_agents, self._active_agent)
         self._tray.refresh_agents(self._all_agents)
         self._tray.set_active_agent(self._active_agent)
+        self._sync_action_context()
         self._update_model_profile_summary()
         logger.info("Custom agents saved (%d custom)", len(data))
 
@@ -1812,8 +1822,11 @@ class ChatController(QObject):
             return
         source = get_active_generation(user_message.id)
         if source and source.config_snapshot.get('allowed_tools'):
-            if self._task_authorization is None or self._active_agent.id != 'general_assistant':
+            if self._task_authorization is None or self._task_authorization.agent_id != self._active_agent.id:
                 self._show_notice(QMessageBox.Warning, '请先启用工具', '重新执行任务前，请在输入区检查并启用工具授权。')
+                return
+            if source.config_snapshot.get('agent_id', self._active_agent.id) != self._active_agent.id:
+                self._show_notice(QMessageBox.Warning, '任务属于其他角色', '请切回原任务角色并重新启用工具后执行。')
                 return
             if QMessageBox.question(self._dialog, '重新执行任务',
                                     '这将创建新任务，并可能再次运行命令或产生搜索费用。是否继续？') != QMessageBox.Yes:
@@ -1851,6 +1864,8 @@ class ChatController(QObject):
             try:
                 if self._task_authorization is None:
                     raise ValueError('请先在输入区启用工具授权。')
+                if snapshot.get('agent_id', self._active_agent.id) != self._active_agent.id:
+                    raise ValueError('请切回原任务角色并重新启用工具后执行。')
                 task_kwargs = self._task_authorization.worker_kwargs(task_admission, config.OLLAMA_BASE_URL,
                                                                    agent_id=self._active_agent.id, origin=origin,
                                                                    model=self._model,
@@ -2205,7 +2220,12 @@ class ChatController(QObject):
                 self._dialog.restore_draft(text, images)
             self._show_notice(QMessageBox.Warning, '上一任务正在停止', '请等待执行进程退出后再发送。')
             return
-        task = self._task_authorization if not retry_action_id and request_agent.id == 'general_assistant' else None
+        task = self._task_authorization if not retry_action_id else None
+        if task is not None and task.agent_id != request_agent.id:
+            if self._dialog:
+                self._dialog.restore_draft(text, images)
+            self._show_notice(QMessageBox.Warning, '工具授权已失效', '请为当前角色重新启用工具后发送。')
+            return
         if task is not None and task_admission is None:
             self._begin_task_check(text, images)
             return
@@ -2707,6 +2727,14 @@ def _open_input_monitoring_prefs() -> None:
 
 
 def main() -> None:
+    if "--search-credential-check" in sys.argv[1:]:
+        from ai_desktop.diagnostics.credential_check import main as credential_main
+        args = sys.argv[1:].copy()
+        args.remove('--search-credential-check')
+        raise SystemExit(credential_main(args))
+    if "--search-credential-read" in sys.argv[1:]:
+        from ai_desktop.services.credential_reader import child_main
+        raise SystemExit(child_main())
     if "--harness-acceptance" in sys.argv[1:]:
         from ai_desktop.diagnostics.harness_acceptance import main as acceptance_main
         args = sys.argv[1:].copy()
@@ -2776,89 +2804,10 @@ def main() -> None:
     # 已授权 → 静默跳过；缺失 → 触发 macOS 系统标准授权弹窗
     perm = _check_permissions() if not smoke_mode else PermissionStatus(True, True)
     logger.info("权限状态: AX=%s, InputMonitoring=%s", perm.accessibility, perm.input_monitoring)
-    _perm_requested = False
     if not perm.all_granted:
-        # 触发系统标准弹窗（非阻塞，用户在系统设置中授权后自动检测到）
+        # Initial onboarding may request access once. Recovery only inspects it;
+        # revoking permission does not trigger repeated system prompts.
         _request_permissions(perm.accessibility, perm.input_monitoring)
-        _perm_requested = True
-
-    # 权限重检定时器：用户在系统设置中授权后自动检测到，自动启动热键
-    def _hotkey_running() -> bool:
-        """检测两个热键后端是否均已运行（兼容 NSEventMonitor / HotkeyListener）"""
-        for h in (controller.hotkey, controller.hotkey_img):
-            if hasattr(h, "_monitor"):
-                if h._monitor is None and getattr(h, "_local_monitor", None) is None:
-                    return False
-            elif hasattr(h, "_listener"):
-                if h._listener is None:
-                    return False
-        return True
-
-    def _global_hotkey_missing() -> bool:
-        """权限已恢复时，检查 NSEvent 全局监听是否仍需补装。"""
-        return any(
-            hasattr(h, "_monitor") and h._monitor is None
-            for h in (controller.hotkey, controller.hotkey_img)
-        )
-
-    _perm_recheck = QTimer()
-    _recheck_count = 0
-    _perm_recheck_slow = False  # 权限已授予后降频到 60s
-
-    def _reinstall_hotkeys() -> None:
-        """重装 NSEvent 全局监听器，防止系统事件后监听器变陈旧。"""
-        for name, hk in (("hotkey", controller.hotkey),
-                         ("hotkey_img", controller.hotkey_img)):
-            running = (hasattr(hk, "_monitor") and hk._monitor is not None) or \
-                      (hasattr(hk, "_local_monitor") and hk._local_monitor is not None) or \
-                      (hasattr(hk, "_listener") and hk._listener is not None)
-            if not running:
-                continue
-            try:
-                hk.stop()
-                hk.start()
-            except Exception as e:
-                logger.warning("重装热键 %s 失败: %s", name, e)
-
-    def _recheck_permissions() -> None:
-        nonlocal _perm_requested, _recheck_count, _perm_recheck_slow
-        _recheck_count += 1
-        cur = _check_permissions()
-        if cur.all_granted:
-            if not _hotkey_running() or _global_hotkey_missing():
-                # 权限刚授予，热键尚未启动 → 启动热键
-                logger.info("权限已授予，启动热键监听")
-                try:
-                    controller.hotkey.start()
-                except Exception as e:
-                    logger.warning("热键启动失败: %s", e)
-                try:
-                    controller.hotkey_img.start()
-                except Exception as e:
-                    logger.warning("截图热键启动失败: %s", e)
-            # 权限已就绪后降频到 60s，持续重装监听器防止变陈旧
-            if not _perm_recheck_slow:
-                _perm_recheck_slow = True
-                _perm_recheck.setInterval(60000)
-                logger.info("热键重装定时器降频到 60s")
-            else:
-                _reinstall_hotkeys()
-            _perm_requested = False
-        else:
-            # 每 5 次（~15 秒）记录一次状态，避免日志刷屏
-            if _recheck_count % 5 == 1:
-                logger.info(
-                    "等待授权中... (AX=%s, IM=%s, 第%d次检查)",
-                    cur.accessibility, cur.input_monitoring, _recheck_count,
-                )
-            if not _perm_requested:
-                # 权限被撤销或仍未授权 → 重新触发系统弹窗
-                _request_permissions(cur.accessibility, cur.input_monitoring)
-                _perm_requested = True
-
-    _perm_recheck.timeout.connect(_recheck_permissions)
-    if not smoke_mode:
-        _perm_recheck.start(3000)  # 每 3 秒重检一次
 
     controller.start()
 
@@ -2898,7 +2847,6 @@ def main() -> None:
     else:
         startup_timer.start(1500)
     controller.shutdown_started.connect(poll_timer.stop)
-    controller.shutdown_started.connect(_perm_recheck.stop)
     controller.shutdown_started.connect(startup_timer.stop)
 
     sys.exit(app.exec_())

@@ -399,9 +399,9 @@ def test_task_confirmation_buttons_execute_once_or_reject(qtbot, controller, tmp
 
 def test_global_disable_closes_next_run_grant_and_persists(controller, tmp_path, monkeypatch):
     authorize(controller, tmp_path)
-    monkeypatch.setattr(config, 'GENERAL_ASSISTANT_TOOLS_ENABLED', True)
+    monkeypatch.setattr(config, 'CHAT_TOOLS_ENABLED', True)
     controller._on_settings_applied({'task_tools_enabled': False})
-    assert config.GENERAL_ASSISTANT_TOOLS_ENABLED is False
+    assert config.CHAT_TOOLS_ENABLED is False
     assert controller._task_authorization is None and '已禁用' in controller._dialog._task_btn.text()
     assert storage.get_setting('general_assistant_tools_enabled') == 'False'
     assert not controller._dialog._task_btn.isEnabled()

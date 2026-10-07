@@ -7,6 +7,7 @@ import logging
 import time
 from pathlib import Path
 
+from PyQt5 import sip
 from PyQt5.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QCursor, QIcon, QKeyEvent, QPixmap, QTextCursor
 from PyQt5.QtWidgets import (
@@ -70,6 +71,45 @@ from ai_desktop.utils.window_state import (
 logger = logging.getLogger(__name__)
 
 
+class _UserMessageBubble(QWidget):
+    """Own hover feedback without inspecting a QObject tree during destruction."""
+
+    def __init__(self):
+        super().__init__()
+        self._edit_button = None
+
+    def set_edit_button(self, button):
+        self._edit_button = button
+        button.destroyed.connect(self._forget_edit_button)
+
+    def _forget_edit_button(self):
+        self._edit_button = None
+
+    def retire(self):
+        # Clear the reference before hide/delete: Cocoa may send a synthetic
+        # Leave while Qt is already destroying the message's child widgets.
+        self._forget_edit_button()
+        self.hide()
+
+    def _set_edit_visible(self, visible):
+        button = self._edit_button
+        if button is not None and not sip.isdeleted(button):
+            button.setVisible(visible)
+
+    def enterEvent(self, event):
+        self._set_edit_visible(True)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._set_edit_visible(False)
+        super().leaveEvent(event)
+
+    def event(self, event):
+        if event.type() == QEvent.DeferredDelete:
+            self.retire()
+        return super().event(event)
+
+
 class _ChatInputEdit(QPlainTextEdit):
     """输入框 —— 使用 Fluent 菜单，并拦截粘贴/拖入的图片。"""
 
@@ -113,6 +153,35 @@ class _SelectableMessageLabel(QLabel):
     """消息文本标签，提供面向选区的朗读入口。"""
 
     read_selection_requested = pyqtSignal(str)
+
+    def _update_wrapped_height(self) -> None:
+        # A scroll-area layout can shrink a word-wrapped QLabel below its
+        # heightForWidth after PlainText -> RichText or a width change. Report
+        # the actual document height as the minimum, while allowing it to
+        # shrink again when the text or available width changes.
+        if self.wordWrap():
+            # QLabel.heightForWidth itself respects minimumHeight; clear the
+            # previous floor before measuring shorter text or a wider window.
+            self.setMinimumHeight(0)
+            self.setMinimumHeight(max(0, self.heightForWidth(self.width())))
+
+    def setText(self, text) -> None:
+        super().setText(text)
+        self._update_wrapped_height()
+
+    def setTextFormat(self, text_format) -> None:
+        super().setTextFormat(text_format)
+        self._update_wrapped_height()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if event.size().width() != event.oldSize().width():
+            self._update_wrapped_height()
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if event.type() in (QEvent.FontChange, QEvent.StyleChange):
+            self._update_wrapped_height()
 
     def _select_all(self) -> None:
         self.setSelection(0, len(self.text()))
@@ -573,6 +642,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         task_layout.setContentsMargins(16, 0, 16, 0)
         task_layout.setSpacing(4)
         self._task_btn = TransparentPushButton('工具：关闭')
+        self._task_btn.setEnabled(config.CHAT_TOOLS_ENABLED)
         self._task_btn.setAccessibleName('工具授权设置')
         self._task_btn.clicked.connect(self.task_settings_requested.emit)
         task_layout.addWidget(self._task_btn, alignment=Qt.AlignLeft)
@@ -580,7 +650,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self._task_status.setWordWrap(True)
         task_layout.addWidget(self._task_status)
         self._task_status.hide()
-        self._task_row.setVisible(self._active_agent.id == 'general_assistant')
+        self._task_row.setVisible(True)
         root.addWidget(self._task_row)
 
         # ── 输入区域 ──
@@ -1695,7 +1765,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         menu.exec_(QCursor.pos())
 
     def set_thinking(self, thinking: bool) -> None:
-        self._task_btn.setEnabled(not thinking and config.GENERAL_ASSISTANT_TOOLS_ENABLED)
+        self._task_btn.setEnabled(not thinking and config.CHAT_TOOLS_ENABLED)
         self._send_btn.setEnabled(True)
         try:
             self._send_btn.clicked.disconnect()
@@ -1714,13 +1784,15 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
             self._input.setFocus()
 
     def set_task_authorization(self, authorization, *, model=None, checking=False):
-        self._task_row.setVisible(self._active_agent.id == 'general_assistant')
+        if authorization is not None and authorization.agent_id != self._active_agent.id:
+            authorization = None
+        self._task_row.setVisible(True)
         self._task_btn.setText('工具：本对话已启用' if authorization else '工具：关闭')
-        self._task_btn.setToolTip('授权仅在本对话后续轮次有效；新建或切换对话后关闭。'
+        self._task_btn.setToolTip('授权仅在当前角色与本对话有效；新建、切换对话或角色后关闭。'
                                  '工具任务使用顶栏所选模型，每次发送前检查工具能力。')
-        if not config.GENERAL_ASSISTANT_TOOLS_ENABLED:
+        if not config.CHAT_TOOLS_ENABLED:
             self._task_btn.setText('工具：设置中已禁用')
-        self._task_btn.setEnabled(config.GENERAL_ASSISTANT_TOOLS_ENABLED and self._input.isEnabled())
+        self._task_btn.setEnabled(config.CHAT_TOOLS_ENABLED and self._input.isEnabled())
         if authorization:
             parts = ['工具模型：' + (model or self._active_model)]
             if authorization.execution:
@@ -1762,6 +1834,10 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         while self._msg_layout.count() > 2:  # keep empty state + stretch
             item = self._msg_layout.takeAt(1)
             if item.widget():
+                if isinstance(item.widget(), _UserMessageBubble):
+                    item.widget().retire()
+                else:
+                    item.widget().hide()
                 item.widget().deleteLater()
         self._empty_state.show()
         self.clear_pending_images()
@@ -1892,7 +1968,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         missing_images: list[str] | None = None,
         markdown_source: str | None = None,
     ) -> QWidget:
-        wrapper = QWidget()
+        wrapper = _UserMessageBubble() if is_user else QWidget()
         wl = QHBoxLayout(wrapper)
         wl.setContentsMargins(0, 0, 0, 0)
 
@@ -1952,7 +2028,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
             wl.addStretch()
             wl.addLayout(v_layout)
 
-            wrapper.installEventFilter(self)
+            wrapper.set_edit_button(edit_btn)
         else:
             # 将回答操作直接放在内容下方，复制始终可见。
             v_layout = QVBoxLayout()
@@ -1994,8 +2070,6 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
             v_layout.addWidget(btn_bar)
             wl.addLayout(v_layout)
             wl.addStretch()
-
-            wrapper.installEventFilter(self)
 
         if is_html:
             # QLabel doesn't support full HTML with inline styles well;
@@ -2068,7 +2142,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         except Exception:
             pass
 
-    # ── hover 显示复制按钮 ─────────────────────────────
+    # ── 滚动区域和输入框事件 ───────────────────────────
 
     def eventFilter(self, obj, event):
         if not hasattr(self, "_scroll"):
@@ -2078,13 +2152,6 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         if (obj is self._scroll.viewport() or obj is self._scroll.verticalScrollBar()) \
                 and event.type() == QEvent.Wheel:
             self._queue_user_scroll_update()
-        if event.type() == QEvent.Enter:
-            for btn in obj.findChildren(QPushButton, "edit_btn_user"):
-                btn.setVisible(True)
-        elif event.type() == QEvent.Leave:
-            for btn in obj.findChildren(QPushButton, "edit_btn_user"):
-                btn.setVisible(False)
-
         # ── 输入框快捷键 ──
         if obj is getattr(self, "_input", None) and event.type() == QEvent.KeyPress:
             if event.key() == Qt.Key_Escape:

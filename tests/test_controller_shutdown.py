@@ -318,3 +318,38 @@ def test_permission_screenshot_error_offers_settings_action(controller):
     notice.assert_not_called()
     box.exec_.assert_called_once()
     open_prefs.assert_called_once()
+
+
+def test_selection_trigger_does_not_restart_pending_delay(controller):
+    with patch.object(controller._selection_delay_timer, 'start') as start, \
+            patch.object(controller._selection_delay_timer, 'isActive', side_effect=[False, True]):
+        controller._on_hotkey_triggered('')
+        controller._on_hotkey_triggered('')
+    start.assert_called_once_with(100)
+
+
+@pytest.mark.parametrize('reason', ['modifiers_held', 'modifier_state_unavailable'])
+def test_selection_modifier_failure_clears_pending_intent_without_pasting(controller, reason):
+    task = MagicMock(failure_reason=reason)
+    controller._selection_capture = task
+    controller._pending_pet_action_id = 'translate'
+    controller._pending_read_selection = True
+    with patch.object(controller, '_show_speech_feedback', return_value=True) as feedback, \
+            patch.object(controller._dialog, 'set_input_text') as paste, \
+            patch.object(controller, '_on_action_requested') as action:
+        controller._on_selection_captured(task, '')
+    assert controller._selection_capture is None
+    assert controller._pending_pet_action_id is None
+    assert not controller._pending_read_selection
+    feedback.assert_called_once()
+    paste.assert_not_called()
+    action.assert_not_called()
+
+
+def test_controller_stops_recovery_before_native_listeners(controller):
+    lifecycle = MagicMock()
+    controller._hotkey_recovery = lifecycle.recovery
+    controller.hotkey = lifecycle.selection
+    controller.hotkey_img = lifecycle.screenshot
+    controller.stop()
+    assert lifecycle.mock_calls[:3] == [call.recovery.stop(), call.selection.stop(), call.screenshot.stop()]

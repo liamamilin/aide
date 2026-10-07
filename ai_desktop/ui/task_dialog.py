@@ -32,8 +32,11 @@ from ai_desktop.ui.fluent import (
 
 
 class TaskDialog(FluentDialog):
-    def __init__(self, current=None, *, workspace_hint='', model=TASK_MODEL, settings=None, parent=None):
+    def __init__(self, current=None, *, workspace_hint='', model=TASK_MODEL, settings=None,
+                 agent_id='general_assistant', agent_name='', parent=None):
         super().__init__(parent)
+        if current is not None and current.agent_id != agent_id:
+            current = None
         self.authorization = current
         self.admission = None
         self._checking = False
@@ -42,6 +45,7 @@ class TaskDialog(FluentDialog):
         self._candidate = None
         self._base_url = config.OLLAMA_BASE_URL
         self._model = model
+        self._agent_id = agent_id
         self._model_settings = settings or TaskModelSettings.from_config()
         preferences = load_execution_preferences()
         self._path = preferences['execution_path']
@@ -55,7 +59,8 @@ class TaskDialog(FluentDialog):
         layout = QVBoxLayout(content)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
-        intro = BodyLabel('授权在当前通用助手对话的后续轮次中有效。新建或切换对话后关闭，需重新启用。'
+        intro = BodyLabel(f'当前角色：{agent_name or agent_id}。授权仅在当前角色与对话的后续轮次有效。'
+                          '新建、切换对话或切换角色后关闭，需重新启用。'
                           '工具模型跟随顶栏选择。')
         intro.setWordWrap(True)
         layout.addWidget(intro)
@@ -160,7 +165,7 @@ class TaskDialog(FluentDialog):
                          if self._bash.isChecked() else None)
             search = (replace(SearchSettings.from_config(), provider=self._provider.currentData())
                       if self._search.isChecked() else None)
-            self._candidate = TaskAuthorization(execution, search)
+            self._candidate = TaskAuthorization(execution, search, agent_id=self._agent_id)
         except (OSError, ValueError, SearchError) as exc:
             self._status.setText(str(exc))
             return
@@ -177,7 +182,7 @@ class TaskDialog(FluentDialog):
             return
         try:
             self._candidate.worker_kwargs(admission, config.OLLAMA_BASE_URL,
-                                          agent_id='general_assistant', origin='chat', model=self._model,
+                                          agent_id=self._agent_id, origin='chat', model=self._model,
                                           settings=self._model_settings)
             if self._candidate.execution:
                 snapshot = self._candidate.execution
