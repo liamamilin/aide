@@ -23,7 +23,7 @@ CASES = ('ordinary_send_and_regenerate', 'bash_readonly', 'bash_approve', 'bash_
          'cancel_then_new_conversation', 'restart_and_readonly_history', 'window_layout_and_restore',
          'model_switch_tools', 'settings_tab_navigation', 'settings_task_limits', 'task_model_settings',
          'all_agent_tools', 'answer_layout', 'selection_hotkey', 'desktop_recovery',
-         'conversation_lifecycle') + PAID_CASES + tuple(
+         'conversation_lifecycle', 'tool_settings_inheritance') + PAID_CASES + tuple(
     'action_'+mode+'_'+action for mode in ('current', 'new')
     for action in ('translate', 'explain', 'summarize', 'rewrite'))
 
@@ -128,7 +128,8 @@ def acceptance(output, only=None, model='qwen3.5:9b-mlx', *, allow_paid_search=F
               'real_local_model': only not in {'restart_and_readonly_history', 'window_layout_and_restore',
                                                'settings_tab_navigation', 'settings_task_limits',
                                                'task_model_settings', 'answer_layout', 'selection_hotkey',
-                                               'desktop_recovery', 'conversation_lifecycle'},
+                                               'desktop_recovery', 'conversation_lifecycle',
+                                               'tool_settings_inheritance'},
               'native_qt': app.platformName() not in {'offscreen', 'minimal'},
               'qt_platform': app.platformName(),
               'paid_search_authorized': allow_paid_search, 'paid_search_used': False,
@@ -700,6 +701,9 @@ def acceptance(output, only=None, model='qwen3.5:9b-mlx', *, allow_paid_search=F
         return {**value, 'synthetic_history_fixture': synthetic}
 
     try:
+        if only == 'tool_settings_inheritance':
+            from ai_desktop.diagnostics.tool_inheritance import acceptance as inheritance_acceptance
+            case('tool_settings_inheritance', lambda: inheritance_acceptance(ctl, workspace))
         if only == 'conversation_lifecycle':
             from ai_desktop.diagnostics.conversation_lifecycle import acceptance as lifecycle_acceptance
             case('conversation_lifecycle', lambda: lifecycle_acceptance(
@@ -767,6 +771,7 @@ def main(argv=None):
                                                  'summarizer', 'polisher', 'acceptance-researcher'],
                         default='code_expert')
     parser.add_argument('--resume-probe', help=argparse.SUPPRESS)
+    parser.add_argument('--tool-inheritance-resume', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--conversation-id', type=int, help=argparse.SUPPRESS)
     parser.add_argument('--interrupted-id', help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -777,6 +782,10 @@ def main(argv=None):
         parser.error(str(exc))
     if args.resume_probe:
         resume_probe(args.resume_probe, args.conversation_id, args.interrupted_id)
+        return 0
+    if args.tool_inheritance_resume:
+        from ai_desktop.diagnostics.tool_inheritance import resume_probe as inheritance_resume
+        inheritance_resume()
         return 0
     return acceptance(args.output, args.only, args.model, allow_paid_search=args.allow_paid_search,
                       search_agent=args.search_agent)

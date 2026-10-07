@@ -46,6 +46,7 @@ from ai_desktop.services.model_profiles import ModelProfile, ModelProfileManager
 from ai_desktop.services.ocr_service import AsyncOCRService, OCRResult, OCRStatus
 from ai_desktop.services.speech_service import SpeechService
 from ai_desktop.services.task_admission import TaskAuthorization, TaskModelSettings
+from ai_desktop.services.tool_preferences import ToolPreferences
 from ai_desktop.settings_manager import SettingsManager
 from ai_desktop.ui import styles
 from ai_desktop.ui.agent_editor import AgentDef, AgentEditor
@@ -173,7 +174,9 @@ class ChatController(QObject):
         self._messages: list[Message] = []
         self._restore_last: bool = True  # 首次打开自动恢复上次对话
         self._worker: Optional[RunWorker] = None
+        self._tool_preferences = ToolPreferences.load()
         self._task_authorization: TaskAuthorization | None = None
+        self._inherit_tool_settings()
         self._task_epoch = 0
         self._pending_task = None
         self._model_prepare_timer = QTimer(self)
@@ -919,6 +922,11 @@ class ChatController(QObject):
                            'task_max_model_rounds', 'task_max_tool_calls', 'task_max_search_calls',
                            'search_provider', 'search_max_results', 'search_timeout', 'search_parallel_mode'}:
             self._clear_task_authorization()
+            if self._tool_preferences is not None:
+                self._tool_preferences = self._tool_preferences.updated(changed)
+                ToolPreferences.save(self._tool_preferences)
+            self._inherit_tool_settings()
+            self._sync_action_context()
         if "hotkey" in changed:
             try:
                 self.hotkey.reregister(config.HOTKEY, self._on_global_hotkey)
@@ -976,6 +984,7 @@ class ChatController(QObject):
     def _on_agent_changed(self, agent: Agent) -> None:
         self._clear_task_authorization(cancel_running=True)
         self._active_agent = self._agent_mgr.switch(agent)
+        self._inherit_tool_settings()
         self._sync_action_context()
         self._tray.set_active_agent(self._active_agent)
         self._update_model_profile_summary()
@@ -995,6 +1004,7 @@ class ChatController(QObject):
         )
         self._clear_task_authorization(cancel_running=True)
         self._active_agent = self._agent_mgr.switch(visible_agent)
+        self._inherit_tool_settings()
         self._tray.set_active_agent(self._active_agent)
         self._update_model_profile_summary()
         return self._active_agent
@@ -1004,6 +1014,7 @@ class ChatController(QObject):
         """菜单栏切换 Agent"""
         self._clear_task_authorization(cancel_running=True)
         self._active_agent = self._agent_mgr.switch(agent)
+        self._inherit_tool_settings()
         if self._dialog:
             self._dialog.set_active_agent(self._active_agent)
             self._sync_action_context()
@@ -1320,6 +1331,7 @@ class ChatController(QObject):
         self._stop_worker(show_cancelled=False)
         self._clear_task_authorization()
         self._sync_active_agent_from_dialog()
+        self._inherit_tool_settings()
         self._regenerating_user_id = 0
         self._convo_id = 0
         self._messages = []
@@ -1414,6 +1426,7 @@ class ChatController(QObject):
                     self._update_model_profile_summary()
                     break
             # 渲染消息
+            self._inherit_tool_settings()
             if self._dialog:
                 self._render_messages()
             self._sync_action_context()
@@ -1431,6 +1444,7 @@ class ChatController(QObject):
         self._convo_id = 0
         self._messages = []
         self._response_text = ""
+        self._inherit_tool_settings()
         if self._dialog:
             self._dialog.clear_messages()
             self._dialog.set_thinking(False)
@@ -1465,6 +1479,18 @@ class ChatController(QObject):
         from ai_desktop.ui.run_history_dialog import RunHistoryDialog
         dialog = RunHistoryDialog(self._convo_id, self._dialog)
         dialog.exec_()
+
+    def _inherit_tool_settings(self):
+        self._task_authorization = (self._tool_preferences.for_agent(self._active_agent.id)
+                                    if self._tool_preferences and config.CHAT_TOOLS_ENABLED else None)
+
+    def _save_tool_settings(self, authorization):
+        preferences = ToolPreferences.from_authorization(authorization)
+        ToolPreferences.save(preferences)
+        self._tool_preferences = preferences
+        self._task_authorization = authorization
+        self._task_epoch += 1
+        self._sync_action_context()
 
     def _clear_task_authorization(self, *, cancel_running=False):
         if cancel_running and self._worker is not None and self._worker.context.tools:
@@ -1578,9 +1604,7 @@ class ChatController(QObject):
                 or self._task_epoch != epoch or self._model != selected_model
                 or model_settings != TaskModelSettings.from_config(self._resolve_model_config(agent=agent))):
             return
-        self._task_authorization = dialog.authorization
-        self._task_epoch += 1
-        self._sync_action_context()
+        self._save_tool_settings(dialog.authorization)
 
     def _begin_task_check(self, text, images, *, regenerate=False):
         from ai_desktop.utils import storage
@@ -1665,6 +1689,7 @@ class ChatController(QObject):
         self._all_agents = self._agent_mgr.all_agents
         self._custom_agents = self._agent_mgr.custom_agents
         self._active_agent = self._agent_mgr.active_agent
+        self._inherit_tool_settings()
         if self._dialog:
             self._dialog.refresh_agents(self._all_agents, self._active_agent)
         self._tray.refresh_agents(self._all_agents)

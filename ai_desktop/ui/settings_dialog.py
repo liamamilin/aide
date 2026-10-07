@@ -197,7 +197,7 @@ class SettingsDialog(FramelessDragMixin, QDialog):
             if route == "execution":
                 limits_hint = CaptionLabel("限制按每次发送或重新执行计算，搜索也计入工具调用总数。"
                                            "模型每轮可调用多个工具；上述限制或活动时长 5 分钟中任一先到即停止。"
-                                           "修改工具或搜索设置后需为当前对话重新启用工具。")
+                                           "工具设置会沿用到新对话及其他 Agent；修改后下一次任务使用新配置。")
                 limits_hint.setWordWrap(True)
                 layout.addWidget(limits_hint)
                 hint = CaptionLabel("自动执行只适用于允许列表中的字面量命令、已知参数和工作区内路径。"

@@ -643,7 +643,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         task_layout.setSpacing(4)
         self._task_btn = TransparentPushButton('工具：关闭')
         self._task_btn.setEnabled(config.CHAT_TOOLS_ENABLED)
-        self._task_btn.setAccessibleName('工具授权设置')
+        self._task_btn.setAccessibleName('工具设置')
         self._task_btn.clicked.connect(self.task_settings_requested.emit)
         task_layout.addWidget(self._task_btn, alignment=Qt.AlignLeft)
         self._task_status = CaptionLabel('')
@@ -1787,9 +1787,10 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         if authorization is not None and authorization.agent_id != self._active_agent.id:
             authorization = None
         self._task_row.setVisible(True)
-        self._task_btn.setText('工具：本对话已启用' if authorization else '工具：关闭')
-        self._task_btn.setToolTip('授权仅在当前角色与本对话有效；新建、切换对话或角色后关闭。'
-                                 '工具任务使用顶栏所选模型，每次发送前检查工具能力。')
+        self._task_btn.setText('工具：已启用' if authorization else '工具：关闭')
+        self._task_btn.setToolTip('工具设置自动沿用到新建、切换对话及其他 Agent，重启后保留。'
+                                 '关闭工具后后续对话保持关闭。命令确认逐条生效；'
+                                 '工具模型跟随顶栏，每次发送前检查工具能力。')
         if not config.CHAT_TOOLS_ENABLED:
             self._task_btn.setText('工具：设置中已禁用')
         self._task_btn.setEnabled(config.CHAT_TOOLS_ENABLED and self._input.isEnabled())

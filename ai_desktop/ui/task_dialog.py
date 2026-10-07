@@ -1,4 +1,4 @@
-"""Default Fluent controls for explicit tool authorization in one conversation."""
+"""Default Fluent controls for saved tool settings shared across conversations."""
 from dataclasses import replace
 
 from PyQt5.QtCore import Qt
@@ -51,7 +51,7 @@ class TaskDialog(FluentDialog):
         self._path = preferences['execution_path']
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.addWidget(dialog_title(self, '工具授权'))
+        root.addWidget(dialog_title(self, '工具设置'))
         scroll = ScrollArea(self)
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -59,9 +59,9 @@ class TaskDialog(FluentDialog):
         layout = QVBoxLayout(content)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
-        intro = BodyLabel(f'当前角色：{agent_name or agent_id}。授权仅在当前角色与对话的后续轮次有效。'
-                          '新建、切换对话或切换角色后关闭，需重新启用。'
-                          '工具模型跟随顶栏选择。')
+        intro = BodyLabel(f'当前角色：{agent_name or agent_id}。设置自动沿用到新建、切换对话及其他角色，'
+                          '重启后保留。关闭工具会同时关闭后续对话的工具。'
+                          '工具模型跟随顶栏；每条需确认的命令仍单独确认。')
         intro.setWordWrap(True)
         layout.addWidget(intro)
         layout.addWidget(StrongBodyLabel('本地命令'))
@@ -130,7 +130,7 @@ class TaskDialog(FluentDialog):
         cancel = PushButton('取消')
         cancel.clicked.connect(self.reject)
         buttons.addWidget(cancel)
-        self._enable = PrimaryPushButton('启用工具')
+        self._enable = PrimaryPushButton('保存设置' if current else '启用工具')
         self._enable.clicked.connect(self._start_check)
         buttons.addWidget(self._enable)
         root.addLayout(buttons)

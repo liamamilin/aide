@@ -462,7 +462,7 @@ def test_authorization_remains_for_followups_in_same_conversation(qtbot, control
         assert controller._convo_id == conversation and controller._task_authorization is grant
     runs = audit_store.list_runs(conversation)
     assert len(runs) == 2 and all(run['config']['allowed_tools'] == ['bash'] for run in runs)
-    assert controller._dialog._task_btn.text() == '工具：本对话已启用'
+    assert controller._dialog._task_btn.text() == '工具：已启用'
 
 
 def test_selector_change_keeps_grant_and_tool_requests_use_27b(qtbot, controller, tmp_path, ollama_server):
@@ -475,7 +475,7 @@ def test_selector_change_keeps_grant_and_tool_requests_use_27b(qtbot, controller
     controller._dialog._model_combo.setCurrentText(model)
     assert controller._model == model and controller._task_authorization is grant
     assert model in controller._dialog._task_status.text()
-    assert controller._dialog._task_btn.text() == '工具：本对话已启用'
+    assert controller._dialog._task_btn.text() == '工具：已启用'
     enqueue_discovery(ollama_server, discovery(model))
     ollama_server.enqueue(call_response('cat note.txt'))
     ollama_server.enqueue(answer('AMBER-731'))
