@@ -5,6 +5,8 @@ import sys
 import textwrap
 from pathlib import Path
 
+import pytest
+
 
 def test_worker_cleanup_does_not_block_widget_updates():
     # A native lock inversion cannot be interrupted by qtbot's Python timeout.
@@ -84,10 +86,19 @@ def test_worker_cleanup_does_not_block_widget_updates():
                 storage.close_db()
             faulthandler.cancel_dump_traceback_later()
     ''')
-    result = subprocess.run(
-        [sys.executable, '-X', 'faulthandler', '-c', program],
-        cwd=Path(__file__).resolve().parents[1],
-        env=dict(os.environ, QT_QPA_PLATFORM='offscreen'),
-        capture_output=True, text=True, timeout=25,
-    )
+    try:
+        result = subprocess.run(
+            [sys.executable, '-X', 'faulthandler', '-c', program],
+            cwd=Path(__file__).resolve().parents[1],
+            env=dict(os.environ, QT_QPA_PLATFORM='offscreen'),
+            capture_output=True, text=True, timeout=25,
+        )
+    except subprocess.TimeoutExpired as error:
+        # pytest truncates TimeoutExpired.stderr in its locals display. Print
+        # the complete native watchdog trace so a startup stall and a worker
+        # deadlock remain distinguishable without increasing the time limit.
+        output = error.stderr or b''
+        if isinstance(output, bytes):
+            output = output.decode('utf-8', errors='replace')
+        pytest.fail(f'Worker lifecycle child exceeded 25 seconds:\n{output}', pytrace=False)
     assert result.returncode == 0, result.stdout + result.stderr
