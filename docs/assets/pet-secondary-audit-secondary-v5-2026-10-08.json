@@ -1,0 +1,53 @@
+{
+  "owl-v2": {
+    "parts": [
+      "left_ear_feathers",
+      "right_ear_feathers"
+    ],
+    "frames_checked": 18,
+    "poses_checked": 90,
+    "changed_pixels_at_reference_pose": [
+      3839,
+      3694,
+      0,
+      3682,
+      3756
+    ],
+    "outside_part_bounds_unchanged": true,
+    "face_prop_feet_unchanged": true,
+    "neutral_pose_exact": true,
+    "parts_connected": true,
+    "source_files_unchanged": true,
+    "source_sha256": [
+      "f95f7ba2dcb3b62800663ad528dcf9c97496a63b87cb9ccbc7d1e4a56846cb61",
+      "9649b31bae57be36971fd07e320ca92c32ad3d7e33779daa1c81af3584d42839"
+    ],
+    "cache_entries": 19,
+    "cache_limit": 19
+  },
+  "boba": {
+    "parts": [
+      "tail"
+    ],
+    "frames_checked": 5,
+    "poses_checked": 25,
+    "changed_pixels_at_reference_pose": [
+      846,
+      777,
+      0,
+      801,
+      890
+    ],
+    "outside_part_bounds_unchanged": true,
+    "face_prop_feet_unchanged": true,
+    "neutral_pose_exact": true,
+    "parts_connected": true,
+    "source_files_unchanged": true,
+    "source_sha256": [
+      "be687b1e21877456115a77d266c98c4be5e129b68c46cc291bb7f5a1d4b695ba",
+      "b2a723fc55ac6af867765dedc26b3841fbf178d7e1025d6011e8d96ac44f19c9"
+    ],
+    "cache_entries": 20,
+    "cache_limit": 24
+  }
+}

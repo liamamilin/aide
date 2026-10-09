@@ -1,0 +1,60 @@
+{
+  "version": "1.5.0",
+  "app": "/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app",
+  "modules": {
+    "ai_desktop.main": "matches current source",
+    "ai_desktop.ui.float_button": "matches current source",
+    "ai_desktop.ui.pet_toolbar": "matches current source",
+    "ai_desktop.ui.result_bubble": "matches current source",
+    "ai_desktop.ui.pet_profiles": "matches current source",
+    "ai_desktop.ui.pet_manifest": "matches current source",
+    "ai_desktop.ui.pet_animator": "matches current source",
+    "ai_desktop.ui.spritesheet": "matches current source",
+    "ai_desktop.ui.pet_secondary": "matches current source"
+  },
+  "assets": {
+    "owl-v2/pet.json": "f95f7ba2dcb3b62800663ad528dcf9c97496a63b87cb9ccbc7d1e4a56846cb61",
+    "owl-v2/spritesheet.png": "9649b31bae57be36971fd07e320ca92c32ad3d7e33779daa1c81af3584d42839",
+    "petdex-profiles/astra.json": "2b695bbebd7cddc0fdb1974b508af0cc474c00f18ac150df0624b76d5a064dbc",
+    "petdex-profiles/boba.json": "933e82e90fd39c208808b04d06cce8559a4f8d1602b9c4d806d6bb798f7a8e21",
+    "petdex-profiles/shinchan.json": "c23037eb8ad67ff7120f6380db24fda7e39f54c3caff8e77771e7290aaf841fe",
+    "petdex-profiles/motion/astra-limb-v1.png": "4f503a30d5df371df52b188331f7bd4902a2149095d3abfa0a5251076b14a8ab",
+    "petdex-profiles/motion/boba-limb-v1.png": "3360a6c9ac362ca02f35f678a9725259e72c2560cb9d0b5819a0e675ae2fe3cb"
+  },
+  "patch_loading": {
+    "astra": {
+      "patches_loaded": true,
+      "total_frames": 76,
+      "bundled_path": "/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Resources/ai_desktop/pets/petdex-profiles/motion/astra-limb-v1.png"
+    },
+    "boba": {
+      "patches_loaded": true,
+      "total_frames": 92,
+      "bundled_path": "/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Resources/ai_desktop/pets/petdex-profiles/motion/boba-limb-v1.png"
+    }
+  },
+  "secondary_loading": {
+    "owl-v2": {
+      "parts": [
+        "left_ear_feathers",
+        "right_ear_feathers"
+      ],
+      "sample_angles": [
+        2.5,
+        -4.0
+      ],
+      "pose_changed": true,
+      "finite_end": true
+    },
+    "boba": {
+      "parts": [
+        "tail"
+      ],
+      "sample_angles": [
+        6.0
+      ],
+      "pose_changed": true,
+      "finite_end": true
+    }
+  }
+}

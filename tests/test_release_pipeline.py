@@ -60,6 +60,8 @@ def test_bundle_validator_checks_version_dependencies_and_resources(tmp_path):
         "pets/petdex-profiles/astra.json",
         "pets/petdex-profiles/boba.json",
         "pets/petdex-profiles/shinchan.json",
+        "pets/petdex-profiles/motion/astra-limb-v1.png",
+        "pets/petdex-profiles/motion/boba-limb-v1.png",
     ):
         resource = resources / name
         resource.parent.mkdir(parents=True, exist_ok=True)
@@ -107,6 +109,10 @@ def test_bundle_validator_checks_version_dependencies_and_resources(tmp_path):
     assert mismatch == [
         f"CFBundleShortVersionString={__version__!r}, expected '99.0.0'",
         f"CFBundleVersion={__version__!r}, expected '99.0.0'",
+    ]
+    (resources / "pets/petdex-profiles/motion/astra-limb-v1.png").unlink()
+    assert release_check.validate_bundle(bundle, __version__) == [
+        "missing bundled resource: ai_desktop/pets/petdex-profiles/motion/astra-limb-v1.png",
     ]
 
 

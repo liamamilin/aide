@@ -385,6 +385,7 @@ def test_task_confirmation_buttons_execute_once_or_reject(qtbot, controller, tmp
     qtbot.waitUntil(lambda: any(card.pending for card in controller._dialog._tool_cards.values()), timeout=2500)
     card = next(card for card in controller._dialog._tool_cards.values() if card.pending)
     request = card.confirmation
+    controller.float_btn.set_task_activity.assert_called_with('waiting')
     (card.approve if approve else card.reject).click()
     idle(qtbot, controller)
     assert (tmp_path/'created.txt').exists() is approve
@@ -392,6 +393,8 @@ def test_task_confirmation_buttons_execute_once_or_reject(qtbot, controller, tmp
         assert (tmp_path/'created.txt').read_text() == 'verified'
     assert not card.pending and card.terminal
     assert not controller._worker
+    activities = [item.args[0] for item in controller.float_btn.set_task_activity.call_args_list]
+    assert 'executing' in activities and activities[-1] == 'working'
     # A late click cannot repeat the side effect after the run closes.
     controller._on_command_decided(request, True)
     assert not card.approve.isEnabled()

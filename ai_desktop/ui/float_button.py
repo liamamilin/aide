@@ -28,6 +28,7 @@ from ai_desktop.ui.motion_preference import MotionPreference
 from ai_desktop.ui.pet_animator import PetAnimator
 from ai_desktop.ui.pet_manifest import ManifestError, load_manifest
 from ai_desktop.ui.pet_profiles import apply_petdex_profile
+from ai_desktop.ui.pet_toolbar import PetToolbar
 from ai_desktop.ui.spritesheet import Spritesheet
 from ai_desktop.utils.paths import resource_path
 from ai_desktop.utils.window_state import (
@@ -158,6 +159,8 @@ class FloatButton(QPushButton):
     read_selection_requested = pyqtSignal()
     stop_speech_requested = pyqtSignal()
     screenshot_requested = pyqtSignal()
+    open_dialog_requested = pyqtSignal()
+    stop_task_requested = pyqtSignal()
     placement_changed = pyqtSignal()
     screen_follow_changed = pyqtSignal(bool)
 
@@ -185,10 +188,16 @@ class FloatButton(QPushButton):
         self._listening = False
         self._speaking = False
         self._responding: bool = False
+        self._task_activity = "working"
+        self._unread_result: str | None = None
         self._result_state: str | None = None
         self._hovered = False
         self._menu_open = False
+        self._toolbar_hovered = False
+        self._follow_candidate = None
+        self._follow_candidate_since = 0.0
         self._last_hover_reaction_time = float("-inf")
+        self._hover_entry_direction: str | None = None
         self._quick_actions: list[tuple[str, str]] = []
         self._animation_phase = 0
         self._spritesheet: Spritesheet | None = None
@@ -207,9 +216,25 @@ class FloatButton(QPushButton):
         self._idle_wake_timer = QTimer(self)
         self._idle_wake_timer.setSingleShot(True)
         self._idle_wake_timer.timeout.connect(self._advance_animation)
+        self._hover_reaction_timer = QTimer(self)
+        self._hover_reaction_timer.setSingleShot(True)
+        self._hover_reaction_timer.setInterval(140)
+        self._hover_reaction_timer.timeout.connect(self._react_to_hover)
         self._result_timer = QTimer(self)
         self._result_timer.setSingleShot(True)
         self._result_timer.timeout.connect(self._clear_result_state)
+        self._toolbar = PetToolbar(self)
+        self._toolbar.activated.connect(self._on_toolbar_action)
+        self._toolbar.entered.connect(self._on_toolbar_entered)
+        self._toolbar.left.connect(self._on_toolbar_left)
+        self._toolbar_show_timer = QTimer(self)
+        self._toolbar_show_timer.setSingleShot(True)
+        self._toolbar_show_timer.setInterval(350)
+        self._toolbar_show_timer.timeout.connect(self._show_toolbar)
+        self._toolbar_hide_timer = QTimer(self)
+        self._toolbar_hide_timer.setSingleShot(True)
+        self._toolbar_hide_timer.setInterval(450)
+        self._toolbar_hide_timer.timeout.connect(self._maybe_hide_toolbar)
         self._init_ui()
         self._position_initial()
         self._start_screen_tracking()
@@ -246,6 +271,7 @@ class FloatButton(QPushButton):
                     manifest.spritesheet.frame_width, manifest.spritesheet.frame_height,
                     manifest.spritesheet.columns, manifest.spritesheet.frame_count,
                     remove_magenta_matte=manifest.rendering.remove_magenta_matte,
+                    frame_patches=manifest.frame_patches,
                 )
                 if not ss.load():
                     raise ManifestError("spritesheet cannot be loaded")
@@ -263,7 +289,14 @@ class FloatButton(QPushButton):
         if self._animator is None or self._spritesheet is None:
             return
         snap = self._animator.snapshot()
-        self._spritesheet_frame = self._spritesheet.frame(snap.frame_index)
+        index = snap.frame_index
+        if self._reduce_motion:
+            state = self._animator.manifest.states[self._animator.current_state]
+            index = self._animator.manifest.animations[state.base].frames[-1]
+        self._spritesheet_frame = self._spritesheet.frame(
+            index, secondary=self._animator.manifest.secondary_motion,
+            angles=() if self._reduce_motion else snap.secondary_angles,
+            pixel_art=self._animator.manifest.rendering.pixel_art)
 
     @staticmethod
     def _normalize_pet_size(value: str) -> str:
@@ -271,6 +304,7 @@ class FloatButton(QPushButton):
         return value if value in _PET_SIZES else _DEFAULT_PET_SIZE
 
     def _apply_mode(self) -> None:
+        self._hide_toolbar()
         if self._pet_enabled and self._spritesheet_available:
             self.setFixedSize(_PET_SIZES[self._pet_size])
             self.setIcon(QIcon())
@@ -284,6 +318,7 @@ class FloatButton(QPushButton):
             return
 
         self._pet_enabled = False
+        self._cancel_pointer_pose()
         self._animation_timer.stop()
         self.setFixedSize(_COMPACT_SIZE, _COMPACT_SIZE)
 
@@ -345,6 +380,16 @@ class FloatButton(QPushButton):
             for index in sorted(indices):
                 frame = self._spritesheet.frame(index)
                 painter.drawPixmap(draw_rect, frame, QRectF(frame.rect()))
+            secondary = self._animator.manifest.secondary_motion
+            if secondary:
+                for index in secondary.frames:
+                    if index not in indices:
+                        continue
+                    for sign in (-1, 1):
+                        frame = self._spritesheet.frame(index, secondary=secondary,
+                                                       angles=tuple(sign * part.angle_deg for part in secondary.parts),
+                                                       pixel_art=self._animator.manifest.rendering.pixel_art)
+                        painter.drawPixmap(draw_rect, frame, QRectF(frame.rect()))
         painter.end()
 
         # Leave room for the brief hover lift and anti-aliased feather edges.
@@ -372,13 +417,16 @@ class FloatButton(QPushButton):
     def _sync_hit_mask(self) -> None:
         if not self._pet_enabled or not self._spritesheet_available:
             return
-        # Badges may extend beyond the silhouette; idle is the
-        # long-lived state where transparent corners should pass clicks through.
-        mask = (
-            self._idle_hit_mask
-            if self._effective_state() == "idle"
-            else QRegion(self.rect())
-        )
+        mask = QRegion(self._idle_hit_mask)
+        if self._effective_state() != "idle":
+            path = QPainterPath()
+            path.addRoundedRect(self._badge_rect().adjusted(-2, -2, 2, 2), 8, 8)
+            mask |= QRegion(path.toFillPolygon().toPolygon())
+        if self._unread_result:
+            mask |= QRegion(self._unread_rect().adjusted(-2, -2, 2, 2).toAlignedRect(), QRegion.Ellipse)
+        if self._effective_state() == "success" and not self._reduce_motion:
+            for rect in self._success_sparkle_rects():
+                mask |= QRegion(rect.adjusted(-2, -2, 2, 2).toAlignedRect(), QRegion.Ellipse)
         if self.mask() != mask:
             self.setMask(mask)
 
@@ -388,18 +436,21 @@ class FloatButton(QPushButton):
         if not self.isVisible() or self._reduce_motion or self._is_dragging or self._menu_open:
             return
         if not self._pet_enabled or self._animator is None:
-            if self._responding:
+            if self._responding and self._task_activity != "waiting":
                 self._scheduled_wake_seconds = 0.18
                 self._animation_timer.start(180)
             return
         wake = self._animator.next_wake_seconds
-        if self._effective_state() != "idle":
+        if self._effective_state() in {"working", "searching", "executing", "speaking", "success"}:
             # Task badges remain fluid even when the body is held in a calm pose.
-            wake = min(wake, 0.04) if wake is not None else 0.04
+            wake = min(wake, 0.18) if wake is not None else 0.18
         if wake is None:
             return
-        milliseconds = max(16, math.ceil(wake * 1000))
-        self._scheduled_wake_seconds = milliseconds / 1000
+        # UI events may reschedule the same frame. Keep its original deadline
+        # rather than adding a whole frame duration on every pointer crossing.
+        elapsed = max(0.0, time.monotonic() - self._last_animation_time)
+        milliseconds = max(16, math.ceil(max(0.0, wake - elapsed) * 1000))
+        self._scheduled_wake_seconds = elapsed + milliseconds / 1000
         if milliseconds > 250:
             self._idle_wake_timer.start(milliseconds)
         else:
@@ -428,6 +479,7 @@ class FloatButton(QPushButton):
         self._reduce_motion_requested = bool(enabled)
         self._reduce_motion = bool(enabled or self._motion_preference.reduced)
         if self._reduce_motion:
+            self._hover_reaction_timer.stop()
             self._animation_phase = 0
             self._visual_elapsed = 0.0
             if self._spritesheet_available and self._animator is not None:
@@ -437,6 +489,7 @@ class FloatButton(QPushButton):
             self._sync_animator_state()
         self._last_animation_time = time.monotonic()
         self._sync_animation_timer()
+        self._sync_hit_mask()
         self.update()
 
     def _on_system_motion_changed(self, reduced: bool) -> None:
@@ -464,6 +517,8 @@ class FloatButton(QPushButton):
     def reload_pet(self) -> None:
         """Reload the spritesheet engine with the current config pet source/name."""
         anchor = self.geometry().bottomRight()
+        self._hide_toolbar()
+        self._hover_reaction_timer.stop()
         self._animation_timer.stop()
         self._idle_wake_timer.stop()
         self._spritesheet = None
@@ -516,16 +571,10 @@ class FloatButton(QPushButton):
             painter.drawPixmap(draw_rect, self._spritesheet_frame, QRectF(self._spritesheet_frame.rect()))
 
         if state == "success" and not self._reduce_motion:
-            self._draw_success_sparkles(painter, px)
+            self._draw_success_sparkles(painter)
 
         if state != "idle":
-            bubble_width = px(38 if state in {"working", "speaking"} else 30)
-            bubble = QRectF(
-                self.width() - bubble_width - px(3),
-                px(3),
-                bubble_width,
-                px(24),
-            )
+            bubble = self._badge_rect()
             painter.setPen(QPen(QColor(92, 207, 255, 210), 1.5 * scale))
             painter.setBrush(QColor(255, 255, 255, 235))
             painter.drawRoundedRect(bubble, px(12), px(12))
@@ -565,7 +614,7 @@ class FloatButton(QPushButton):
                         round(x),
                         round(center_y + height / 2),
                     )
-            elif state == "working":
+            elif state in {"working", "executing"}:
                 active_dot = (
                     None if self._reduce_motion else (self._animation_phase // 2) % 3
                 )
@@ -582,6 +631,20 @@ class FloatButton(QPushButton):
                             radius * 2,
                         )
                     )
+            elif state == "searching":
+                painter.setPen(QPen(QColor(20, 142, 235, 230), 2.0 * scale))
+                center = bubble.center()
+                painter.drawEllipse(QRectF(center.x() - px(6), center.y() - px(6), px(9), px(9)))
+                painter.drawLine(round(center.x() + px(2)), round(center.y() + px(2)),
+                                 round(center.x() + px(6)), round(center.y() + px(6)))
+            elif state in {"waiting", "cancelled"}:
+                painter.setPen(QPen(QColor(150, 104, 24, 235) if state == "waiting"
+                                    else QColor(95, 105, 120, 235), 2.0 * scale))
+                if state == "waiting":
+                    painter.drawText(bubble, Qt.AlignCenter, "?")
+                else:
+                    center = bubble.center()
+                    painter.drawRect(QRectF(center.x() - px(4), center.y() - px(4), px(8), px(8)))
             elif state == "success":
                 painter.setPen(QPen(QColor(27, 166, 93, 235), 2.3 * scale))
                 center = bubble.center()
@@ -611,18 +674,41 @@ class FloatButton(QPushButton):
                         radius * 2,
                     )
                 )
+        if self._unread_result:
+            painter.setPen(QPen(QColor(255, 255, 255, 240), 1.5 * scale))
+            painter.setBrush(QColor(218, 75, 87) if self._unread_result == "error"
+                             else QColor(20, 142, 235))
+            painter.drawEllipse(self._unread_rect())
         painter.end()
 
-    def _draw_success_sparkles(self, painter: QPainter, px) -> None:
+    def _badge_rect(self) -> QRectF:
+        scale = min(self.width() / 116, self.height() / 122)
+        width = round((38 if self._effective_state() in {"working", "executing", "speaking"} else 30) * scale)
+        return QRectF(self.width() - width - round(3 * scale), round(3 * scale), width, round(24 * scale))
+
+    def _unread_rect(self) -> QRectF:
+        size = max(8, round(self.width() * .085))
+        return QRectF(self.width() - size - 4, self.height() - size - 6, size, size)
+
+    def _success_sparkle_rects(self) -> list[QRectF]:
+        scale = min(self.width() / 116, self.height() / 122)
+
+        def px(value):
+            return max(1, round(value * scale))
+
+        return [QRectF(px(x), px(y), px(radius * 2), px(radius * 2))
+                for x, y, radius in ((18, 25, 2.2), (26, 13, 1.4), (96, 45, 1.8))]
+
+    def _draw_success_sparkles(self, painter: QPainter) -> None:
         pulse = (math.sin(self._animation_phase * math.pi / 4) + 1.0) / 2.0
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor(73, 220, 145, round(130 + pulse * 110)))
-        for x, y, radius in ((18, 25, 2.2), (26, 13, 1.4), (96, 45, 1.8)):
-            painter.drawEllipse(QRectF(px(x), px(y), px(radius * 2), px(radius * 2)))
+        for rect in self._success_sparkle_rects():
+            painter.drawEllipse(rect)
 
     def _effective_state(self) -> str:
         if self._responding:
-            return "working"
+            return self._task_activity
         if self._speaking:
             return "speaking"
         if self._listening:
@@ -633,6 +719,8 @@ class FloatButton(QPushButton):
 
     def _state_tooltip(self) -> str:
         if self._effective_state() == "idle":
+            if self._unread_result:
+                return "有未查看的任务结果 · 点击查看"
             placement = (
                 "拖动可固定位置" if self._follow_cursor_screen_enabled
                 else "已固定屏幕，右键可重新跟随"
@@ -642,49 +730,83 @@ class FloatButton(QPushButton):
             "listening": "正在读取选中内容…",
             "speaking": "正在朗读 · 右键可停止",
             "working": "AI 正在回复…",
+            "searching": "正在搜索资料…",
+            "executing": "正在执行工具…",
+            "waiting": "需要你确认 · 点击查看确认卡",
             "success": "回复已完成",
             "error": "这次没有完成，可点击查看",
+            "cancelled": "任务已停止",
         }[self._effective_state()]
 
     def _advance_animation(self) -> None:
         if self._reduce_motion or not self.isVisible() or self._is_dragging:
             self._animation_timer.stop()
             return
-        now = time.monotonic()
-        delta = max(0.0, now - self._last_animation_time)
-        self._last_animation_time = now
-        # No fast-forward through gestures after sleep or a stalled GUI callback.
-        delta = min(delta, max(0.25, self._scheduled_wake_seconds + 0.1))
-        self._visual_elapsed += delta
+        self._consume_animation_time()
         self._animation_phase = int(self._visual_elapsed / 0.18) % 96
         if not self._pet_enabled:
             if self._responding:
                 self.setWindowOpacity(0.55 if self._animation_phase % 12 < 6 else 1.0)
         elif self._animator is not None:
-            self._animator.tick(delta)
             self._update_spritesheet_frame()
         self.update()
         self._sync_animation_timer()
+
+    def _consume_animation_time(self) -> None:
+        now = time.monotonic()
+        elapsed = max(0.0, now - self._last_animation_time)
+        self._last_animation_time = now
+        # Motion is paused while hidden, reduced, or held during a drag.
+        delta = (min(elapsed, max(0.25, self._scheduled_wake_seconds + 0.1))
+                 if self.isVisible() and not self._reduce_motion and not self._is_dragging else 0.0)
+        self._visual_elapsed += delta
+        if self._animator is not None:
+            self._animator.tick(delta, elapsed_seconds=elapsed)
 
     def enterEvent(self, event) -> None:
         newly_entered = not self._hovered
         self._hovered = True
+        self._toolbar_hide_timer.stop()
+        if not self._toolbar.isVisible() and not self._is_dragging and not self._menu_open:
+            self._toolbar_show_timer.start()
         if newly_entered and self._effective_state() == "idle" and not self._reduce_motion and not self._is_dragging:
-            self._sync_animator_state()
-            now = time.monotonic()
-            if self._animator is not None and now - self._last_hover_reaction_time >= 0.8:
-                self._animator.react()
-                self._last_hover_reaction_time = now
-                self._update_spritesheet_frame()
+            pointer = event.globalPos() if hasattr(event, "globalPos") else QCursor.pos()
+            offset = pointer - self.geometry().center()
+            self._hover_entry_direction = (
+                ("left" if offset.x() < 0 else "right") if abs(offset.x()) >= abs(offset.y())
+                else ("up" if offset.y() < 0 else "down"))
+            self._hover_reaction_timer.start()
         self._sync_animation_timer()
         self.update()
         super().enterEvent(event)
 
+    def _react_to_hover(self) -> None:
+        if (not self.isVisible() or not self._hovered or not self._pet_enabled or self._reduce_motion
+                or self._is_dragging or self._press_global is not None or self._menu_open
+                or self._effective_state() != "idle" or self._animator is None):
+            return
+        self._sync_animator_state()
+        now = time.monotonic()
+        if now - self._last_hover_reaction_time >= 1.2 and self._animator.react(self._hover_entry_direction):
+            self._last_hover_reaction_time = now
+            self._last_animation_time = now
+            self._update_spritesheet_frame()
+        self._sync_animation_timer()
+        self.update()
+
     def leaveEvent(self, event) -> None:
         self._hovered = False
-        if self._effective_state() == "idle" and self._animator is not None:
-            self._animator.settle_to("idle")
-            self._update_spritesheet_frame()
+        self._hover_reaction_timer.stop()
+        self._hover_entry_direction = None
+        self._toolbar_show_timer.stop()
+        self._toolbar_hide_timer.start()
+        if self._effective_state() == "idle" and self._animator is not None and not self._is_dragging:
+            if self._toolbar.isVisible():
+                self._sync_animator_state()
+            else:
+                self._consume_animation_time()
+                self._animator.settle_to("idle")
+                self._update_spritesheet_frame()
         self._sync_animation_timer()
         self.update()
         super().leaveEvent(event)
@@ -699,6 +821,9 @@ class FloatButton(QPushButton):
         super().showEvent(event)
 
     def hideEvent(self, event) -> None:
+        self._hover_reaction_timer.stop()
+        self._hide_toolbar()
+        self._cancel_pointer_pose()
         self._animation_timer.stop()
         self._idle_wake_timer.stop()
         self._result_timer.stop()
@@ -717,6 +842,8 @@ class FloatButton(QPushButton):
         if responding and not self._responding:
             self._animation_phase = 0
             self._visual_elapsed = 0.0
+        if not self._responding or not responding:
+            self._task_activity = "working"
         self._responding = responding
         if responding:
             self._result_timer.stop()
@@ -746,6 +873,39 @@ class FloatButton(QPushButton):
         self._sync_hit_mask()
         self._sync_animation_timer()
         self.setToolTip(self._state_tooltip())
+        self._refresh_toolbar()
+        self.update()
+
+    def set_task_activity(self, activity: str) -> None:
+        """Only an active task may publish activity; it never changes task ownership."""
+        if not self._responding or activity not in {"working", "searching", "executing", "waiting"}:
+            return
+        if self._task_activity == activity:
+            return
+        self._task_activity = activity
+        self.setWindowOpacity(1.0)
+        self._sync_animator_state()
+        self._sync_hit_mask()
+        self._sync_animation_timer()
+        self.setToolTip(self._state_tooltip())
+        self.update()
+
+    def show_cancelled(self) -> None:
+        if self._responding or self._speaking or self._listening:
+            return
+        self._result_state = "cancelled"
+        self._sync_animator_state()
+        self._result_timer.start(1600)
+        self._sync_hit_mask()
+        self._sync_animation_timer()
+        self.setToolTip(self._state_tooltip())
+        self.update()
+
+    def mark_result_unread(self, kind: str | None) -> None:
+        self._unread_result = kind if kind in {"success", "error"} else None
+        self._sync_hit_mask()
+        self.setToolTip(self._state_tooltip())
+        self._refresh_toolbar()
         self.update()
 
     def _clear_result_state(self) -> None:
@@ -794,6 +954,7 @@ class FloatButton(QPushButton):
         if enabled == self._follow_cursor_screen_enabled:
             return
         self._follow_cursor_screen_enabled = enabled
+        self._follow_candidate = None
         self.screen_follow_changed.emit(enabled)
         if self._pet_enabled and self._effective_state() == "idle":
             self.setToolTip(self._state_tooltip())
@@ -803,20 +964,98 @@ class FloatButton(QPushButton):
             else:
                 self._track_timer.stop()
         if enabled:
-            self._follow_cursor_screen()
+            self._follow_cursor_screen(immediate=True)
 
     def _sync_animator_state(self) -> None:
         """Push the current effective state to the animator."""
         if not self._spritesheet_available or self._animator is None:
             return
+        self._consume_animation_time()
         state = self._effective_state()
-        if state == "idle" and self._hovered and not self._reduce_motion:
+        if state != "idle" or self._reduce_motion:
+            self._hover_reaction_timer.stop()
+        if state == "idle" and (self._hovered or self._toolbar.isVisible()) and not self._reduce_motion:
             state = "hover"
-        previous = self._animator.current_state
-        self._animator.set_state(state, restart=self._reduce_motion)
-        if previous != self._animator.current_state:
-            self._last_animation_time = time.monotonic()
+        if state not in self._animator.manifest.states:
+            fallback = {"searching": "working", "executing": "working", "waiting": "hover",
+                        "cancelled": "idle", "hover": "idle"}.get(state, "idle")
+            state = fallback if fallback in self._animator.manifest.states else self._animator.manifest.default_state
+        self._animator.set_state(state, restart=self._reduce_motion,
+                                 animate=not self._reduce_motion and not self._is_dragging)
         self._update_spritesheet_frame()
+
+        self._refresh_toolbar()
+
+    def _refresh_toolbar(self, *, force: bool = False) -> None:
+        if not force and not self._toolbar.isVisible():
+            return
+        state = self._effective_state()
+        if self._responding:
+            actions = [("dialog", "查看确认" if state == "waiting" else "查看进度"), ("stop_task", "停止")]
+        elif self._speaking:
+            actions = [("dialog", "对话"), ("stop_speech", "停止朗读")]
+        elif self._listening:
+            actions = [("dialog", "对话")]
+        else:
+            actions = [("dialog", "查看结果" if self._unread_result else "对话"),
+                       ("screenshot", "截图"), ("read", "朗读")]
+        status = self._state_tooltip() if state != "idle" or self._unread_result else ""
+        self._toolbar.configure(status, actions)
+        screen = QApplication.screenAt(self.geometry().center()) or QApplication.primaryScreen()
+        if screen:
+            self._toolbar.position_near(self.frameGeometry(), screen.availableGeometry())
+
+    def _show_toolbar(self) -> None:
+        if (not self.isVisible() or not self._pet_enabled or not self._hovered
+                or self._is_dragging or self._menu_open):
+            return
+        self._refresh_toolbar(force=True)
+        self._toolbar.show()
+        pin_to_all_spaces(self._toolbar)
+
+    def _hide_toolbar(self) -> None:
+        self._toolbar_show_timer.stop()
+        self._toolbar_hide_timer.stop()
+        self._toolbar_hovered = False
+        self._toolbar.hide()
+        # Toolbar buttons hide their own window before emitting activated.
+        # Restore from the pose too, rather than relying on visibility here.
+        if (not self._hovered and self._press_global is None and not self._is_dragging
+                and self._animator is not None and self._animator.current_state == "hover"):
+            self._sync_animator_state()
+            self._sync_animation_timer()
+            self.update()
+
+    def _maybe_hide_toolbar(self) -> None:
+        if not self._hovered and not self._toolbar_hovered:
+            self._hide_toolbar()
+
+    def _on_toolbar_entered(self) -> None:
+        if not self._toolbar.isVisible():
+            return
+        self._toolbar_hovered = True
+        self._toolbar_hide_timer.stop()
+        self._sync_animator_state()
+        self._sync_animation_timer()
+        self.update()
+
+    def _on_toolbar_left(self) -> None:
+        self._toolbar_hovered = False
+        self._toolbar_hide_timer.start()
+
+    def _on_toolbar_action(self, action: str) -> None:
+        self._hide_toolbar()
+        if action == "dialog":
+            self.open_dialog_requested.emit()
+        elif action == "stop_task" and self._responding:
+            self.stop_task_requested.emit()
+        elif action == "stop_speech" and self._speaking:
+            self.stop_speech_requested.emit()
+        elif not (self._responding or self._speaking or self._listening):
+            if action == "screenshot":
+                self.screenshot_requested.emit()
+            elif action == "read":
+                self.read_selection_requested.emit()
 
     def _start_screen_tracking(self) -> None:
         """定时检测鼠标所在屏幕，自动跟随"""
@@ -826,18 +1065,30 @@ class FloatButton(QPushButton):
         if self.isVisible() and self._follow_cursor_screen_enabled:
             self._track_timer.start()
 
-    def _follow_cursor_screen(self) -> None:
+    def _follow_cursor_screen(self, *, immediate: bool = False) -> None:
         """如果鼠标所在的屏幕与按钮不同，移动按钮到鼠标所在屏幕"""
-        if self._is_dragging or not self._follow_cursor_screen_enabled:
+        if (self._is_dragging or self._hovered or self._toolbar.isVisible() or self._menu_open
+                or not self._follow_cursor_screen_enabled):
+            self._follow_candidate = None
             return
         cursor_pos = QCursor.pos()
         cursor_screen = QApplication.screenAt(cursor_pos)
         btn_screen = QApplication.screenAt(self.geometry().center())
         if cursor_screen is not None and cursor_screen != btn_screen:
+            now = time.monotonic()
+            if not immediate:
+                if self._follow_candidate is not cursor_screen:
+                    self._follow_candidate = cursor_screen
+                    self._follow_candidate_since = now
+                    return
+                if now - self._follow_candidate_since < .8:
+                    return
             geo = cursor_screen.availableGeometry()
             x = geo.right() - self.width() - 20
             y = geo.center().y() - self.height() // 2
             self.move(x, y)
+        else:
+            self._follow_candidate = None
 
     # ── 拖拽 ───────────────────────────────────────────
 
@@ -888,13 +1139,47 @@ class FloatButton(QPushButton):
 
     def moveEvent(self, event) -> None:
         super().moveEvent(event)
+        if hasattr(self, "_toolbar"):
+            self._hide_toolbar()
         self.placement_changed.emit()
 
     def mousePressEvent(self, event) -> None:
-        if event.button() == Qt.LeftButton:
+        self._hover_reaction_timer.stop()
+        self._hide_toolbar()
+        if event.button() == Qt.LeftButton and self.hitButton(event.pos()):
             self._drag_pos = event.globalPos() - self.frameGeometry().topLeft()
             self._press_global = event.globalPos()
+            self._play_pointer_gesture("press", hold=True)
         super().mousePressEvent(event)
+
+    def hitButton(self, pos: QPoint) -> bool:
+        # A grabbed mouse release can land in a transparent corner. Match the
+        # native button hit test to the stable character/badge window mask.
+        return super().hitButton(pos) and (self.mask().isEmpty() or self.mask().contains(pos))
+
+    def _play_pointer_gesture(self, action: str, *, hold: bool = False) -> None:
+        if (not self._pet_enabled or self._reduce_motion or self._animator is None
+                or self._effective_state() != "idle"):
+            return
+        self._consume_animation_time()
+        if self._animator.gesture(action, hold=hold):
+            self._last_animation_time = time.monotonic()
+            self._update_spritesheet_frame()
+            self._sync_animation_timer()
+            self.update()
+
+    def _cancel_pointer_pose(self) -> None:
+        self._hover_reaction_timer.stop()
+        if self._animator is not None and (self._is_dragging or self._animator.layer == "interaction"):
+            self._animator.set_state(self._animator.current_state, restart=True, animate=False)
+        if self._animator is not None:
+            self._animator.clear_secondary_motion()
+            self._update_spritesheet_frame()
+        self._is_dragging = False
+        self._drag_pos = None
+        self._press_global = None
+        self.setDown(False)
+        self.setCursor(Qt.PointingHandCursor)
 
     def mouseMoveEvent(self, event) -> None:
         if event.buttons() & Qt.LeftButton and self._drag_pos is not None:
@@ -903,9 +1188,7 @@ class FloatButton(QPushButton):
                 if distance >= QApplication.startDragDistance():
                     self._is_dragging = True
                     self.setCursor(Qt.ClosedHandCursor)
-                    if self._animator is not None and self._effective_state() == "idle":
-                        self._animator.set_state("idle", restart=True)
-                        self._update_spritesheet_frame()
+                    self._play_pointer_gesture("grab", hold=True)
                     self._sync_animation_timer()
                     self.set_follow_cursor_screen(False)
             if not self._is_dragging:
@@ -921,6 +1204,11 @@ class FloatButton(QPushButton):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
+        if event.button() != Qt.LeftButton:
+            super().mouseReleaseEvent(event)
+            return
+        had_press = self._press_global is not None
+        accepted = self.hitButton(event.pos())
         dragged = self._is_dragging and event.button() == Qt.LeftButton
         self._is_dragging = False
         self._drag_pos = None
@@ -929,11 +1217,25 @@ class FloatButton(QPushButton):
             self.setDown(False)
             self.setCursor(Qt.PointingHandCursor)
             self._last_animation_time = time.monotonic()
+            if self._animator is not None:
+                # Release a held pose even when the semantic state stayed idle.
+                self._animator.set_state(self._animator.current_state, restart=True, animate=False)
             self._sync_animator_state()
+        if had_press and not dragged and not accepted:
+            self._hovered = False
+            self._cancel_pointer_pose()
+            self._sync_animator_state()
+        elif had_press:
+            if (self._animator is not None and self._animator.layer == "interaction"
+                    and self._animator.next_wake_seconds is None):
+                self._animator.set_state(self._animator.current_state, restart=True, animate=False)
+            self._play_pointer_gesture("release" if dragged else "click")
+        if had_press:
             self._sync_animation_timer()
         super().mouseReleaseEvent(event)
 
     def contextMenuEvent(self, event) -> None:
+        self._hide_toolbar()
         self._menu_open = True
         self._sync_animation_timer()
         menu = self._create_context_menu()

@@ -1,0 +1,25 @@
+ROUND 1 EXIT 1
+INVALID 6187855872 reply <PyQt5.QtNetwork.QNetworkReply object at 0x11199a950> recorded 42924767456 sender <PyQt5.QtNetwork.QNetworkReply object at 0x11199ad40> sender_same False manager_deleted False root_deleted False
+SENDER ADDRESS 42924767456
+DESTROYED ENTRY 6187855872 <PyQt5.QtNetwork.QNetworkReply object at 0x11199a950> sender <PyQt5.QtNetwork.QNetworkReply object at 0x11199ad40>
+<PyQt5.QtNetwork.QNetworkReply object at 0x11199a950>
+    Reference count: 2
+    Address of wrapped object: 0x0
+    Created by: C/C++
+    To be destroyed by: C/C++
+    Parent wrapper: NULL
+    Next sibling wrapper: NULL
+    Previous sibling wrapper: NULL
+    First child wrapper: NULL
+  File "/Users/milin/2026/AI桌面助手/ai_desktop/llm/run_worker.py", line 144, in run
+    result = self._run_loop.run(lambda: _payload(self.request, stream=True))
+  File "/Users/milin/2026/AI桌面助手/ai_desktop/llm/run_loop.py", line 228, in run
+    result = self.model_step(self.current_request, wire, self._deadline)
+  File "/Users/milin/2026/AI桌面助手/ai_desktop/llm/run_worker.py", line 175, in _model_step
+    loop.exec_()
+  File "qt_stream_inline.py", line 180, in _headers_received
+  File "qt_stream_inline.py", line 173, in _has_live_reply
+Traceback (most recent call last):
+  File "/private/tmp/aide-worker-inline-2026-10-09.py", line 69, in <module>
+    assert results[0].status == expected, (index, results[0])
+AssertionError: (9, ChatResult(request_id='08da2cc116ae4ee8a54c7662b2ce7f68', status=<ResultStatus.FAILED: 'failed'>, text='', error='连接意外结束，请重试。', error_code=<ErrorCode.CONNECTION: 'connection'>, turn=None, run_id='388811d0bb254cf683883ecb39783e64', step_id='3799f6e54d774fea83a8f39631539d11', conversation_id=0))

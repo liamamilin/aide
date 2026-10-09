@@ -4,6 +4,8 @@ from dataclasses import replace
 from unittest.mock import patch
 
 import pytest
+from PyQt5 import sip
+from PyQt5.QtCore import QCoreApplication, QEvent
 from PyQt5.QtNetwork import QNetworkReply
 
 from ai_desktop.llm.chat_client import ChatClient, StreamProtocolError
@@ -64,3 +66,99 @@ def test_connection_timeout_aborts_a_reply_with_no_upload_or_response(qtbot):
     assert completed[0].error_code == ErrorCode.TIMEOUT
     assert "连接 Ollama 超时" in completed[0].error
     transport.deleteLater()
+
+
+@pytest.mark.parametrize("partial", ["", "partial answer"])
+@pytest.mark.parametrize("notification", ["destroyed_signal", "late_headers"])
+def test_destroyed_active_reply_finishes_once_without_reading_a_stale_wrapper(
+    qtbot, ollama_server, partial, notification,
+):
+    scenario = ollama_server.enqueue(
+        *([{"message": {"content": partial}}] if partial else []),
+        before_headers=not partial, hold_open=True,
+    )
+    transport = QtChatTransport(ChatClient().create_request([]))
+    completed, chunks = [], []
+    transport.done.connect(completed.append)
+    transport.stream_event.connect(chunks.append)
+    try:
+        transport.start(b"{}")
+        qtbot.waitUntil(scenario.received.is_set)
+        if partial:
+            qtbot.waitUntil(lambda: any(event.kind == EventKind.CONTENT for event in chunks))
+        reply = transport._reply
+        if notification == "late_headers":
+            # A queued destroyed notification may arrive after another callback.
+            reply.destroyed.disconnect(transport._reply_destroyed)
+        reply.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        assert sip.isdeleted(reply)
+        if notification == "late_headers":
+            transport._headers_received()
+        qtbot.waitUntil(lambda: bool(completed), timeout=500)
+        # These are the exact late callbacks seen in the full-suite failure.
+        transport._headers_received()
+        transport._ready_read()
+        transport._finished()
+        transport.cancel()
+        assert len(completed) == 1
+        assert completed[0].status == ResultStatus.FAILED
+        assert completed[0].error_code == ErrorCode.CONNECTION
+        assert completed[0].text == partial
+        assert not transport._connect_timer.isActive() and not transport._idle_timer.isActive()
+        assert transport._reply is None
+        qtbot.waitUntil(scenario.disconnected.is_set)
+    finally:
+        # Keep the pre-fix red run from leaving a dangling native reply timer.
+        transport._reply = None
+        transport.cancel()
+        transport.deleteLater()
+
+
+def test_cancel_with_deleted_reply_and_delayed_destroyed_notification(qtbot, ollama_server):
+    scenario = ollama_server.enqueue(before_headers=True)
+    transport = QtChatTransport(ChatClient().create_request([]))
+    completed = []
+    transport.done.connect(completed.append)
+    try:
+        transport.start(b"{}")
+        qtbot.waitUntil(scenario.received.is_set)
+        reply = transport._reply
+        reply.destroyed.disconnect(transport._reply_destroyed)
+        reply.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        assert sip.isdeleted(reply)
+        transport.cancel()
+        transport._headers_received()
+        transport._ready_read()
+        transport._finished()
+        assert len(completed) == 1 and completed[0].status == ResultStatus.CANCELLED
+        assert transport._reply is None
+        assert not transport._connect_timer.isActive() and not transport._idle_timer.isActive()
+        qtbot.waitUntil(scenario.disconnected.is_set)
+    finally:
+        transport.cancel()
+        transport.deleteLater()
+
+
+def test_completed_reply_is_released_before_late_callbacks_and_cancel(qtbot, ollama_server):
+    ollama_server.enqueue({"message": {"content": "answer"}, "done": True})
+    transport = QtChatTransport(ChatClient().create_request([]))
+    completed = []
+    transport.done.connect(completed.append)
+    try:
+        transport.start(b"{}")
+        reply = transport._reply
+        qtbot.waitUntil(lambda: bool(completed))
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        assert sip.isdeleted(reply)
+        transport._headers_received()
+        transport._ready_read()
+        transport._finished()
+        transport.cancel()
+        assert len(completed) == 1 and completed[0].ok
+        assert completed[0].text == "answer"
+        assert transport._reply is None
+    finally:
+        transport.cancel()
+        transport.deleteLater()

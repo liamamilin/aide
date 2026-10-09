@@ -1,0 +1,107 @@
+{
+  "status": "fixed_and_validated",
+  "timestamp": "2026-10-09T18:01:52.824867+08:00",
+  "environment": {
+    "macos": "26.6.2",
+    "machine": "arm64",
+    "python": "3.10.13",
+    "pyqt": "5.15.11",
+    "qt": "5.15.19",
+    "pyqt5_sip": "12.18.0"
+  },
+  "root_cause": "Stale cross-thread PyQtMonitor destroyed(QObject*) notification invalidates a new live reply wrapper after native address reuse.",
+  "fix": "Rebind through the fresh one-shot manager native child tree at binding operations and disposal; actual native destruction remains terminal. No additional HTTP POST, decoder restart or GC suppression.",
+  "deterministic_regression": {
+    "new_cases": 20,
+    "passed": 20,
+    "initial_red_cases": 14,
+    "initial_red_failed": 14,
+    "seconds": 1.66
+  },
+  "controlled_native_address_reuse": {
+    "model_rounds_passed": 3,
+    "search_rounds_passed": 3,
+    "monitor_invalidation_required": true,
+    "http_requests_per_round": 1,
+    "allocation_bound": 512
+  },
+  "ordinary_pressure": {
+    "rounds_passed": 12,
+    "tasks_per_round": 24,
+    "total_tasks": 288,
+    "model_http_per_round": 40,
+    "search_http_per_round": 24
+  },
+  "intensive_pressure": {
+    "rounds_passed": 10,
+    "tasks_per_round": 96,
+    "total_tasks": 960,
+    "model_http_total": 1600,
+    "search_http_total": 960,
+    "gc_every_widget_pulses": 2,
+    "process_bound_seconds": 25
+  },
+  "full_regression": [
+    {
+      "round": 1,
+      "passed": 1655,
+      "warnings": 2,
+      "seconds": 77.33,
+      "log": "qt-reply-lifecycle-full-1-2026-10-09.log"
+    },
+    {
+      "round": 2,
+      "passed": 1655,
+      "warnings": 2,
+      "seconds": 79.21,
+      "log": "qt-reply-lifecycle-full-2-2026-10-09.log"
+    },
+    {
+      "round": 3,
+      "passed": 1655,
+      "warnings": 2,
+      "seconds": 78.23,
+      "log": "qt-reply-lifecycle-full-3-2026-10-09.log"
+    }
+  ],
+  "checks": {
+    "ruff": true,
+    "git_diff_check": true,
+    "native_owner_tree_released": true,
+    "cancel_timeouts_limit_native_destruction_exactly_once": true
+  },
+  "bundle": {
+    "path": "/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app",
+    "version": "1.5.0",
+    "size": "867M",
+    "modules_match": 14,
+    "pet_assets_match": 7,
+    "signature_authority": "AI Desktop Assistant",
+    "strict_signature_verified": true,
+    "hardened_runtime": true,
+    "isolated_startup_schema": 5,
+    "schema_0_upgrade": true,
+    "settings_verified": 14,
+    "backup_verified": true,
+    "report": "qt-reply-lifecycle-bundle-2026-10-09.json"
+  },
+  "source_sha256": {
+    "ai_desktop/llm/qt_stream.py": "dcc7691c4bfbd34ce00831b00dd7c4af755cc3840deb937d824ec8ecfe9e6228",
+    "ai_desktop/services/qt_search.py": "765d840e2fc6d02139908d42ed8511cda22e50555326b7db0189ab2b11f835f2",
+    "ai_desktop/services/qt_reply.py": "6519e2a37371222b2b9b1f1e804d9534e4558a3e7e7d07be15ab35b66b6fe268",
+    "tests/test_qt_reply_lifecycle.py": "b5d634687daeb9ae04481b4b5259b609ae1fc1423363d5878add9edd508f5c06",
+    "tests/test_search_acceptance.py": "ca5ee967a752bcdc96e98c61c1e7dcf1312d74737cbc46ec9218368f3288323e",
+    "scripts/reproduce_qt_reply_lifecycle.py": "f3191be895a9ddac66dd09ba349e8b31dea7156098dbd651692abc9ae7ece266",
+    "scripts/reproduce_qt_reply_address_reuse.py": "a5294d22be9b57bbf841b947f7c744d4c221430d9ae7c50a3d21c440b545f32d"
+  },
+  "previous_cleanup_unchanged_sha256": {
+    "ai_desktop/llm/run_worker.py": "0ff9d801e1a8c6f590f57819507a07a6d48ce52a369f84e76ecd59a9060f7762",
+    "ai_desktop/services/search_executor.py": "d6173cd045ff127c9cdd3d7eabd976032c88857193a2fa2bce632d043014f3f3",
+    "tests/test_qt_stream.py": "c3cbc58f843e95c5f44af817a16f7b0f623d6a97472fd6650bd936417d26e210"
+  },
+  "boundaries": [
+    "Loopback only; no real model or paid search acceptance.",
+    "Native mechanism checks performed on this macOS/arm64/PyQt5 environment.",
+    "No project dependency updates, real user-data edits, running-user-app restart, Git commit or push."
+  ]
+}

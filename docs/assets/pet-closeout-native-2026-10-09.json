@@ -1,0 +1,92 @@
+{
+  "platform": "cocoa",
+  "physical_screens": 1,
+  "pointer_input": "synthetic QWidget events; system cursor unchanged",
+  "pets": {
+    "owl-v2": {
+      "profile": "",
+      "reload_correct": true,
+      "simulated_idle_seconds": 1800,
+      "idle_gestures_seen": [
+        "blink",
+        "double_blink",
+        "observe",
+        "rest_eyes",
+        "scan",
+        "screen_check",
+        "slow_blink"
+      ],
+      "quiet_samples": 16418,
+      "real_timer_release_settled": true,
+      "task_preempts_parts": true,
+      "waiting_timer_stopped": true,
+      "reduce_hide_compact_clear": true,
+      "clipped_pixels": 0,
+      "source_files_unchanged": true
+    },
+    "astra": {
+      "profile": "petdex-astra-v1",
+      "reload_correct": true,
+      "simulated_idle_seconds": 1800,
+      "idle_gestures_seen": [
+        "idle_blink",
+        "idle_composure",
+        "idle_curious",
+        "idle_double_blink",
+        "idle_glance",
+        "idle_slow_blink",
+        "wing_acknowledge"
+      ],
+      "quiet_samples": 16420,
+      "real_timer_release_settled": true,
+      "task_preempts_parts": true,
+      "waiting_timer_stopped": true,
+      "reduce_hide_compact_clear": true,
+      "clipped_pixels": 0,
+      "source_files_unchanged": true
+    },
+    "boba": {
+      "profile": "petdex-boba-v1",
+      "reload_correct": true,
+      "simulated_idle_seconds": 1800,
+      "idle_gestures_seen": [
+        "idle_blink",
+        "idle_double_blink",
+        "idle_slow_blink",
+        "idle_small_sip",
+        "idle_tea_break",
+        "idle_tea_thought",
+        "tea_salute"
+      ],
+      "quiet_samples": 16342,
+      "real_timer_release_settled": true,
+      "task_preempts_parts": true,
+      "waiting_timer_stopped": true,
+      "reduce_hide_compact_clear": true,
+      "clipped_pixels": 0,
+      "source_files_unchanged": true
+    },
+    "shinchan": {
+      "profile": "petdex-shinchan-v1",
+      "reload_correct": true,
+      "simulated_idle_seconds": 1800,
+      "idle_gestures_seen": [
+        "idle_blink",
+        "idle_double_blink",
+        "idle_look_forward",
+        "idle_slow_blink",
+        "idle_small_reply",
+        "idle_thought",
+        "little_reply"
+      ],
+      "quiet_samples": 16519,
+      "real_timer_release_settled": true,
+      "task_preempts_parts": true,
+      "waiting_timer_stopped": true,
+      "reduce_hide_compact_clear": true,
+      "clipped_pixels": 0,
+      "source_files_unchanged": true
+    }
+  },
+  "system_reduce_motion": false
+}

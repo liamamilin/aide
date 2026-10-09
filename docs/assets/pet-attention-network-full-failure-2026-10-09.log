@@ -1,0 +1,132 @@
+........................................................................ [  4%]
+........................................................................ [  8%]
+........................................................................ [ 13%]
+........................................................................ [ 17%]
+........................................................................ [ 22%]
+........................................................................ [ 26%]
+........................................................................ [ 30%]
+........................................................................ [ 35%]
+........................................................................ [ 39%]
+........................................................................ [ 44%]
+........................................................................ [ 48%]
+........................................................................ [ 52%]
+........................................................................ [ 57%]
+.........................................................F.............. [ 61%]
+........................................................................ [ 66%]
+........................................................................ [ 70%]
+........................................................................ [ 74%]
+........................................................................ [ 79%]
+........................................................................ [ 83%]
+........................................................................ [ 88%]
+........................................................................ [ 92%]
+........................................................................ [ 96%]
+...................................................                      [100%]
+=================================== FAILURES ===================================
+______________ test_worker_cleanup_does_not_block_widget_updates _______________
+
+    def test_worker_cleanup_does_not_block_widget_updates():
+        # A native lock inversion cannot be interrupted by qtbot's Python timeout.
+        # Keep this race regression in a child with a hard process-level bound.
+        program = textwrap.dedent('''
+            import faulthandler
+            import os
+            import tempfile
+            import time
+            from collections import deque
+            faulthandler.dump_traceback_later(20)
+            with tempfile.TemporaryDirectory(prefix='aide-worker-lifecycle-') as data:
+                os.environ['AIDE_DATA_DIR'] = data
+                from PyQt5.QtCore import QCoreApplication, QEvent, QTimer
+                from PyQt5.QtTest import QTest
+                from PyQt5.QtWidgets import QApplication, QLabel
+                from ai_desktop import config
+                from ai_desktop.llm.events import ResultStatus
+                from ai_desktop.llm.run_worker import RunWorker
+                from ai_desktop.services.search_credentials import SearchCredentials
+                from ai_desktop.services.web_search import ENDPOINTS, SearchSettings
+                from ai_desktop.utils import storage
+                from tests.fake_ollama import FakeOllama
+                app = QApplication([])
+                storage.init_db()
+                model, search = FakeOllama(), FakeOllama()
+                config.OLLAMA_BASE_URL = model.url
+                ENDPOINTS['exa'] = search.url + '/search'
+                SearchCredentials.get = lambda *args, **kwargs: 'test-only-key'
+                labels = deque(maxlen=128)
+                pulses = [0]
+                def update_widgets():
+                    pulses[0] += 1
+                    for _ in range(8):
+                        label = QLabel()
+                        label.setText(str(pulses[0]))
+                        labels.append(label)
+                timer = QTimer()
+                timer.timeout.connect(update_widgets)
+                timer.start(1)
+                try:
+                    for index in range(24):
+                        mode = index % 3
+                        model.enqueue({'message': {'role': 'assistant', 'tool_calls': [
+                            {'function': {'name': 'web_search', 'arguments': {'query': 'Python'}}}
+                        ]}, 'done': True})
+                        if mode == 2:
+                            scenario = search.enqueue({'results': []}, before_headers=True)
+                        else:
+                            search.enqueue({'results': []}, status=401 if mode else 200)
+                            model.enqueue({'message': {'content': 'finished'}, 'done': True})
+                        worker = RunWorker([], '', agent_id='general_assistant',
+                                           think=False, options={'num_ctx': 8192, 'num_predict': 1024},
+                                           tools_admitted=True, search_settings=SearchSettings('exa', 1))
+                        results = []
+                        worker.done.connect(results.append)
+                        worker.start()
+                        deadline = time.monotonic() + 3
+                        while not results and time.monotonic() < deadline:
+                            QTest.qWait(5)
+                            if mode == 2 and scenario.received.is_set():
+                                worker.cancel()
+                        assert len(results) == 1, (index, results)
+                        assert worker.wait(2000), index
+                        expected = ResultStatus.CANCELLED if mode == 2 else ResultStatus.SUCCEEDED
+                        assert results[0].status == expected, (index, results[0])
+                        worker.deleteLater()
+                        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+                    assert pulses[0] > 20, pulses[0]
+                    assert len(search.requests) == 24
+                    assert len(model.requests) == 40
+                finally:
+                    timer.stop()
+                    timer.timeout.disconnect(update_widgets)
+                    model.close()
+                    search.close()
+                    storage.close_db()
+                faulthandler.cancel_dump_traceback_later()
+        ''')
+        result = subprocess.run(
+            [sys.executable, '-X', 'faulthandler', '-c', program],
+            cwd=Path(__file__).resolve().parents[1],
+            env=dict(os.environ, QT_QPA_PLATFORM='offscreen'),
+            capture_output=True, text=True, timeout=25,
+        )
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 62, in <module>
+E         AssertionError: (0, ChatResult(request_id='554a6b6b19e34d7fb348ee8103753110', status=<ResultStatus.FAILED: 'failed'>, text='', error='连接意外结束，请重试。', error_code=<ErrorCode.CONNECTION: 'connection'>, turn=None, run_id='56e7ceb881564a3d98b982636f54fad5', step_id='2aa557c6c2c54059925e60d006f2675e', conversation_id=0))
+E
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/Users/milin/.pyenv/versions/3.10.13/bin/python3', '-X', 'faulthandler', '-c', "\nimport fault...one, run_id=\'56e7ceb881564a3d98b982636f54fad5\', step_id=\'2aa557c6c2c54059925e60d006f2675e\', conversation_id=0))\n').returncode
+
+tests/test_qt_worker_lifecycle.py:93: AssertionError
+=============================== warnings summary ===============================
+tests/test_frameless_mixin.py:7
+  /Users/milin/2026/AI桌面助手/tests/test_frameless_mixin.py:7: PytestCollectionWarning: cannot collect test class 'TestWidget' because it has a __init__ constructor (from: tests/test_frameless_mixin.py)
+    class TestWidget(FramelessDragMixin, QWidget):
+
+tests/test_frameless_mixin.py:13
+  /Users/milin/2026/AI桌面助手/tests/test_frameless_mixin.py:13: PytestCollectionWarning: cannot collect test class 'TestDialog' because it has a __init__ constructor (from: tests/test_frameless_mixin.py)
+    class TestDialog(FramelessDragMixin, QDialog):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_qt_worker_lifecycle.py::test_worker_cleanup_does_not_block_widget_updates
+1 failed, 1634 passed, 2 warnings in 77.08s (0:01:17)

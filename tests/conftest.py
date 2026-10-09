@@ -5,6 +5,7 @@ Provides:
 - tmp_db: function-scoped temp SQLite database with monkey-patching
 - _isolated_session_data: session-scoped temporary data root for every test
 """
+import gc
 import os
 import shutil
 import tempfile
@@ -62,6 +63,9 @@ def qapp():
     its own qapp fixture, but we define ours to ensure consistency
     and to set QT_QPA_PLATFORM=offscreen for headless CI.
     """
+    # Clear collection-time cycles before the first native paint. On macOS,
+    # collecting them during Qt's first SVG render can crash in QSvgRenderer.
+    gc.collect()
     app = QApplication.instance()
     if app is None:
         # offscreen platform for headless CI

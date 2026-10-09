@@ -1,0 +1,35 @@
+{
+  "version": "1.5.0",
+  "app": "/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app",
+  "modules": {
+    "ai_desktop.main": "matches current source",
+    "ai_desktop.ui.float_button": "matches current source",
+    "ai_desktop.ui.pet_toolbar": "matches current source",
+    "ai_desktop.ui.result_bubble": "matches current source",
+    "ai_desktop.ui.pet_profiles": "matches current source",
+    "ai_desktop.ui.pet_manifest": "matches current source",
+    "ai_desktop.ui.pet_animator": "matches current source",
+    "ai_desktop.ui.spritesheet": "matches current source"
+  },
+  "assets": {
+    "owl-v2/pet.json": "16b7801dc884636adea62ee477826a229e85499d5e0c380fc0eec01e582a588e",
+    "owl-v2/spritesheet.png": "9649b31bae57be36971fd07e320ca92c32ad3d7e33779daa1c81af3584d42839",
+    "petdex-profiles/astra.json": "59560fa0c113d4fc623e23f735ac9789b5b05f05875fe10e5297232c74e3c68e",
+    "petdex-profiles/boba.json": "4dbccef4a72b1f604cffdb1657909854286a2862b0ce2267c5165a85bb3afae1",
+    "petdex-profiles/shinchan.json": "fbbc45cc68e7bcb114028e54e350bedd94739a0a28f6b7ec5300b00a72502725",
+    "petdex-profiles/motion/astra-limb-v1.png": "4f503a30d5df371df52b188331f7bd4902a2149095d3abfa0a5251076b14a8ab",
+    "petdex-profiles/motion/boba-limb-v1.png": "3360a6c9ac362ca02f35f678a9725259e72c2560cb9d0b5819a0e675ae2fe3cb"
+  },
+  "patch_loading": {
+    "astra": {
+      "patches_loaded": true,
+      "total_frames": 76,
+      "bundled_path": "/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Resources/ai_desktop/pets/petdex-profiles/motion/astra-limb-v1.png"
+    },
+    "boba": {
+      "patches_loaded": true,
+      "total_frames": 92,
+      "bundled_path": "/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Resources/ai_desktop/pets/petdex-profiles/motion/boba-limb-v1.png"
+    }
+  }
+}

@@ -18,6 +18,7 @@ class ResultBubble(QWidget):
 
     activated = pyqtSignal()
     dismissed = pyqtSignal()
+    acknowledged = pyqtSignal()
 
     _WIDTH = 296
     _HEIGHT = 96
@@ -78,7 +79,7 @@ class ResultBubble(QWidget):
         self._close = self._content.closeButton
         self._close.setAccessibleName("关闭结果摘要")
         self._close.clicked.disconnect()
-        self._close.clicked.connect(self.dismiss)
+        self._close.clicked.connect(self._acknowledge)
         self._layout.addWidget(self._content)
         # Reserve enough width for summaries; height follows the real InfoBar.
         self.setFixedWidth(self._WIDTH)
@@ -179,6 +180,10 @@ class ResultBubble(QWidget):
         self.hide()
         if was_visible:
             self.dismissed.emit()
+
+    def _acknowledge(self) -> None:
+        self.dismiss()
+        self.acknowledged.emit()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         self._pressed = event.button() == Qt.LeftButton

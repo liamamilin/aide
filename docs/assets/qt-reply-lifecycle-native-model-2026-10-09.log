@@ -1,0 +1,12 @@
+Round 1: exit 0
+model: native address reused at attempt 1
+model: queued monitor invalidated the live wrapper
+model: succeeded, HTTP requests=1
+Round 2: exit 0
+model: native address reused at attempt 1
+model: queued monitor invalidated the live wrapper
+model: succeeded, HTTP requests=1
+Round 3: exit 0
+model: native address reused at attempt 2
+model: queued monitor invalidated the live wrapper
+model: succeeded, HTTP requests=1

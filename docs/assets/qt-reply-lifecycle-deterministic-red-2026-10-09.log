@@ -1,0 +1,471 @@
+FFFFFFFFFFFFFF                                                           [100%]
+=================================== FAILURES ===================================
+_________________ test_model_recovers_live_native_reply[post] __________________
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x11300f3a0>
+ollama_server = <tests.fake_ollama.FakeOllama object at 0x11300f130>
+stage = 'post'
+
+    @pytest.mark.parametrize('stage', ['post', 'headers', 'ready_read', 'chunk'])
+    def test_model_recovers_live_native_reply(qtbot, ollama_server, stage):
+        ollama_server.enqueue({'message': {'content': 'partial'}},
+                              {'message': {'content': ' answer'}, 'done': True}, delay=.06)
+        transport = QtChatTransport(ChatClient().create_request([]))
+        results, chunks = [], []
+        transport.done.connect(results.append)
+        transport.stream_event.connect(chunks.append)
+        if stage == 'chunk':
+            def invalidate(event):
+                if event.kind == EventKind.CONTENT and event.text == 'partial':
+                    sip.setdeleted(transport._reply)
+            transport.stream_event.connect(invalidate)
+        try:
+            if stage == 'post':
+                with patch.object(transport._manager, 'post', side_effect=invalidated_post(transport._manager)):
+>                   transport.start(b'{}')
+
+tests/test_qt_reply_lifecycle.py:44:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <ai_desktop.llm.qt_stream.QtChatTransport object at 0x106622dd0>
+payload = b'{}'
+
+    def start(self, payload: bytes) -> None:
+        if self._started or self.result is not None:
+            return
+        self._started = True
+        request = QNetworkRequest(QUrl(f"{self.request.base_url}/api/chat"))
+        request.setHeader(QNetworkRequest.ContentTypeHeader, "application/json")
+        request.setRawHeader(b"Accept", b"application/x-ndjson")
+        # Preserve POST semantics and report redirects as HTTP errors.
+        request.setAttribute(QNetworkRequest.RedirectPolicyAttribute, QNetworkRequest.ManualRedirectPolicy)
+        self._reply = self._manager.post(request, payload)
+>       self._reply.destroyed.connect(self._reply_destroyed)
+E       RuntimeError: wrapped C/C++ object of type QNetworkReply has been deleted
+
+ai_desktop/llm/qt_stream.py:111: RuntimeError
+________________ test_model_recovers_live_native_reply[headers] ________________
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x11304f5b0>
+ollama_server = <tests.fake_ollama.FakeOllama object at 0x11304f190>
+stage = 'headers'
+
+    @pytest.mark.parametrize('stage', ['post', 'headers', 'ready_read', 'chunk'])
+    def test_model_recovers_live_native_reply(qtbot, ollama_server, stage):
+        ollama_server.enqueue({'message': {'content': 'partial'}},
+                              {'message': {'content': ' answer'}, 'done': True}, delay=.06)
+        transport = QtChatTransport(ChatClient().create_request([]))
+        results, chunks = [], []
+        transport.done.connect(results.append)
+        transport.stream_event.connect(chunks.append)
+        if stage == 'chunk':
+            def invalidate(event):
+                if event.kind == EventKind.CONTENT and event.text == 'partial':
+                    sip.setdeleted(transport._reply)
+            transport.stream_event.connect(invalidate)
+        try:
+            if stage == 'post':
+                with patch.object(transport._manager, 'post', side_effect=invalidated_post(transport._manager)):
+                    transport.start(b'{}')
+            else:
+                transport.start(b'{}')
+                if stage != 'chunk':
+                    qtbot.waitUntil(lambda: any(event.kind == EventKind.CONTENT for event in chunks))
+                    sip.setdeleted(transport._reply)
+                    getattr(transport, '_' + ('headers_received' if stage == 'headers' else stage))()
+            qtbot.waitUntil(lambda: bool(results))
+            transport.cancel()
+>           assert len(results) == 1 and results[0].status == ResultStatus.SUCCEEDED
+E           AssertionError: assert (1 == 1 and <ResultStatus...LED: 'failed'> == <ResultStatus...: 'succeeded'>
+E            +  where 1 = len([ChatResult(request_id='c81d1bb6e6db482eb37fe30fff7bc5f1', status=<ResultStatus.FAILED: 'failed'>, text='partial', err..., turn=None, run_id='7b80413964294e9e93a747f6e262c4a0', step_id='d55f91144ad04d46a4dc904a70ba1dfc', conversation_id=0)])
+E
+E             - succeeded
+E             + failed)
+
+tests/test_qt_reply_lifecycle.py:53: AssertionError
+______________ test_model_recovers_live_native_reply[ready_read] _______________
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x11304feb0>
+ollama_server = <tests.fake_ollama.FakeOllama object at 0x11304fe50>
+stage = 'ready_read'
+
+    @pytest.mark.parametrize('stage', ['post', 'headers', 'ready_read', 'chunk'])
+    def test_model_recovers_live_native_reply(qtbot, ollama_server, stage):
+        ollama_server.enqueue({'message': {'content': 'partial'}},
+                              {'message': {'content': ' answer'}, 'done': True}, delay=.06)
+        transport = QtChatTransport(ChatClient().create_request([]))
+        results, chunks = [], []
+        transport.done.connect(results.append)
+        transport.stream_event.connect(chunks.append)
+        if stage == 'chunk':
+            def invalidate(event):
+                if event.kind == EventKind.CONTENT and event.text == 'partial':
+                    sip.setdeleted(transport._reply)
+            transport.stream_event.connect(invalidate)
+        try:
+            if stage == 'post':
+                with patch.object(transport._manager, 'post', side_effect=invalidated_post(transport._manager)):
+                    transport.start(b'{}')
+            else:
+                transport.start(b'{}')
+                if stage != 'chunk':
+                    qtbot.waitUntil(lambda: any(event.kind == EventKind.CONTENT for event in chunks))
+                    sip.setdeleted(transport._reply)
+                    getattr(transport, '_' + ('headers_received' if stage == 'headers' else stage))()
+            qtbot.waitUntil(lambda: bool(results))
+            transport.cancel()
+>           assert len(results) == 1 and results[0].status == ResultStatus.SUCCEEDED
+E           AssertionError: assert (1 == 1 and <ResultStatus...LED: 'failed'> == <ResultStatus...: 'succeeded'>
+E            +  where 1 = len([ChatResult(request_id='bf61b1febd68406c90a0987aab8576db', status=<ResultStatus.FAILED: 'failed'>, text='partial', err..., turn=None, run_id='a0ad740f815d49b88e40e1e47ce8ed3e', step_id='2e2a1a29190f4064ae627ba861e19237', conversation_id=0)])
+E
+E             - succeeded
+E             + failed)
+
+tests/test_qt_reply_lifecycle.py:53: AssertionError
+_________________ test_model_recovers_live_native_reply[chunk] _________________
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x106fab850>
+ollama_server = <tests.fake_ollama.FakeOllama object at 0x106fab760>
+stage = 'chunk'
+
+    @pytest.mark.parametrize('stage', ['post', 'headers', 'ready_read', 'chunk'])
+    def test_model_recovers_live_native_reply(qtbot, ollama_server, stage):
+        ollama_server.enqueue({'message': {'content': 'partial'}},
+                              {'message': {'content': ' answer'}, 'done': True}, delay=.06)
+        transport = QtChatTransport(ChatClient().create_request([]))
+        results, chunks = [], []
+        transport.done.connect(results.append)
+        transport.stream_event.connect(chunks.append)
+        if stage == 'chunk':
+            def invalidate(event):
+                if event.kind == EventKind.CONTENT and event.text == 'partial':
+                    sip.setdeleted(transport._reply)
+            transport.stream_event.connect(invalidate)
+        try:
+            if stage == 'post':
+                with patch.object(transport._manager, 'post', side_effect=invalidated_post(transport._manager)):
+                    transport.start(b'{}')
+            else:
+                transport.start(b'{}')
+                if stage != 'chunk':
+                    qtbot.waitUntil(lambda: any(event.kind == EventKind.CONTENT for event in chunks))
+                    sip.setdeleted(transport._reply)
+                    getattr(transport, '_' + ('headers_received' if stage == 'headers' else stage))()
+            qtbot.waitUntil(lambda: bool(results))
+            transport.cancel()
+>           assert len(results) == 1 and results[0].status == ResultStatus.SUCCEEDED
+E           AssertionError: assert (1 == 1 and <ResultStatus...LED: 'failed'> == <ResultStatus...: 'succeeded'>
+E            +  where 1 = len([ChatResult(request_id='7a727f9b2cd64678b0725af610a28138', status=<ResultStatus.FAILED: 'failed'>, text='partial', err..., turn=None, run_id='72d8ce8ab9b544f980955ec43e417b68', step_id='2126687ee508452cb64dc9ddfa5f2b6c', conversation_id=0)])
+E
+E             - succeeded
+E             + failed)
+
+tests/test_qt_reply_lifecycle.py:53: AssertionError
+_ test_model_releases_native_reply_after_wrapper_invalidation[cancel-cancelled] _
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x10661a860>
+ollama_server = <tests.fake_ollama.FakeOllama object at 0x10661abc0>
+action = 'cancel', status = <ResultStatus.CANCELLED: 'cancelled'>
+
+    @pytest.mark.parametrize('action,status', [
+        ('cancel', ResultStatus.CANCELLED), ('limit', ResultStatus.LIMITED),
+        ('_idle_timeout', ResultStatus.FAILED), ('_connection_timeout', ResultStatus.FAILED),
+    ])
+    def test_model_releases_native_reply_after_wrapper_invalidation(qtbot, ollama_server, action, status):
+        scenario = ollama_server.enqueue({'message': {'content': 'partial'}}, hold_open=True)
+        transport = QtChatTransport(ChatClient().create_request([]))
+        results, chunks = [], []
+        transport.done.connect(results.append)
+        transport.stream_event.connect(chunks.append)
+        try:
+            transport.start(b'{}')
+            qtbot.waitUntil(lambda: any(event.kind == EventKind.CONTENT for event in chunks))
+            sip.setdeleted(transport._reply)
+            getattr(transport, action)()
+            transport._finished()
+            transport.cancel()
+            assert len(results) == 1 and results[0].status == status
+            assert results[0].text == 'partial'
+            if status == ResultStatus.FAILED:
+                assert results[0].error_code == ErrorCode.TIMEOUT
+            assert transport._reply is None
+            assert not transport._connect_timer.isActive() and not transport._idle_timer.isActive()
+>           qtbot.waitUntil(scenario.disconnected.is_set, timeout=1000)
+E           pytestqt.exceptions.TimeoutError: waitUntil timed out in 1000 milliseconds
+
+tests/test_qt_reply_lifecycle.py:86: TimeoutError
+__ test_model_releases_native_reply_after_wrapper_invalidation[limit-limited] __
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x1133eac80>
+ollama_server = <tests.fake_ollama.FakeOllama object at 0x1133ead70>
+action = 'limit', status = <ResultStatus.LIMITED: 'limited'>
+
+    @pytest.mark.parametrize('action,status', [
+        ('cancel', ResultStatus.CANCELLED), ('limit', ResultStatus.LIMITED),
+        ('_idle_timeout', ResultStatus.FAILED), ('_connection_timeout', ResultStatus.FAILED),
+    ])
+    def test_model_releases_native_reply_after_wrapper_invalidation(qtbot, ollama_server, action, status):
+        scenario = ollama_server.enqueue({'message': {'content': 'partial'}}, hold_open=True)
+        transport = QtChatTransport(ChatClient().create_request([]))
+        results, chunks = [], []
+        transport.done.connect(results.append)
+        transport.stream_event.connect(chunks.append)
+        try:
+            transport.start(b'{}')
+            qtbot.waitUntil(lambda: any(event.kind == EventKind.CONTENT for event in chunks))
+            sip.setdeleted(transport._reply)
+            getattr(transport, action)()
+            transport._finished()
+            transport.cancel()
+            assert len(results) == 1 and results[0].status == status
+            assert results[0].text == 'partial'
+            if status == ResultStatus.FAILED:
+                assert results[0].error_code == ErrorCode.TIMEOUT
+            assert transport._reply is None
+            assert not transport._connect_timer.isActive() and not transport._idle_timer.isActive()
+>           qtbot.waitUntil(scenario.disconnected.is_set, timeout=1000)
+E           pytestqt.exceptions.TimeoutError: waitUntil timed out in 1000 milliseconds
+
+tests/test_qt_reply_lifecycle.py:86: TimeoutError
+_ test_model_releases_native_reply_after_wrapper_invalidation[_idle_timeout-failed] _
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x1133ce8f0>
+ollama_server = <tests.fake_ollama.FakeOllama object at 0x1133ce9b0>
+action = '_idle_timeout', status = <ResultStatus.FAILED: 'failed'>
+
+    @pytest.mark.parametrize('action,status', [
+        ('cancel', ResultStatus.CANCELLED), ('limit', ResultStatus.LIMITED),
+        ('_idle_timeout', ResultStatus.FAILED), ('_connection_timeout', ResultStatus.FAILED),
+    ])
+    def test_model_releases_native_reply_after_wrapper_invalidation(qtbot, ollama_server, action, status):
+        scenario = ollama_server.enqueue({'message': {'content': 'partial'}}, hold_open=True)
+        transport = QtChatTransport(ChatClient().create_request([]))
+        results, chunks = [], []
+        transport.done.connect(results.append)
+        transport.stream_event.connect(chunks.append)
+        try:
+            transport.start(b'{}')
+            qtbot.waitUntil(lambda: any(event.kind == EventKind.CONTENT for event in chunks))
+            sip.setdeleted(transport._reply)
+            getattr(transport, action)()
+            transport._finished()
+            transport.cancel()
+            assert len(results) == 1 and results[0].status == status
+            assert results[0].text == 'partial'
+            if status == ResultStatus.FAILED:
+                assert results[0].error_code == ErrorCode.TIMEOUT
+            assert transport._reply is None
+            assert not transport._connect_timer.isActive() and not transport._idle_timer.isActive()
+>           qtbot.waitUntil(scenario.disconnected.is_set, timeout=1000)
+E           pytestqt.exceptions.TimeoutError: waitUntil timed out in 1000 milliseconds
+
+tests/test_qt_reply_lifecycle.py:86: TimeoutError
+_ test_model_releases_native_reply_after_wrapper_invalidation[_connection_timeout-failed] _
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x106619de0>
+ollama_server = <tests.fake_ollama.FakeOllama object at 0x10661b610>
+action = '_connection_timeout', status = <ResultStatus.FAILED: 'failed'>
+
+    @pytest.mark.parametrize('action,status', [
+        ('cancel', ResultStatus.CANCELLED), ('limit', ResultStatus.LIMITED),
+        ('_idle_timeout', ResultStatus.FAILED), ('_connection_timeout', ResultStatus.FAILED),
+    ])
+    def test_model_releases_native_reply_after_wrapper_invalidation(qtbot, ollama_server, action, status):
+        scenario = ollama_server.enqueue({'message': {'content': 'partial'}}, hold_open=True)
+        transport = QtChatTransport(ChatClient().create_request([]))
+        results, chunks = [], []
+        transport.done.connect(results.append)
+        transport.stream_event.connect(chunks.append)
+        try:
+            transport.start(b'{}')
+            qtbot.waitUntil(lambda: any(event.kind == EventKind.CONTENT for event in chunks))
+            sip.setdeleted(transport._reply)
+            getattr(transport, action)()
+            transport._finished()
+            transport.cancel()
+            assert len(results) == 1 and results[0].status == status
+            assert results[0].text == 'partial'
+            if status == ResultStatus.FAILED:
+                assert results[0].error_code == ErrorCode.TIMEOUT
+            assert transport._reply is None
+            assert not transport._connect_timer.isActive() and not transport._idle_timer.isActive()
+>           qtbot.waitUntil(scenario.disconnected.is_set, timeout=1000)
+E           pytestqt.exceptions.TimeoutError: waitUntil timed out in 1000 milliseconds
+
+tests/test_qt_reply_lifecycle.py:86: TimeoutError
+_________________ test_search_recovers_live_native_reply[post] _________________
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x1133db2e0>
+search_server = <tests.fake_ollama.FakeOllama object at 0x1133db310>
+stage = 'post'
+
+    @pytest.mark.parametrize('stage', ['post', 'read'])
+    def test_search_recovers_live_native_reply(qtbot, search_server, stage):
+        search_server.enqueue(chunks=[b'{"results":[', b'{"title":"Python","url":"https://docs.python.org/"}]}'],
+                              delay=.06)
+        job = SearchJob(build_request(SearchSettings('exa', 1), 'test-only-key', 'Python'))
+        results = []
+        job.finished.connect(results.append)
+        try:
+            if stage == 'post':
+                with patch.object(job._manager, 'post', side_effect=invalidated_post(job._manager)):
+>                   job.start()
+
+tests/test_qt_reply_lifecycle.py:103:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <ai_desktop.services.qt_search.SearchJob object at 0x1130a2170>
+
+    def start(self):
+        if self._reply is not None or self.result is not None:
+            return
+        req = QNetworkRequest(QUrl(self.request.url))
+        req.setHeader(QNetworkRequest.ContentTypeHeader, "application/json")
+        req.setRawHeader(b"x-api-key", self.request.api_key.encode("utf-8"))
+        req.setAttribute(QNetworkRequest.RedirectPolicyAttribute, QNetworkRequest.ManualRedirectPolicy)
+        self._reply = self._manager.post(req, self.request.payload)
+>       self._reply.setReadBufferSize(65536)
+E       RuntimeError: wrapped C/C++ object of type QNetworkReply has been deleted
+
+ai_desktop/services/qt_search.py:41: RuntimeError
+_________________ test_search_recovers_live_native_reply[read] _________________
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x1133eb1f0>
+search_server = <tests.fake_ollama.FakeOllama object at 0x1133e8c70>
+stage = 'read'
+
+    @pytest.mark.parametrize('stage', ['post', 'read'])
+    def test_search_recovers_live_native_reply(qtbot, search_server, stage):
+        search_server.enqueue(chunks=[b'{"results":[', b'{"title":"Python","url":"https://docs.python.org/"}]}'],
+                              delay=.06)
+        job = SearchJob(build_request(SearchSettings('exa', 1), 'test-only-key', 'Python'))
+        results = []
+        job.finished.connect(results.append)
+        try:
+            if stage == 'post':
+                with patch.object(job._manager, 'post', side_effect=invalidated_post(job._manager)):
+                    job.start()
+            else:
+                job.start()
+                qtbot.waitUntil(lambda: bool(job._data))
+                sip.setdeleted(job._reply)
+                job._read()
+            qtbot.waitUntil(lambda: bool(results))
+            job.cancel()
+>           assert len(results) == 1 and results[0].ok
+E           AssertionError: assert (1 == 1 and False)
+E            +  where 1 = len([SearchResult(sources=(), error='搜索连接已关闭，请重试。', cancelled=False, error_type='network')])
+E            +  and   False = SearchResult(sources=(), error='搜索连接已关闭，请重试。', cancelled=False, error_type='network').ok
+
+tests/test_qt_reply_lifecycle.py:111: AssertionError
+----------------------------- Captured Qt messages -----------------------------
+QtWarningMsg: QNativeSocketEngine::write() was called on an uninitialized socket device
+_ test_search_releases_native_reply_after_wrapper_invalidation[cancel-cancelled] _
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x11300fdc0>
+search_server = <tests.fake_ollama.FakeOllama object at 0x11300f190>
+action = 'cancel', kind = 'cancelled'
+
+    @pytest.mark.parametrize('action,kind', [('cancel', 'cancelled'), ('limit', 'active_limit'), ('_timeout', 'timeout')])
+    def test_search_releases_native_reply_after_wrapper_invalidation(qtbot, search_server, action, kind):
+        scenario = search_server.enqueue(before_headers=True)
+        job = SearchJob(build_request(SearchSettings('exa', 1), 'test-only-key', 'Python'))
+        results = []
+        job.finished.connect(results.append)
+        try:
+            job.start()
+            qtbot.waitUntil(scenario.received.is_set)
+            sip.setdeleted(job._reply)
+            getattr(job, action)()
+            job._done()
+            job.cancel()
+            assert len(results) == 1 and results[0].error_type == kind
+            assert job._reply is None and not job._timer.isActive()
+>           qtbot.waitUntil(scenario.disconnected.is_set, timeout=1000)
+E           pytestqt.exceptions.TimeoutError: waitUntil timed out in 1000 milliseconds
+
+tests/test_qt_reply_lifecycle.py:135: TimeoutError
+_ test_search_releases_native_reply_after_wrapper_invalidation[limit-active_limit] _
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x1133e90f0>
+search_server = <tests.fake_ollama.FakeOllama object at 0x1133e8370>
+action = 'limit', kind = 'active_limit'
+
+    @pytest.mark.parametrize('action,kind', [('cancel', 'cancelled'), ('limit', 'active_limit'), ('_timeout', 'timeout')])
+    def test_search_releases_native_reply_after_wrapper_invalidation(qtbot, search_server, action, kind):
+        scenario = search_server.enqueue(before_headers=True)
+        job = SearchJob(build_request(SearchSettings('exa', 1), 'test-only-key', 'Python'))
+        results = []
+        job.finished.connect(results.append)
+        try:
+            job.start()
+            qtbot.waitUntil(scenario.received.is_set)
+            sip.setdeleted(job._reply)
+            getattr(job, action)()
+            job._done()
+            job.cancel()
+            assert len(results) == 1 and results[0].error_type == kind
+            assert job._reply is None and not job._timer.isActive()
+>           qtbot.waitUntil(scenario.disconnected.is_set, timeout=1000)
+E           pytestqt.exceptions.TimeoutError: waitUntil timed out in 1000 milliseconds
+
+tests/test_qt_reply_lifecycle.py:135: TimeoutError
+_ test_search_releases_native_reply_after_wrapper_invalidation[_timeout-timeout] _
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x1133ce200>
+search_server = <tests.fake_ollama.FakeOllama object at 0x1133cded0>
+action = '_timeout', kind = 'timeout'
+
+    @pytest.mark.parametrize('action,kind', [('cancel', 'cancelled'), ('limit', 'active_limit'), ('_timeout', 'timeout')])
+    def test_search_releases_native_reply_after_wrapper_invalidation(qtbot, search_server, action, kind):
+        scenario = search_server.enqueue(before_headers=True)
+        job = SearchJob(build_request(SearchSettings('exa', 1), 'test-only-key', 'Python'))
+        results = []
+        job.finished.connect(results.append)
+        try:
+            job.start()
+            qtbot.waitUntil(scenario.received.is_set)
+            sip.setdeleted(job._reply)
+            getattr(job, action)()
+            job._done()
+            job.cancel()
+            assert len(results) == 1 and results[0].error_type == kind
+            assert job._reply is None and not job._timer.isActive()
+>           qtbot.waitUntil(scenario.disconnected.is_set, timeout=1000)
+E           pytestqt.exceptions.TimeoutError: waitUntil timed out in 1000 milliseconds
+
+tests/test_qt_reply_lifecycle.py:135: TimeoutError
+_________________ test_search_native_destruction_finishes_once _________________
+
+qtbot = <pytestqt.qtbot.QtBot object at 0x11304cc10>
+search_server = <tests.fake_ollama.FakeOllama object at 0x11304cbb0>
+
+    def test_search_native_destruction_finishes_once(qtbot, search_server):
+        scenario = search_server.enqueue(before_headers=True)
+        job = SearchJob(build_request(SearchSettings('exa', 1), 'test-only-key', 'Python'))
+        results = []
+        job.finished.connect(results.append)
+        try:
+            job.start()
+            qtbot.waitUntil(scenario.received.is_set)
+            sip.delete(job._reply)
+>           qtbot.waitUntil(lambda: bool(results), timeout=500)
+E           pytestqt.exceptions.TimeoutError: waitUntil timed out in 500 milliseconds
+
+tests/test_qt_reply_lifecycle.py:151: TimeoutError
+=========================== short test summary info ============================
+FAILED tests/test_qt_reply_lifecycle.py::test_model_recovers_live_native_reply[post]
+FAILED tests/test_qt_reply_lifecycle.py::test_model_recovers_live_native_reply[headers]
+FAILED tests/test_qt_reply_lifecycle.py::test_model_recovers_live_native_reply[ready_read]
+FAILED tests/test_qt_reply_lifecycle.py::test_model_recovers_live_native_reply[chunk]
+FAILED tests/test_qt_reply_lifecycle.py::test_model_releases_native_reply_after_wrapper_invalidation[cancel-cancelled]
+FAILED tests/test_qt_reply_lifecycle.py::test_model_releases_native_reply_after_wrapper_invalidation[limit-limited]
+FAILED tests/test_qt_reply_lifecycle.py::test_model_releases_native_reply_after_wrapper_invalidation[_idle_timeout-failed]
+FAILED tests/test_qt_reply_lifecycle.py::test_model_releases_native_reply_after_wrapper_invalidation[_connection_timeout-failed]
+FAILED tests/test_qt_reply_lifecycle.py::test_search_recovers_live_native_reply[post]
+FAILED tests/test_qt_reply_lifecycle.py::test_search_recovers_live_native_reply[read]
+FAILED tests/test_qt_reply_lifecycle.py::test_search_releases_native_reply_after_wrapper_invalidation[cancel-cancelled]
+FAILED tests/test_qt_reply_lifecycle.py::test_search_releases_native_reply_after_wrapper_invalidation[limit-active_limit]
+FAILED tests/test_qt_reply_lifecycle.py::test_search_releases_native_reply_after_wrapper_invalidation[_timeout-timeout]
+FAILED tests/test_qt_reply_lifecycle.py::test_search_native_destruction_finishes_once
+14 failed in 8.64s

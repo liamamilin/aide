@@ -230,7 +230,7 @@ class TestFloatButtonState:
             with qtbot.waitSignal(button.screen_follow_changed, timeout=1000) as spy:
                 action.toggle()
             assert spy.args == [True]
-            follow.assert_called_once_with()
+            follow.assert_called_once_with(immediate=True)
             assert "拖动可固定位置" in button.toolTip()
             assert button._track_timer.isActive()
 
@@ -281,7 +281,8 @@ class TestFloatButtonState:
                 )
 
         button.set_responding(True)
-        assert button.mask().contains(QPoint(0, 0))
+        assert not button.mask().contains(QPoint(0, 0))
+        assert button.mask().contains(button._badge_rect().center().toPoint())
         button.set_responding(False)
         assert not button.mask().contains(QPoint(0, 0))
         button.set_pet_enabled(False)
@@ -424,12 +425,14 @@ class TestFloatButtonState:
         )
         assert button._track_timer.isActive()
 
-    def test_hover_and_task_pause_idle_blink(self, button):
+    def test_hover_and_task_pause_idle_blink(self, qtbot, button):
         button._sync_animation_timer()
         assert button._idle_wake_timer.isActive()
         from PyQt5.QtCore import QEvent
 
         button.enterEvent(QEvent(QEvent.Enter))
+        assert button._idle_wake_timer.isActive()  # A passing pointer leaves idle alone.
+        qtbot.waitUntil(lambda: button._animator.layer == "reaction", timeout=500)
         assert not button._idle_wake_timer.isActive()
         assert button._animation_timer.isActive()
         button._hovered = False
@@ -472,9 +475,10 @@ def test_real_clock_drives_idle_wake_and_blink(button):
     assert not button._idle_wake_timer.isActive()
 
 
-def test_hover_finishes_and_task_interrupts_without_resetting_progress(button):
+def test_hover_finishes_and_task_interrupts_without_resetting_progress(qtbot, button):
     from PyQt5.QtCore import QEvent
     button.enterEvent(QEvent(QEvent.Enter))
+    qtbot.waitUntil(lambda: button._animator.layer == "reaction", timeout=500)
     assert button._animator.current_state == "hover"
     assert button._animator.layer == "reaction"
     button._animator.tick(2)
@@ -537,7 +541,7 @@ def test_all_frames_fit_one_stable_hit_region(button):
 def test_idle_eye_poses_do_not_redraw_or_move_body(button):
     # Every idle pose has identical pixels outside the eye region, including
     # feather edges, laptop and feet. This catches body jitter at asset level.
-    images = [button._spritesheet.frame(index).toImage() for index in range(4)]
+    images = [button._spritesheet.frame(index).toImage() for index in range(button._spritesheet.frame_count)]
     bounds = []
     for image in images[1:]:
         points = [(x, y) for y in range(image.height()) for x in range(image.width())
@@ -552,12 +556,16 @@ def test_idle_eye_poses_do_not_redraw_or_move_body(button):
 def test_rapid_pointer_reentry_does_not_restart_greeting(button):
     from PyQt5.QtCore import QEvent
     with patch("ai_desktop.ui.float_button.time.monotonic", return_value=100):
+        button._last_animation_time = 100
         button.enterEvent(QEvent(QEvent.Enter))
+        button._react_to_hover()
     button._animator.tick(.1)
     before = button._animator.snapshot()
-    button.leaveEvent(QEvent(QEvent.Leave))
     with patch("ai_desktop.ui.float_button.time.monotonic", return_value=100.1):
+        button._last_animation_time = 100.1
+        button.leaveEvent(QEvent(QEvent.Leave))
         button.enterEvent(QEvent(QEvent.Enter))
+        button._react_to_hover()
     assert button._animator.snapshot() == before
     assert button._last_hover_reaction_time == 100
     button._animator.tick(2)

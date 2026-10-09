@@ -24,7 +24,9 @@
         "idle_double_blink",
         "idle_slow_blink",
         "idle_small_sip",
-        "idle_tea_break"
+        "idle_tea_break",
+        "idle_tea_thought",
+        "tea_salute"
       ]
     },
     "hover": {
@@ -34,7 +36,8 @@
         "hover_friendly_blink",
         "hover_tea_reply",
         "hover_quiet_attention",
-        "hover_double_reply"
+        "hover_double_reply",
+        "tea_salute"
       ]
     },
     "working": {
@@ -51,6 +54,18 @@
     },
     "error": {
       "base": "error"
+    },
+    "searching": {
+      "base": "focus"
+    },
+    "executing": {
+      "base": "focus"
+    },
+    "waiting": {
+      "base": "listen"
+    },
+    "cancelled": {
+      "base": "rest"
     }
   },
   "animations": {
@@ -96,7 +111,9 @@
         240
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "idle_double_blink": {
       "frames": [
@@ -114,7 +131,9 @@
         260
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "idle_slow_blink": {
       "frames": [
@@ -128,7 +147,9 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "idle_small_sip": {
       "frames": [
@@ -144,7 +165,9 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "tea",
+      "tempo_variation": 0.08
     },
     "idle_tea_break": {
       "frames": [
@@ -166,29 +189,39 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "tea",
+      "tempo_variation": 0.08
     },
     "hover_paw_greeting": {
       "frames": [
         0,
-        24,
-        25,
-        26,
-        25,
-        24,
+        88,
+        89,
+        90,
+        91,
+        90,
+        89,
+        88,
         0
       ],
       "durations_ms": [
-        140,
-        120,
-        160,
-        280,
-        140,
-        160,
-        260
+        70,
+        95,
+        55,
+        75,
+        220,
+        80,
+        60,
+        100,
+        180
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "signature",
+      "weight": 0.3,
+      "cooldown_ms": 45000,
+      "tempo_variation": 0.08
     },
     "hover_friendly_blink": {
       "frames": [
@@ -202,7 +235,9 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "hover_tea_reply": {
       "frames": [
@@ -222,7 +257,9 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "tea",
+      "tempo_variation": 0.08
     },
     "hover_quiet_attention": {
       "frames": [
@@ -236,7 +273,9 @@
         320
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "observe",
+      "tempo_variation": 0.08
     },
     "hover_double_reply": {
       "frames": [
@@ -254,7 +293,9 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "success": {
       "frames": [
@@ -274,13 +315,17 @@
     "error": {
       "frames": [
         0,
-        40,
+        1,
+        3,
+        1,
         0
       ],
       "durations_ms": [
         180,
-        420,
-        280
+        120,
+        300,
+        120,
+        240
       ],
       "fps": 8,
       "loop": false,
@@ -295,6 +340,175 @@
       ],
       "fps": 8,
       "loop": true
+    },
+    "enter_focus": {
+      "frames": [
+        0,
+        64,
+        65
+      ],
+      "durations_ms": [
+        60,
+        90,
+        90
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "leave_focus": {
+      "frames": [
+        65,
+        67,
+        64,
+        0
+      ],
+      "durations_ms": [
+        60,
+        80,
+        80,
+        80
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "tea_salute": {
+      "frames": [
+        0,
+        88,
+        89,
+        90,
+        91,
+        90,
+        89,
+        88,
+        0
+      ],
+      "durations_ms": [
+        70,
+        95,
+        55,
+        75,
+        220,
+        80,
+        60,
+        100,
+        180
+      ],
+      "fps": 12,
+      "loop": false,
+      "family": "signature",
+      "weight": 0.3,
+      "cooldown_ms": 45000,
+      "tempo_variation": 0.08
+    },
+    "idle_tea_thought": {
+      "frames": [
+        0,
+        64,
+        66,
+        64,
+        0
+      ],
+      "durations_ms": [
+        100,
+        110,
+        180,
+        110,
+        200
+      ],
+      "fps": 12,
+      "loop": false,
+      "family": "focus",
+      "weight": 0.6,
+      "tempo_variation": 0.08
+    },
+    "press": {
+      "frames": [
+        3
+      ],
+      "durations_ms": [
+        100
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "grab": {
+      "frames": [
+        89
+      ],
+      "durations_ms": [
+        100
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "click": {
+      "frames": [
+        3,
+        1,
+        0
+      ],
+      "durations_ms": [
+        70,
+        100,
+        160
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "release": {
+      "frames": [
+        89,
+        88,
+        0
+      ],
+      "durations_ms": [
+        65,
+        95,
+        380
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "limb_to_focus": {
+      "frames": [
+        91,
+        90,
+        89,
+        88,
+        0,
+        64,
+        65
+      ],
+      "durations_ms": [
+        40,
+        40,
+        40,
+        50,
+        45,
+        65,
+        75
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "limb_to_rest": {
+      "frames": [
+        91,
+        90,
+        89,
+        88,
+        0
+      ],
+      "durations_ms": [
+        40,
+        40,
+        45,
+        55,
+        70
+      ],
+      "fps": 12,
+      "loop": false
     }
   },
   "atlas_sha256": "b2a723fc55ac6af867765dedc26b3841fbf178d7e1025d6011e8d96ac44f19c9",
@@ -303,5 +517,177 @@
     "scale": 0.88,
     "baseline": 0.9,
     "remove_magenta_matte": true
+  },
+  "transitions": {
+    "focus": [
+      "enter_focus",
+      "limb_to_focus"
+    ],
+    "error": [
+      "leave_focus",
+      "limb_to_rest"
+    ],
+    "rest": [
+      "leave_focus",
+      "limb_to_rest"
+    ],
+    "listen": [
+      "leave_focus",
+      "limb_to_rest"
+    ],
+    "speak": [
+      "leave_focus",
+      "limb_to_rest"
+    ],
+    "success": [
+      "leave_focus",
+      "limb_to_rest"
+    ]
+  },
+  "interactions": {
+    "press": "press",
+    "grab": "grab",
+    "click": "click",
+    "release": "release",
+    "signature": "tea_salute"
+  },
+  "frame_patches": {
+    "file": "motion/boba-limb-v1.png",
+    "columns": 4,
+    "frame_count": 4,
+    "base_frame": 0,
+    "mask": [
+      [
+        109,
+        114
+      ],
+      [
+        133,
+        114
+      ],
+      [
+        145,
+        101
+      ],
+      [
+        149,
+        65
+      ],
+      [
+        181,
+        65
+      ],
+      [
+        181,
+        145
+      ],
+      [
+        141,
+        145
+      ],
+      [
+        136,
+        153
+      ],
+      [
+        127,
+        156
+      ],
+      [
+        113,
+        156
+      ],
+      [
+        106,
+        150
+      ],
+      [
+        106,
+        120
+      ]
+    ],
+    "frames": [
+      {
+        "cell": 0
+      },
+      {
+        "cell": 1
+      },
+      {
+        "cell": 2
+      },
+      {
+        "cell": 3
+      }
+    ],
+    "sha256": "3360a6c9ac362ca02f35f678a9725259e72c2560cb9d0b5819a0e675ae2fe3cb"
+  },
+  "secondary_motion": {
+    "frames": [
+      0,
+      88,
+      89,
+      90,
+      91
+    ],
+    "duration_ms": 880,
+    "fps": 24,
+    "triggers": {
+      "signature": 1,
+      "release": 0.85
+    },
+    "parts": [
+      {
+        "name": "tail",
+        "source_mask": [
+          [
+            142,
+            145
+          ],
+          [
+            176,
+            145
+          ],
+          [
+            176,
+            194
+          ],
+          [
+            142,
+            194
+          ]
+        ],
+        "cutout_mask": [
+          [
+            145,
+            145
+          ],
+          [
+            176,
+            145
+          ],
+          [
+            176,
+            194
+          ],
+          [
+            145,
+            194
+          ]
+        ],
+        "bounds": [
+          137,
+          137,
+          50,
+          65
+        ],
+        "pivot": [
+          145,
+          180
+        ],
+        "angle_deg": 10,
+        "delay_ms": 180
+      }
+    ]
   }
 }

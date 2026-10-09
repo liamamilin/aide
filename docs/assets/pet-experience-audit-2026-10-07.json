@@ -1,0 +1,33 @@
+{
+  "platform": "offscreen",
+  "pets": {
+    "owl-v2": {
+      "profile": "",
+      "size_theme_state_checks": 24,
+      "transparent_corners": true,
+      "clipped_pixels": 0,
+      "source_files_unchanged": true
+    },
+    "astra": {
+      "profile": "petdex-astra-v1",
+      "size_theme_state_checks": 24,
+      "transparent_corners": true,
+      "clipped_pixels": 0,
+      "source_files_unchanged": true
+    },
+    "boba": {
+      "profile": "petdex-boba-v1",
+      "size_theme_state_checks": 24,
+      "transparent_corners": true,
+      "clipped_pixels": 0,
+      "source_files_unchanged": true
+    },
+    "shinchan": {
+      "profile": "petdex-shinchan-v1",
+      "size_theme_state_checks": 24,
+      "transparent_corners": true,
+      "clipped_pixels": 0,
+      "source_files_unchanged": true
+    }
+  }
+}

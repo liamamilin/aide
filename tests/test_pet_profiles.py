@@ -15,12 +15,34 @@ PROFILES = Path(__file__).resolve().parents[1] / "ai_desktop/pets/petdex-profile
 
 
 @pytest.mark.parametrize("name", ["astra", "boba", "shinchan"])
+def test_feedback_stays_on_the_same_character_pose_family(name):
+    manifest = load_manifest(PROFILES / f"{name}.json")
+    rest = manifest.animations[manifest.states["idle"].base].frames[0]
+    for state in ("success", "error"):
+        animation = manifest.animations[manifest.states[state].base]
+        assert animation.frames[0] == animation.frames[-1] == rest
+        assert 40 not in animation.frames  # Crying/seated pose changes silhouette abruptly.
+        assert sum(animation.durations_ms) <= 1200
+    if name == "shinchan":
+        assert not any(24 <= frame <= 27 for animation in manifest.animations.values() for frame in animation.frames)
+    for state in ("searching", "executing", "waiting", "cancelled"):
+        animator = PetAnimator(manifest)
+        animator.set_state(state)
+        assert animator.current_state == state  # Semantic state never waits for a bridge.
+        animator.tick(.6)
+        before = animator.snapshot()
+        animator.tick(10)
+        assert animator.snapshot() == before
+        assert animator.next_wake_seconds is None
+
+
+@pytest.mark.parametrize("name", ["astra", "boba", "shinchan"])
 def test_profile_actions_stay_still_and_return_home(name):
     manifest = load_manifest(PROFILES / f"{name}.json")
     rest = manifest.animations[manifest.states["idle"].base].frames[0]
     assert len(manifest.animations[manifest.states["idle"].base].frames) == 1
-    assert len(manifest.states["idle"].ambient) == 5
-    assert len(manifest.states["hover"].reactions) == 5
+    assert len(manifest.states["idle"].ambient) >= 5
+    assert len(manifest.states["hover"].reactions) >= 5
     for gesture in manifest.states["idle"].ambient + manifest.states["hover"].reactions:
         animation = manifest.animations[gesture]
         assert animation.frames[0] == animation.frames[-1] == rest
@@ -37,6 +59,7 @@ def test_profile_actions_stay_still_and_return_home(name):
     assert animator.snapshot().frame_index == rest
     assert animator.layer == "base"
     animator.set_state("working")
+    animator.tick(.6)
     assert animator.next_wake_seconds is None
     animator.tick(20)
     assert animator.snapshot().frame_index == manifest.animations["focus"].frames[0]
@@ -124,9 +147,12 @@ def test_profile_reaches_widget_and_task_states_without_mutating_pet(qtbot, tmp_
     assert button._animator.manifest.profile_id == "petdex-boba-v1"
     assert button._animator.manifest.rendering.pixel_art
     button.enterEvent(QEvent(QEvent.Enter))
+    qtbot.waitUntil(lambda: button._animator.layer == "reaction", timeout=500)
     assert button._animator.layer == "reaction"
     button.set_responding(True)
     assert button._animator.current_state == "working"
+    assert button._animator.layer == "transition"
+    button._animator.tick(.6)
     assert button._animator.snapshot().frame_index == 65
     button.set_reduce_motion(True)
     assert not button._animation_timer.isActive()

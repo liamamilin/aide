@@ -249,7 +249,7 @@ def test_static_idle_wakes_for_ambient_without_continuous_frame_loop():
                   "blink": AnimationDef("blink", [1, 0], 10, False)}
     animator = PetAnimator(_make_manifest(states={"idle": StateDef("rest", ["blink"])}, animations=animations))
     wake = animator.next_wake_seconds
-    assert 4.8 <= wake <= 9.6
+    assert 6 <= wake <= 12
     animator.tick(wake)
     assert animator.layer == "ambient"
     assert animator.next_wake_seconds == .1

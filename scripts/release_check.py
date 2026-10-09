@@ -100,6 +100,8 @@ def validate_bundle(bundle: Path, version: str) -> list[str]:
         "pets/petdex-profiles/astra.json",
         "pets/petdex-profiles/boba.json",
         "pets/petdex-profiles/shinchan.json",
+        "pets/petdex-profiles/motion/astra-limb-v1.png",
+        "pets/petdex-profiles/motion/boba-limb-v1.png",
     ):
         if not (resources / name).is_file():
             errors.append(f"missing bundled resource: ai_desktop/{name}")

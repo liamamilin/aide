@@ -89,7 +89,10 @@ class SearchExecutor:
             return self._output(result, started)
         finally:
             poll.stop()
+            poll.timeout.disconnect(check)
             job.cancel()
+            job.finished.disconnect(loop.quit)
+            poll.deleteLater()
             job.deleteLater()
             QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 

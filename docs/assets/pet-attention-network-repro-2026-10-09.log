@@ -1,0 +1,4 @@
+Round 1: exit 1
+Traceback (most recent call last):
+  File "<string>", line 68, in <module>
+AssertionError: (22, ChatResult(request_id='37b6a2fd864e403f8986c42dd10b0b84', status=<ResultStatus.FAILED: 'failed'>, text='', error='连接意外结束，请重试。', error_code=<ErrorCode.CONNECTION: 'connection'>, turn=None, run_id='8f1ca9fc9a40484198f8899948b7d11e', step_id='41242c70236b48d19ce7e8ac04d6f7f2', conversation_id=0))

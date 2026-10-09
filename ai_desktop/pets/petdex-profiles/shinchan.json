@@ -24,17 +24,20 @@
         "idle_double_blink",
         "idle_slow_blink",
         "idle_small_reply",
-        "idle_look_forward"
+        "idle_look_forward",
+        "idle_thought",
+        "little_reply"
       ]
     },
     "hover": {
       "base": "rest",
       "reactions": [
-        "hover_hand_greeting",
+        "hover_quiet_greeting",
         "hover_friendly_blink",
         "hover_curious_reply",
         "hover_quiet_attention",
-        "hover_double_reply"
+        "hover_double_reply",
+        "little_reply"
       ]
     },
     "working": {
@@ -51,6 +54,18 @@
     },
     "error": {
       "base": "error"
+    },
+    "searching": {
+      "base": "focus"
+    },
+    "executing": {
+      "base": "focus"
+    },
+    "waiting": {
+      "base": "listen"
+    },
+    "cancelled": {
+      "base": "rest"
     }
   },
   "animations": {
@@ -96,7 +111,9 @@
         240
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "idle_double_blink": {
       "frames": [
@@ -114,7 +131,9 @@
         260
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "idle_slow_blink": {
       "frames": [
@@ -128,7 +147,9 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "idle_small_reply": {
       "frames": [
@@ -142,7 +163,9 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "observe",
+      "tempo_variation": 0.08
     },
     "idle_look_forward": {
       "frames": [
@@ -158,29 +181,9 @@
         300
       ],
       "fps": 8,
-      "loop": false
-    },
-    "hover_hand_greeting": {
-      "frames": [
-        48,
-        24,
-        25,
-        26,
-        25,
-        27,
-        48
-      ],
-      "durations_ms": [
-        140,
-        140,
-        160,
-        280,
-        140,
-        180,
-        280
-      ],
-      "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "observe",
+      "tempo_variation": 0.08
     },
     "hover_friendly_blink": {
       "frames": [
@@ -194,7 +197,9 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "hover_curious_reply": {
       "frames": [
@@ -208,7 +213,9 @@
         320
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "observe",
+      "tempo_variation": 0.08
     },
     "hover_quiet_attention": {
       "frames": [
@@ -224,7 +231,9 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "observe",
+      "tempo_variation": 0.08
     },
     "hover_double_reply": {
       "frames": [
@@ -242,17 +251,21 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "success": {
       "frames": [
         48,
-        24,
+        49,
+        51,
         48
       ],
       "durations_ms": [
         180,
-        420,
+        180,
+        220,
         280
       ],
       "fps": 8,
@@ -262,13 +275,17 @@
     "error": {
       "frames": [
         48,
-        40,
+        50,
+        53,
+        50,
         48
       ],
       "durations_ms": [
         180,
-        420,
-        280
+        120,
+        300,
+        120,
+        240
       ],
       "fps": 8,
       "loop": false,
@@ -287,6 +304,146 @@
       ],
       "fps": 8,
       "loop": true
+    },
+    "hover_quiet_greeting": {
+      "frames": [
+        48,
+        50,
+        49,
+        51,
+        48
+      ],
+      "durations_ms": [
+        140,
+        180,
+        160,
+        240,
+        280
+      ],
+      "fps": 8,
+      "loop": false,
+      "tempo_variation": 0.08
+    },
+    "enter_focus": {
+      "frames": [
+        48,
+        49,
+        64
+      ],
+      "durations_ms": [
+        70,
+        80,
+        90
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "leave_focus": {
+      "frames": [
+        64,
+        49,
+        48
+      ],
+      "durations_ms": [
+        80,
+        100,
+        100
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "little_reply": {
+      "frames": [
+        48,
+        50,
+        52,
+        53,
+        50,
+        48
+      ],
+      "durations_ms": [
+        100,
+        100,
+        180,
+        120,
+        120,
+        180
+      ],
+      "fps": 12,
+      "loop": false,
+      "family": "signature",
+      "weight": 0.3,
+      "cooldown_ms": 45000,
+      "tempo_variation": 0.08
+    },
+    "idle_thought": {
+      "frames": [
+        48,
+        49,
+        64,
+        49,
+        48
+      ],
+      "durations_ms": [
+        100,
+        100,
+        200,
+        100,
+        180
+      ],
+      "fps": 12,
+      "loop": false,
+      "family": "focus",
+      "weight": 0.6,
+      "tempo_variation": 0.08
+    },
+    "press": {
+      "frames": [
+        53
+      ],
+      "durations_ms": [
+        100
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "grab": {
+      "frames": [
+        49
+      ],
+      "durations_ms": [
+        100
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "click": {
+      "frames": [
+        53,
+        50,
+        48
+      ],
+      "durations_ms": [
+        70,
+        100,
+        160
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "release": {
+      "frames": [
+        49,
+        50,
+        48
+      ],
+      "durations_ms": [
+        75,
+        125,
+        220
+      ],
+      "fps": 12,
+      "loop": false
     }
   },
   "atlas_sha256": "76ad7113c0e6ddebc2f2f120621fe96a034676bbb324ffdce6307ef8b6868c70",
@@ -295,5 +452,32 @@
     "scale": 0.88,
     "baseline": 0.9,
     "remove_magenta_matte": true
+  },
+  "transitions": {
+    "focus": [
+      "enter_focus"
+    ],
+    "error": [
+      "leave_focus"
+    ],
+    "rest": [
+      "leave_focus"
+    ],
+    "listen": [
+      "leave_focus"
+    ],
+    "speak": [
+      "leave_focus"
+    ],
+    "success": [
+      "leave_focus"
+    ]
+  },
+  "interactions": {
+    "press": "press",
+    "grab": "grab",
+    "click": "click",
+    "release": "release",
+    "signature": "little_reply"
   }
 }
