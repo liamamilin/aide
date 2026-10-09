@@ -2,6 +2,7 @@
 
 Provides:
 - qapp: session-scoped QApplication (required by pytest-qt)
+- qtbot: keep registered windows alive through native teardown
 - tmp_db: function-scoped temp SQLite database with monkey-patching
 - _isolated_session_data: session-scoped temporary data root for every test
 """
@@ -12,7 +13,9 @@ import threading
 from pathlib import Path
 
 import pytest
+from PyQt5.QtCore import QCoreApplication, QEvent
 from PyQt5.QtWidgets import QApplication
+from pytestqt.qtbot import QtBot
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -70,6 +73,35 @@ def qapp():
         app = QApplication([])
     yield app
     # Don't quit the app — other tests may still need it
+
+
+class _WidgetKeepingQtBot(QtBot):
+    """Keep registered windows alive until pytest-qt finishes native cleanup."""
+
+    def __init__(self, request):
+        super().__init__(request)
+        self._owned_widgets = []
+
+    def addWidget(self, widget, *, before_close_func=None):
+        super().addWidget(widget, before_close_func=before_close_func)
+        self._owned_widgets.append(widget)
+
+    add_widget = addWidget
+
+
+@pytest.fixture
+def qtbot(qapp, request):
+    # pytest-qt registers only weak references. Once the test function returns,
+    # a window held by signal cycles can be collected while a child's pending
+    # paintEvent runs, invalidating its active QPainter. Retain the registered
+    # widgets through pytest-qt's close/deleteLater/event-drain teardown hook.
+    bot = _WidgetKeepingQtBot(request)
+    yield bot
+    # processEvents alone does not guarantee delivery of DeferredDelete when
+    # pytest has no enclosing Qt event loop. Finish the queued native deletion
+    # before releasing Python ownership, so cycles cannot leak to later tests.
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    bot._owned_widgets.clear()
 
 
 @pytest.fixture()

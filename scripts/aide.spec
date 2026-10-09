@@ -44,6 +44,8 @@ a = Analysis(
         (os.path.join(ROOT, "ai_desktop", "pets", "owl-v2", "pet.json"), "ai_desktop/pets/owl-v2"),
         (os.path.join(ROOT, "ai_desktop", "pets", "owl-v2", "spritesheet.png"), "ai_desktop/pets/owl-v2"),
         (os.path.join(ROOT, "ai_desktop", "pets", "petdex-profiles", "*.json"), "ai_desktop/pets/petdex-profiles"),
+        (os.path.join(ROOT, "ai_desktop", "pets", "petdex-profiles", "motion", "*.png"),
+         "ai_desktop/pets/petdex-profiles/motion"),
         # Kokoro/Misaki uses language-tags JSON data at runtime.  PyInstaller
         # does not collect this package data automatically.
         *collect_data_files("language_tags"),

@@ -208,6 +208,8 @@ class ChatController(QObject):
         self._result_bubble = ResultBubble()
         self.float_btn.restore_placement(get_setting("float_button_placement"))
         self.float_btn.clicked.connect(self._toggle_dialog)
+        self.float_btn.open_dialog_requested.connect(self._show_dialog)
+        self.float_btn.stop_task_requested.connect(self._on_stop_requested)
         self.float_btn.exit_requested.connect(self._on_exit)
         self.float_btn.hide_requested.connect(self._hide_float_entry)
         self.float_btn.about_requested.connect(self._show_about)
@@ -226,6 +228,7 @@ class ChatController(QObject):
         )
         self.float_btn.set_auto_hide_state(self._auto_hide)
         self._result_bubble.activated.connect(self._show_dialog)
+        self._result_bubble.acknowledged.connect(lambda: self.float_btn.mark_result_unread(None))
         self._refresh_pet_actions()
         self._connect_screen_signals()
 
@@ -746,6 +749,7 @@ class ChatController(QObject):
         if self._stopping or self._stopped:
             return
         self._result_bubble.hide()
+        self.float_btn.mark_result_unread(None)
         if self._dialog is None:
             cached_models = self._load_cached_models(config.OLLAMA_BASE_URL)
             self._dialog = ChatDialog(
@@ -1329,6 +1333,7 @@ class ChatController(QObject):
     @_safe_slot
     def _new_conversation(self) -> None:
         self._stop_worker(show_cancelled=False)
+        self.float_btn.mark_result_unread(None)
         self._clear_task_authorization()
         self._sync_active_agent_from_dialog()
         self._inherit_tool_settings()
@@ -1349,9 +1354,12 @@ class ChatController(QObject):
 
     def _stop_worker(self, *, show_cancelled: bool = True) -> None:
         """Invalidate callbacks and restore the UI before asynchronous cancellation."""
+        had_pending = self._pending_task is not None
         self._cancel_pending_task()
         worker = self._worker
         if worker is None:
+            if had_pending and show_cancelled:
+                self.float_btn.show_cancelled()
             return
         if self._regenerating_user_id:
             current = worker.current_request
@@ -1367,6 +1375,8 @@ class ChatController(QObject):
         worker.cancel()
         self._retire_worker(worker)
         self.float_btn.set_responding(False)
+        if show_cancelled:
+            self.float_btn.show_cancelled()
         if self._dialog:
             self._dialog.finish_tool_run('已停止')
             self._dialog.set_thinking(False)
@@ -2459,6 +2469,14 @@ class ChatController(QObject):
         if (worker is None or source_worker is not worker
                 or worker.request.conversation_id != self._convo_id or not worker.accept_run_event(event)):
             return
+        if event.kind == RunEventKind.MODEL_STARTED:
+            self.float_btn.set_task_activity("working")
+        elif event.kind in {RunEventKind.TOOL_STARTED, RunEventKind.TOOL_UPDATED}:
+            activity = ("waiting" if event.status == "waiting_confirmation" else
+                        "searching" if event.tool_name == "web_search" else "executing")
+            self.float_btn.set_task_activity(activity)
+        elif event.kind == RunEventKind.TOOL_FINISHED:
+            self.float_btn.set_task_activity("working")
         if self._dialog and event.kind in {RunEventKind.TOOL_STARTED, RunEventKind.TOOL_UPDATED,
                                           RunEventKind.TOOL_FINISHED}:
             workspace = worker.context.execution.workspace if worker.context.execution else ''
@@ -2496,6 +2514,8 @@ class ChatController(QObject):
             accepted = worker.confirmations.respond(request, approved)
         if self._dialog:
             self._dialog.acknowledge_command(request, accepted, approved)
+        if accepted:
+            self.float_btn.set_task_activity("executing" if approved else "working")
 
     def _on_tool_stop_requested(self, run_id):
         if self._worker is not None and self._worker.request.run_id == run_id:
@@ -2596,7 +2616,11 @@ class ChatController(QObject):
         text, ok = result.text, result.ok
         self.float_btn.set_responding(False)
         if result.status != ResultStatus.CANCELLED:
+            unseen = self._dialog is None or not self._dialog.isVisible()
+            self.float_btn.mark_result_unread(("success" if ok else "error") if unseen else None)
             self.float_btn.show_result(ok)
+        else:
+            self.float_btn.show_cancelled()
         if self._dialog:
             self._dialog.set_thinking(False)
 
@@ -2704,6 +2728,7 @@ class ChatController(QObject):
 
         summary = ResultBubble.summarize(source, fallback)
         self._speech_feedback_active = False
+        self.float_btn.mark_result_unread("success" if result.ok else "error")
         self._result_bubble.show_result(
             kind,
             title,

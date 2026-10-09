@@ -79,3 +79,15 @@ def test_progress_bubble_dismisses_without_opening_chat(qtbot, bubble):
 def test_result_bubble_rejects_unknown_kind(bubble):
     with pytest.raises(ValueError):
         bubble.show_result("unknown", "", "", QRect())
+def test_expiry_is_not_user_acknowledgement(qtbot, bubble):
+    from PyQt5.QtCore import QRect
+
+    acknowledgements = []
+    bubble.acknowledged.connect(lambda: acknowledgements.append(True))
+    bubble.show_result("success", "完成", "结果", QRect(500, 300, 104, 110))
+    bubble._hide_timer.start(1)
+    qtbot.waitUntil(lambda: not bubble.isVisible())
+    assert not acknowledgements
+    bubble.show_result("success", "完成", "结果", QRect(500, 300, 104, 110))
+    bubble._close.click()
+    assert acknowledgements == [True]

@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-08",
+  "qt_platform": "offscreen",
+  "all_test_files": 74,
+  "all_test_cases": 1576,
+  "grouped_processes": [
+    {
+      "group": "pet",
+      "files": 10,
+      "passed": 332,
+      "seconds": 29.35
+    },
+    {
+      "group": "other",
+      "files": 64,
+      "passed": 1244,
+      "seconds": 39.22,
+      "existing_collection_warnings": 2
+    }
+  ],
+  "all_grouped_tests_passed": true,
+  "single_process_full_suite": {
+    "status": "unstable",
+    "observed_failures": [
+      "Qt QNetworkReply destroyed during input recovery; timeout and native crash"
+    ],
+    "network_subset_passed": 51,
+    "network_subset_seconds": 3.59,
+    "transport_production_code_changed_this_round": false
+  },
+  "secondary_poses_checked": 115,
+  "animation_frames_checked": 1440,
+  "clipped_pixels": 0,
+  "static_combinations_checked": 96,
+  "native_cocoa_pets_checked": 4,
+  "ruff": "passed",
+  "git_diff_check": "passed",
+  "images_match_previous_feel_v4_build": {
+    "owl-v2/spritesheet.png": true,
+    "petdex-profiles/motion/astra-limb-v1.png": true,
+    "petdex-profiles/motion/boba-limb-v1.png": true
+  },
+  "build": {
+    "version": "1.5.0",
+    "app_size": "867M",
+    "stable_signing": "passed",
+    "strict_signature_validation": "passed",
+    "release_preflight": "passed",
+    "isolated_smoke": "passed",
+    "schema_0_upgrade_and_14_settings": "passed",
+    "runtime_modules_match": 9,
+    "asset_sha256_match": 7,
+    "bundled_secondary_loading": [
+      "owl-v2",
+      "boba"
+    ]
+  }
+}

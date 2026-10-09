@@ -1,0 +1,123 @@
+{
+  "date": "2026-10-09",
+  "status": "pet_polish_delivered_with_open_network_lifecycle_issue",
+  "environment": {
+    "python": "3.10.13",
+    "pyqt": "5.15.11",
+    "qt_runtime": "5.15.19",
+    "architecture": "arm64",
+    "macos": "26.6.2",
+    "pyqt5_sip": "12.18.0"
+  },
+  "changes": [
+    "idle activity ramps from 6–12 seconds to 18–30 seconds after sustained inactivity",
+    "toolbar and its grace period preserve attention without another greeting",
+    "outside/transparent press release cancels pointer pose and does not click"
+  ],
+  "new_pet_cases": 52,
+  "targeted_pet_tests": {
+    "passed": 217,
+    "seconds": 34.05
+  },
+  "full_suite": {
+    "passed": 1635,
+    "warnings": 2,
+    "seconds": 76.2,
+    "exit_code": 0,
+    "rounds": 1,
+    "log": "pet-attention-final-regression-2026-10-09.log",
+    "limitation": "A prior full run had 1634 passes and one intermittent worker/network lifecycle failure; repeated pressure tests still fail. This passing run does not resolve that issue."
+  },
+  "checks": {
+    "ruff": true,
+    "git_diff_check": true
+  },
+  "visual": {
+    "dynamic_samples": 1440,
+    "static_combinations": 96,
+    "clipped_pixels": 0,
+    "focus_pets": 4,
+    "simulated_idle_seconds_per_pet": 1800,
+    "first_minute_actions_per_pet": 6,
+    "last_minute_actions_per_pet": 3,
+    "quiet_body_percentage_min": 96.0,
+    "physical_screens": 1,
+    "reports": [
+      "pet-animation-audit-attention-v6-2026-10-09.json",
+      "pet-experience-audit-attention-v6-2026-10-09.json",
+      "pet-native-attention-v6-2026-10-09.json",
+      "pet-closeout-native-attention-v6-2026-10-09.json"
+    ]
+  },
+  "bundle": {
+    "version": "1.5.0",
+    "path": "/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app",
+    "size": "867 MB (du -sh)",
+    "signing_identity": "AI Desktop Assistant",
+    "strict_signature_verified": true,
+    "release_preflight": true,
+    "isolated_smoke": true,
+    "schema_0_upgrade": true,
+    "persistent_settings_preserved": 14,
+    "modules_match": 13,
+    "assets_match": 7,
+    "report": "pet-attention-v6-bundle-2026-10-09.json"
+  },
+  "open_issues": [
+    {
+      "id": "qt-reply-lifecycle-2026-10-09",
+      "status": "open",
+      "symptom": "Intermittent connection/internal failure while QLabel allocation/update and worker network tasks overlap; a Python reply wrapper can be invalid although a native reply is still present. The cause is not established.",
+      "normal_worker_repeat": {
+        "rounds": 12,
+        "failed_rounds": 2
+      },
+      "manual_reproduction": {
+        "command": "python3 scripts/reproduce_qt_reply_lifecycle.py --rounds 3 --tasks 96 --gc-interval 2",
+        "exit_code": 1,
+        "failed_round": 1,
+        "failed_task_index": 22,
+        "log": "pet-attention-network-repro-2026-10-09.log"
+      },
+      "experimental_fixes_shipped": false,
+      "network_source_matches_previous_closeout": true,
+      "evidence": [
+        "pet-attention-network-full-failure-2026-10-09.log",
+        "pet-attention-network-repeat-failure-2026-10-09.log",
+        "pet-attention-network-wrapper-diagnostic-2026-10-09.log",
+        "pet-attention-network-repro-2026-10-09.log"
+      ]
+    }
+  ],
+  "source_sha256": {
+    "ai_desktop/main.py": "1d782f41bf404f15819fc8bc83fbc4decd0f0272c7224a4fa6db1bafc3e80123",
+    "ai_desktop/ui/float_button.py": "213d330d4d271c2af247e99a88e9be7e5ec648e2ec9a9ab876e846b6d5bface8",
+    "ai_desktop/ui/pet_toolbar.py": "d5faf7cae5b669ae35aa67e6e38eec3e95cb1cc3f72fc31ad7e9f2a245778e01",
+    "ai_desktop/ui/result_bubble.py": "b964c43d137b2ae53df663db23d7c432d5d563c9adeab09dcd09c4e13ed92301",
+    "ai_desktop/ui/pet_profiles.py": "30067ca8d419f492a806b6874e1f770d6967339e74bc27250f606208034e6ef4",
+    "ai_desktop/ui/pet_manifest.py": "6eaa983e9694c65b39edda2aa42e0b9d8346b8cf2fb303d0cde1039978a7d849",
+    "ai_desktop/ui/pet_animator.py": "83fcdee889d619f896d14643df0f1748cc7e90c2b7deacc4ad89fca2f81648c4",
+    "ai_desktop/ui/spritesheet.py": "155599e26c25b79adf77b31f3a704f838357972eedb4761e5457cbefce2569dd",
+    "ai_desktop/ui/pet_secondary.py": "94f8eeef9f41596f12e8aaa1b3ec1b6273e75e68b72118bddf02e6ed2e781fce",
+    "ai_desktop/llm/qt_stream.py": "c35c51518aaba572cc5b06449668fb8f045bda2bd8696839450bea2a56e0091e",
+    "ai_desktop/llm/run_worker.py": "0ff9d801e1a8c6f590f57819507a07a6d48ce52a369f84e76ecd59a9060f7762",
+    "ai_desktop/services/qt_search.py": "d1410f743cfe0b11b0e6a1d140e7f6cb3fd4efb990042d431fcacaf7a982333c",
+    "ai_desktop/services/search_executor.py": "d6173cd045ff127c9cdd3d7eabd976032c88857193a2fa2bce632d043014f3f3",
+    "tests/test_qt_stream.py": "c3cbc58f843e95c5f44af817a16f7b0f623d6a97472fd6650bd936417d26e210",
+    "tests/test_qt_worker_lifecycle.py": "d99f2cc18af816f3a7da9ebd42f2d5c007d7024ab455984d1ba1c7a3f3172a92",
+    "scripts/audit_pet_closeout.py": "f279b9ab21d8564d1918bfc7ef397e665e48baf47fd51ebde68b08736c3a780e",
+    "tests/test_pet_feel.py": "0abd37a7e7e1214d938fbde89fb7c49c28ac3068b143fcda0fa77bddf55a94a6",
+    "tests/test_pet_experience.py": "de49ca0641b6be5270f10559d7b22347d7ab86c71843d53c3dbc2e090c9fa3c4",
+    "scripts/reproduce_qt_reply_lifecycle.py": "d804d1443d63b8650e7ae04dfd1a64225d715435ec8ffdd84336acc0f8b6b0a9"
+  },
+  "original_petdex_files_changed": false,
+  "real_user_data_changed": false,
+  "user_application_restarted": false,
+  "git_commit_or_push": false,
+  "limits": [
+    "One physical monitor; real multiple monitors and Spaces remain unverified",
+    "Native input uses a fixture editor and synthetic QWidget events",
+    "Simulated idle duration is not a full-application power measurement",
+    "Network lifecycle pressure issue remains open"
+  ]
+}

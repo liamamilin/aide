@@ -1,0 +1,126 @@
+{
+  "date": "2026-10-09",
+  "environment": {
+    "python": "3.10.13",
+    "pyqt": "5.15.11",
+    "qt_runtime": "5.15.19",
+    "architecture": "arm64",
+    "macos": "26.6.2"
+  },
+  "scope": "Four-pet final validation plus Qt request and worker lifecycle fixes",
+  "pre_fix_evidence": {
+    "deleted_reply_regressions": {
+      "initial_red_cases": 3,
+      "failed": 3
+    },
+    "repeat_with_reply_guard_only": "Round 1 passed 1582 tests; round 2 hung during search task transition",
+    "native_sample": {
+      "main_thread": "QLabel::setText -> QAccessibleCache::insert -> QObject::connectImpl -> QBasicMutex::lockInternal",
+      "worker_thread": "sendPostedEvents(DeferredDelete) -> QObject destructor -> QTimer::disconnectNotify -> PyGILState_Ensure -> take_gil"
+    },
+    "diagnostic_process_termination": "Hung test process deliberately terminated with SIGABRT after sampling; this was not a spontaneous application crash",
+    "historical_crash_limit": "Earlier native crashes were not independently reproduced with a deterministic case; final full-suite repeats showed no crash"
+  },
+  "targeted_tests": {
+    "network_controller_search": 216,
+    "worker_ui_lifecycle": 1,
+    "worker_ui_scenarios": 24,
+    "new_tests_since_previous_round": 7
+  },
+  "full_suite": {
+    "mode": "entire tests directory in one pytest process per round; no test grouping",
+    "source_frozen": true,
+    "rounds": [
+      {
+        "round": 1,
+        "passed": 1583,
+        "warnings": 2,
+        "pytest_seconds": 70.67,
+        "process_seconds": 71.25,
+        "exit_code": 0
+      },
+      {
+        "round": 2,
+        "passed": 1583,
+        "warnings": 2,
+        "pytest_seconds": 70.22,
+        "process_seconds": 70.82,
+        "exit_code": 0
+      },
+      {
+        "round": 3,
+        "passed": 1583,
+        "warnings": 2,
+        "pytest_seconds": 71.54,
+        "process_seconds": 72.17,
+        "exit_code": 0
+      }
+    ],
+    "native_watchdog_seconds": 110,
+    "watchdog_fired": false,
+    "unexpected_native_or_server_diagnostics": false,
+    "existing_warnings": [
+      "TestWidget constructor collection warning",
+      "TestDialog constructor collection warning"
+    ]
+  },
+  "checks": {
+    "ruff": true,
+    "git_diff_check": true
+  },
+  "visual": {
+    "dynamic_samples": 1440,
+    "static_combinations": 96,
+    "clipped_pixels": 0,
+    "focus_pets": 4,
+    "lifecycle_pets": 4,
+    "simulated_idle_seconds_per_pet": 1800,
+    "reports": [
+      "pet-animation-audit-closeout-2026-10-09.json",
+      "pet-experience-audit-closeout-2026-10-09.json",
+      "pet-native-closeout-2026-10-09.json",
+      "pet-closeout-native-2026-10-09.json"
+    ]
+  },
+  "bundle": {
+    "version": "1.5.0",
+    "path": "/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app",
+    "size": "867 MB (du -sh)",
+    "signing_identity": "AI Desktop Assistant",
+    "strict_signature_verified": true,
+    "release_preflight": true,
+    "isolated_smoke": true,
+    "schema_0_upgrade": true,
+    "persistent_settings_preserved": 14,
+    "modules_match": 13,
+    "assets_match": 7,
+    "report": "pet-closeout-bundle-2026-10-09.json"
+  },
+  "source_sha256": {
+    "ai_desktop/main.py": "1d782f41bf404f15819fc8bc83fbc4decd0f0272c7224a4fa6db1bafc3e80123",
+    "ai_desktop/ui/float_button.py": "cee9d58f425ee3d2b1981b916391107f9b0b0ec482aebee698b94f20f2df56cf",
+    "ai_desktop/ui/pet_toolbar.py": "d5faf7cae5b669ae35aa67e6e38eec3e95cb1cc3f72fc31ad7e9f2a245778e01",
+    "ai_desktop/ui/result_bubble.py": "b964c43d137b2ae53df663db23d7c432d5d563c9adeab09dcd09c4e13ed92301",
+    "ai_desktop/ui/pet_profiles.py": "30067ca8d419f492a806b6874e1f770d6967339e74bc27250f606208034e6ef4",
+    "ai_desktop/ui/pet_manifest.py": "6eaa983e9694c65b39edda2aa42e0b9d8346b8cf2fb303d0cde1039978a7d849",
+    "ai_desktop/ui/pet_animator.py": "4d4ce7ef3f7180b8af82f6845752067b8fca85ce35d8b2ae498bc7d1daa392fd",
+    "ai_desktop/ui/spritesheet.py": "155599e26c25b79adf77b31f3a704f838357972eedb4761e5457cbefce2569dd",
+    "ai_desktop/ui/pet_secondary.py": "94f8eeef9f41596f12e8aaa1b3ec1b6273e75e68b72118bddf02e6ed2e781fce",
+    "ai_desktop/llm/qt_stream.py": "c35c51518aaba572cc5b06449668fb8f045bda2bd8696839450bea2a56e0091e",
+    "ai_desktop/llm/run_worker.py": "0ff9d801e1a8c6f590f57819507a07a6d48ce52a369f84e76ecd59a9060f7762",
+    "ai_desktop/services/qt_search.py": "d1410f743cfe0b11b0e6a1d140e7f6cb3fd4efb990042d431fcacaf7a982333c",
+    "ai_desktop/services/search_executor.py": "d6173cd045ff127c9cdd3d7eabd976032c88857193a2fa2bce632d043014f3f3",
+    "tests/test_qt_stream.py": "c3cbc58f843e95c5f44af817a16f7b0f623d6a97472fd6650bd936417d26e210",
+    "tests/test_qt_worker_lifecycle.py": "d99f2cc18af816f3a7da9ebd42f2d5c007d7024ab455984d1ba1c7a3f3172a92",
+    "scripts/audit_pet_closeout.py": "f67e7c04d3171de6506340825dcf80bf2de7fdd6539bdf32e44f857a141b31b0"
+  },
+  "limits": [
+    "One physical monitor; multiple monitors and Spaces need real hardware observation",
+    "Native tool entry checks use a fixture editor and synthetic Qt events, not external-app capture",
+    "Simulated idle duration is not a long-duration full-application power measurement"
+  ],
+  "original_petdex_files_changed": false,
+  "real_user_data_changed": false,
+  "user_application_restarted": false,
+  "git_commit_or_push": false
+}

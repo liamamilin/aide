@@ -174,6 +174,9 @@ def test_repeated_real_requests_do_not_use_qt_sender_for_worker_identity(qtbot, 
             idle(qtbot, controller)
     assert len(ollama_server.requests) == 20
     assert len([msg for msg in controller._messages if msg.role == 'assistant']) == 20
+    # Removing a finished worker from the controller's tracking list schedules
+    # deleteLater; native destruction is delivered on a subsequent event turn.
+    qtbot.waitUntil(lambda: not controller.findChildren(RunWorker), timeout=3000)
     assert not controller.findChildren(RunWorker)
 
 

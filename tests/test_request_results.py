@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import QLabel
 import ai_desktop.utils.storage as storage
 from ai_desktop import config
 from ai_desktop.llm.events import ChatResult, EventKind, ResultStatus, StreamEvent
+from ai_desktop.llm.run_types import RunEvent, RunEventKind
 from ai_desktop.llm.run_worker import RunWorker
 from ai_desktop.llm.service_checks import ImageCapability
 from ai_desktop.llm.thinking import ThinkingCapability, cache_thinking
@@ -92,6 +93,37 @@ def test_current_request_other_step_and_duplicate_chunk_ignored(controller):
     worker, controller._worker = controller._worker, None
     worker.release_attachments()
     worker.deleteLater()
+
+
+def test_pet_activity_uses_only_accepted_current_run_events(controller):
+    with patch.object(RunWorker, "start"):
+        controller._on_user_message("activity fixture")
+    worker = controller._worker
+    request = worker.request
+    event = RunEvent(request.run_id, request.conversation_id, request.step_id,
+                     request.request_id, 1, RunEventKind.MODEL_STARTED)
+    try:
+        controller._on_run_event(event, worker)
+        search = replace(event, seq=2, kind=RunEventKind.TOOL_STARTED, tool_name="web_search")
+        controller._on_run_event(search, worker)
+        controller.float_btn.set_task_activity.assert_called_with("searching")
+        before = controller.float_btn.set_task_activity.call_count
+        controller._on_run_event(search, worker)  # Duplicate sequence.
+        controller._on_run_event(replace(search, seq=3, run_id="old-run"), worker)
+        controller._on_run_event(replace(search, seq=3), object())  # Retired worker.
+        assert controller.float_btn.set_task_activity.call_count == before
+        waiting = replace(event, seq=3, kind=RunEventKind.TOOL_UPDATED,
+                          tool_name="bash", status="waiting_confirmation")
+        controller._on_run_event(waiting, worker)
+        controller.float_btn.set_task_activity.assert_called_with("waiting")
+        controller._on_run_event(replace(waiting, seq=4, status="executing"), worker)
+        controller.float_btn.set_task_activity.assert_called_with("executing")
+        controller._on_run_event(replace(waiting, seq=5, kind=RunEventKind.TOOL_FINISHED), worker)
+        controller.float_btn.set_task_activity.assert_called_with("working")
+    finally:
+        controller._worker = None
+        worker.release_attachments()
+        worker.deleteLater()
 
 
 def test_action_origin_survives_regeneration(qtbot, controller, ollama_server):

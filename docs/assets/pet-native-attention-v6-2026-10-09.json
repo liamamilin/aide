@@ -1,0 +1,33 @@
+{
+  "platform": "cocoa",
+  "pets": {
+    "owl-v2": {
+      "profile": "",
+      "focus_preserved": true,
+      "selection_preserved": true,
+      "read_dispatched": true,
+      "source_files_unchanged": true
+    },
+    "astra": {
+      "profile": "petdex-astra-v1",
+      "focus_preserved": true,
+      "selection_preserved": true,
+      "read_dispatched": true,
+      "source_files_unchanged": true
+    },
+    "boba": {
+      "profile": "petdex-boba-v1",
+      "focus_preserved": true,
+      "selection_preserved": true,
+      "read_dispatched": true,
+      "source_files_unchanged": true
+    },
+    "shinchan": {
+      "profile": "petdex-shinchan-v1",
+      "focus_preserved": true,
+      "selection_preserved": true,
+      "read_dispatched": true,
+      "source_files_unchanged": true
+    }
+  }
+}

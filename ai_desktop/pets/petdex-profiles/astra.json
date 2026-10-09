@@ -24,7 +24,9 @@
         "idle_double_blink",
         "idle_slow_blink",
         "idle_glance",
-        "idle_curious"
+        "idle_curious",
+        "idle_composure",
+        "wing_acknowledge"
       ]
     },
     "hover": {
@@ -34,7 +36,8 @@
         "hover_friendly_blink",
         "hover_curious_reply",
         "hover_quiet_attention",
-        "hover_double_reply"
+        "hover_double_reply",
+        "wing_acknowledge"
       ]
     },
     "working": {
@@ -51,6 +54,18 @@
     },
     "error": {
       "base": "error"
+    },
+    "searching": {
+      "base": "focus"
+    },
+    "executing": {
+      "base": "focus"
+    },
+    "waiting": {
+      "base": "listen"
+    },
+    "cancelled": {
+      "base": "rest"
     }
   },
   "animations": {
@@ -96,7 +111,9 @@
         240
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "idle_double_blink": {
       "frames": [
@@ -114,7 +131,9 @@
         260
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "idle_slow_blink": {
       "frames": [
@@ -128,7 +147,9 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "idle_glance": {
       "frames": [
@@ -142,7 +163,9 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "observe",
+      "tempo_variation": 0.08
     },
     "idle_curious": {
       "frames": [
@@ -156,21 +179,43 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "observe",
+      "tempo_variation": 0.08
     },
     "hover_wing_greeting": {
       "frames": [
         48,
-        52,
+        49,
+        72,
+        73,
+        74,
+        75,
+        74,
+        73,
+        72,
+        49,
         48
       ],
       "durations_ms": [
-        160,
-        420,
-        280
+        65,
+        100,
+        80,
+        50,
+        70,
+        220,
+        70,
+        50,
+        85,
+        110,
+        180
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "signature",
+      "weight": 0.3,
+      "cooldown_ms": 45000,
+      "tempo_variation": 0.08
     },
     "hover_friendly_blink": {
       "frames": [
@@ -184,7 +229,9 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "hover_curious_reply": {
       "frames": [
@@ -198,7 +245,9 @@
         320
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "observe",
+      "tempo_variation": 0.08
     },
     "hover_quiet_attention": {
       "frames": [
@@ -212,7 +261,9 @@
         320
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "observe",
+      "tempo_variation": 0.08
     },
     "hover_double_reply": {
       "frames": [
@@ -230,7 +281,9 @@
         300
       ],
       "fps": 8,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "success": {
       "frames": [
@@ -250,13 +303,17 @@
     "error": {
       "frames": [
         48,
-        40,
+        49,
+        50,
+        49,
         48
       ],
       "durations_ms": [
         180,
-        420,
-        280
+        120,
+        300,
+        120,
+        240
       ],
       "fps": 8,
       "loop": false,
@@ -271,6 +328,198 @@
       ],
       "fps": 8,
       "loop": true
+    },
+    "enter_focus": {
+      "frames": [
+        48,
+        69,
+        64,
+        65
+      ],
+      "durations_ms": [
+        45,
+        65,
+        65,
+        75
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "leave_focus": {
+      "frames": [
+        65,
+        64,
+        66,
+        69,
+        48
+      ],
+      "durations_ms": [
+        60,
+        50,
+        60,
+        60,
+        70
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "wing_acknowledge": {
+      "frames": [
+        48,
+        49,
+        72,
+        73,
+        74,
+        75,
+        74,
+        73,
+        72,
+        49,
+        48
+      ],
+      "durations_ms": [
+        65,
+        100,
+        80,
+        50,
+        70,
+        220,
+        70,
+        50,
+        85,
+        110,
+        180
+      ],
+      "fps": 12,
+      "loop": false,
+      "family": "signature",
+      "weight": 0.3,
+      "cooldown_ms": 45000,
+      "tempo_variation": 0.08
+    },
+    "idle_composure": {
+      "frames": [
+        48,
+        69,
+        48
+      ],
+      "durations_ms": [
+        120,
+        360,
+        180
+      ],
+      "fps": 12,
+      "loop": false,
+      "family": "composure",
+      "weight": 0.6,
+      "tempo_variation": 0.08
+    },
+    "press": {
+      "frames": [
+        50
+      ],
+      "durations_ms": [
+        100
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "grab": {
+      "frames": [
+        51
+      ],
+      "durations_ms": [
+        100
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "click": {
+      "frames": [
+        50,
+        49,
+        48
+      ],
+      "durations_ms": [
+        70,
+        100,
+        160
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "release": {
+      "frames": [
+        51,
+        49,
+        48
+      ],
+      "durations_ms": [
+        75,
+        125,
+        220
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "look_right": {
+      "frames": [
+        48,
+        49,
+        48
+      ],
+      "durations_ms": [
+        70,
+        340,
+        160
+      ],
+      "fps": 12,
+      "loop": false,
+      "tempo_variation": 0.08
+    },
+    "limb_to_focus": {
+      "frames": [
+        75,
+        74,
+        73,
+        72,
+        49,
+        69,
+        64,
+        65
+      ],
+      "durations_ms": [
+        40,
+        40,
+        40,
+        40,
+        40,
+        60,
+        60,
+        70
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "limb_to_rest": {
+      "frames": [
+        75,
+        74,
+        73,
+        72,
+        49,
+        48
+      ],
+      "durations_ms": [
+        40,
+        40,
+        40,
+        40,
+        50,
+        70
+      ],
+      "fps": 12,
+      "loop": false
     }
   },
   "atlas_sha256": "cf18bed5e493b75ab88c78e20ed7c7a87b85b93d6730eb2701e0806c6207c388",
@@ -279,5 +528,86 @@
     "scale": 0.88,
     "baseline": 0.9,
     "remove_magenta_matte": true
+  },
+  "transitions": {
+    "focus": [
+      "enter_focus",
+      "limb_to_focus"
+    ],
+    "error": [
+      "leave_focus",
+      "limb_to_rest"
+    ],
+    "rest": [
+      "leave_focus",
+      "limb_to_rest"
+    ],
+    "listen": [
+      "leave_focus",
+      "limb_to_rest"
+    ],
+    "speak": [
+      "leave_focus",
+      "limb_to_rest"
+    ],
+    "success": [
+      "leave_focus",
+      "limb_to_rest"
+    ]
+  },
+  "interactions": {
+    "press": "press",
+    "grab": "grab",
+    "click": "click",
+    "release": "release",
+    "signature": "wing_acknowledge",
+    "look_right": "look_right"
+  },
+  "frame_patches": {
+    "file": "motion/astra-limb-v1.png",
+    "columns": 3,
+    "frame_count": 3,
+    "base_frame": 49,
+    "mask": [
+      [
+        0,
+        119
+      ],
+      [
+        66,
+        119
+      ],
+      [
+        76,
+        129
+      ],
+      [
+        64,
+        145
+      ],
+      [
+        46,
+        174
+      ],
+      [
+        0,
+        184
+      ]
+    ],
+    "frames": [
+      {
+        "cell": 0
+      },
+      {
+        "cell": 1
+      },
+      {
+        "cell": 2
+      },
+      {
+        "source_frame": 52
+      }
+    ],
+    "sha256": "4f503a30d5df371df52b188331f7bd4902a2149095d3abfa0a5251076b14a8ab"
   }
 }

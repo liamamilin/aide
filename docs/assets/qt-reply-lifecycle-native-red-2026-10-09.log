@@ -1,0 +1,7 @@
+Reused live reply address 47170814032 attempt 6
+Live reply wrapper invalidated by queued monitor: True
+ChatResult(request_id='d558165b96284b3eb3cfe63ffc63dc55', status=<ResultStatus.FAILED: 'failed'>, text='', error='连接意外结束，请重试。', error_code=<ErrorCode.CONNECTION: 'connection'>, turn=None, run_id='348814800f1c4f88973aa78514b9b917', step_id='7fe1622d590443449404b262d69de592', conversation_id=0)
+Traceback (most recent call last):
+  File "/private/tmp/aide-network-address-reuse.py", line 70, in <module>
+    assert worker.result.ok and worker.result.text=='native answer'
+AssertionError

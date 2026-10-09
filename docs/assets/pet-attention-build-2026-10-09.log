@@ -1,0 +1,746 @@
+==> AI 桌面助手 1.5.0 — 构建开始
+    macOS: 26.6.2 (arm64)
+    Python: Python 3.10.13
+    PyInstaller: 6.21.0
+Release preflight passed for 1.5.0
+==> [1/6] 跳过测试（使用 --test 启用）
+==> [3/6] 清理当前应用构建目录...
+==> [4/6] 使用 scripts/aide.spec 构建...
+28 INFO: PyInstaller: 6.21.0, contrib hooks: 2026.6
+28 INFO: Python: 3.10.13
+35 INFO: Platform: macOS-26.6.2-arm64-arm-64bit
+35 INFO: Python environment: /Users/milin/.pyenv/versions/3.10.13
+38 INFO: Removing temporary files and cleaning cache in /Users/milin/Library/Application Support/pyinstaller
+1584 INFO: Module search paths (PYTHONPATH):
+['/Users/milin/2026/AI桌面助手',
+ '/Users/milin/.pyenv/versions/3.10.13/lib/python310.zip',
+ '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10',
+ '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/lib-dynload',
+ '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages',
+ '/Users/milin/2026/大模型课程/HZAU大模型课程/Agent-class-system/Agent-class/agent_course_blueprint/reference_agent/src',
+ '/Users/milin/2026/软件开发/测试项目/创建一个CLI的工具/src',
+ '__editable__.projectdoc-0.1.0.finder.__path_hook__',
+ '/Users/milin/2026/AI桌面助手']
+1706 INFO: Appending 'binaries' from .spec
+1706 INFO: Appending 'datas' from .spec
+1713 INFO: checking Analysis
+1713 INFO: Building Analysis because Analysis-00.toc is non existent
+1713 INFO: Looking for Python shared library...
+1715 INFO: Using Python shared library: /Users/milin/.pyenv/versions/3.10.13/lib/libpython3.10.dylib
+1715 INFO: Running Analysis Analysis-00.toc
+1715 INFO: Target bytecode optimization level: 0
+1715 INFO: Initializing module dependency graph...
+1716 INFO: Initializing module graph hook caches...
+1724 INFO: Analyzing modules for base_library.zip ...
+1924 INFO: Processing standard module hook 'hook-heapq.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+1953 INFO: Processing standard module hook 'hook-encodings.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+2138 INFO: Processing standard module hook 'hook-math.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+2431 INFO: Processing standard module hook 'hook-pickle.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+2871 INFO: Caching module dependency graph...
+2892 INFO: Analyzing /Users/milin/2026/AI桌面助手/ai_desktop/main.py
+3163 INFO: Processing standard module hook 'hook-PyQt5.QtCore.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+3234 INFO: Processing standard module hook 'hook-PyQt5.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+3527 INFO: Processing standard module hook 'hook-PyQt5.QtWidgets.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+3804 INFO: Processing standard module hook 'hook-PyQt5.QtGui.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+3888 INFO: Processing standard module hook 'hook-sqlite3.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+4004 INFO: Processing standard module hook 'hook-platform.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+4015 INFO: Processing standard module hook 'hook-xml.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+4065 INFO: Processing standard module hook 'hook-_ctypes.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+4167 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+4563 INFO: Processing standard module hook 'hook-PyQt5.QtSvg.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+4608 INFO: Processing standard module hook 'hook-PyQt5.QtXml.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+4766 INFO: Processing standard module hook 'hook-sysconfig.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+4770 INFO: Processing standard module hook 'hook-_osx_support.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+4830 INFO: Processing standard module hook 'hook-webbrowser.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+5111 INFO: Processing standard module hook 'hook-numpy.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+5311 INFO: Processing standard module hook 'hook-difflib.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+5372 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+6269 INFO: Processing standard module hook 'hook-PyQt5.QtNetwork.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+6345 INFO: Processing standard module hook 'hook-urllib3.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+6394 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/pre_safe_import_module'
+6395 INFO: SetuptoolsInfo: initializing cached setuptools info...
+6805 INFO: Processing standard module hook 'hook-charset_normalizer.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+6844 INFO: Processing standard module hook 'hook-cryptography.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+7092 INFO: hook-cryptography: cryptography does not seem to be using dynamically linked OpenSSL.
+7201 INFO: Processing standard module hook 'hook-bcrypt.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+7213 INFO: Processing standard module hook 'hook-certifi.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+7253 INFO: Processing standard module hook 'hook-pynput.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+7449 INFO: Processing pre-safe-import-module hook 'hook-six.moves.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/pre_safe_import_module'
+7575 INFO: Processing standard module hook 'hook-spacy.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+10555 INFO: Processing standard module hook 'hook-thinc.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+11509 INFO: Processing pre-safe-import-module hook 'hook-zipp.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/pre_safe_import_module'
+11565 INFO: Processing standard module hook 'hook-pydantic.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/pydantic/experimental/__init__.py:7: PydanticExperimentalWarning: This module is experimental, its contents are subject to change and deprecation.
+  warnings.warn(
+11772 INFO: Processing standard module hook 'hook-rich.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+11886 INFO: Processing standard module hook 'hook-pygments.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+12547 INFO: Processing standard module hook 'hook-zoneinfo.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+12874 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/pre_safe_import_module'
+12903 INFO: Processing standard module hook 'hook-torch.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+592 WARNING: Failed to collect submodules for 'torch.utils.tensorboard' because importing 'torch.utils.tensorboard' raised: ModuleNotFoundError: No module named 'tensorboard'
+W1009 14:26:52.753000 25442 site-packages/torch/distributed/elastic/multiprocessing/redirects.py:35] NOTE: Redirects are currently not supported in MacOs.
+/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/utils/hooks/__init__.py:665: DeprecationWarning: `torch.distributed._sharding_spec` will be deprecated, use `torch.distributed._shard.sharding_spec` instead
+  __import__(name)
+/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/utils/hooks/__init__.py:665: DeprecationWarning: `torch.distributed._sharded_tensor` will be deprecated, use `torch.distributed._shard.sharded_tensor` instead
+  __import__(name)
+/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/utils/hooks/__init__.py:665: DeprecationWarning: `torch.distributed._shard.checkpoint` will be deprecated, use `torch.distributed.checkpoint` instead
+  __import__(name)
+17491 INFO: Processing standard module hook 'hook-py.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+17687 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/pre_safe_import_module'
+17864 INFO: Processing standard module hook 'hook-pytest.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+22094 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+22188 INFO: Processing standard module hook 'hook-lxml.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+22274 INFO: Processing standard module hook 'hook-lxml.etree.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+24058 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/pre_safe_import_module'
+24059 INFO: Processing standard module hook 'hook-importlib_resources.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+24194 INFO: Processing standard module hook 'hook-shelve.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+24506 INFO: Processing standard module hook 'hook-setuptools.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+24510 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/pre_safe_import_module'
+24511 INFO: Processing pre-find-module-path hook 'hook-distutils.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/pre_find_module_path'
+24609 INFO: Processing standard module hook 'hook-distutils.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+24617 INFO: Processing standard module hook 'hook-distutils.util.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+24637 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/pre_safe_import_module'
+24637 INFO: Setuptools: 'jaraco' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco'!
+24640 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+24644 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/pre_safe_import_module'
+24644 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.backports'!
+24675 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/pre_safe_import_module'
+24675 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.more_itertools'!
+25123 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/pre_safe_import_module'
+25124 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+25137 INFO: Processing pre-safe-import-module hook 'hook-win32com.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/pre_safe_import_module'
+33196 INFO: Processing standard module hook 'hook-jinja2.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+35428 INFO: Processing standard module hook 'hook-fsspec.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+36552 INFO: Processing standard module hook 'hook-orjson.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+37641 INFO: Processing pre-safe-import-module hook 'hook-tensorflow.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/pre_safe_import_module'
+37678 INFO: Processing standard module hook 'hook-thinc.backends.numpy_ops.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+37721 INFO: Processing standard module hook 'hook-srsly.msgpack._packer.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+38372 INFO: Processing standard module hook 'hook-jieba.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+39222 INFO: Processing standard module hook 'hook-anyio.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+39963 INFO: Processing standard module hook 'hook-pycparser.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+40327 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/pre_safe_import_module'
+40335 INFO: Processing standard module hook 'hook-importlib_metadata.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+40612 INFO: Processing standard module hook 'hook-transformers.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+41507 INFO: Processing standard module hook 'hook-regex.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+42801 INFO: Processing standard module hook 'hook-uvicorn.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+42982 INFO: Processing standard module hook 'hook-websockets.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+44361 INFO: Processing standard module hook 'hook-soundfile.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+55310 INFO: Processing standard module hook 'hook-cloudpickle.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+55632 INFO: Processing standard module hook 'hook-babel.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+55719 INFO: Processing standard module hook 'hook-pytz.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+55767 INFO: Processing standard module hook 'hook-jsonschema.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+55815 INFO: Processing standard module hook 'hook-jsonschema_specifications.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+55832 INFO: Processing standard module hook 'hook-dateutil.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+56025 INFO: Processing standard module hook 'hook-rdflib.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+58009 INFO: Processing pre-safe-import-module hook 'hook-ordered_set.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/pre_safe_import_module'
+60308 INFO: Analyzing hidden import 'pynput.keyboard._darwin'
+60319 INFO: Analyzing hidden import 'pynput.mouse._darwin'
+60322 INFO: Analyzing hidden import 'CoreML'
+60328 INFO: Analyzing hidden import 'Vision'
+60338 INFO: Analyzing hidden import 'en_core_web_sm'
+60338 INFO: Processing module hooks (post-graph stage)...
+60375 INFO: Processing standard module hook 'hook-uvloop.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+66096 INFO: Processing standard module hook 'hook-lxml.isoschematron.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+66103 WARNING: Hidden import "sip" not found!
+66218 WARNING: Hidden import "importlib_resources.trees" not found!
+67180 INFO: Processing standard module hook 'hook-lxml.objectify.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+67249 INFO: Performing binary vs. data reclassification (2760 entries)
+67376 INFO: Looking for ctypes DLLs
+67379 WARNING: Library user32 required via ctypes not found
+67380 WARNING: Library dwmapi required via ctypes not found
+67380 WARNING: Ignoring AppKit.framework/AppKit imported from /Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/darkdetect/_mac_detect.py - only basenames are supported with ctypes imports!
+67405 WARNING: Ignoring /usr/lib64/libgomp.so.1 imported from /Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/torch/_inductor/codecache.py - only basenames are supported with ctypes imports!
+67407 WARNING: Library libcuda.so.1 required via ctypes not found
+67407 WARNING: Library libhiprtc.so required via ctypes not found
+67407 WARNING: Library libamdhip64.so required via ctypes not found
+67412 WARNING: Library libnvidia-ml.so.1 required via ctypes not found
+67449 WARNING: Library libc.so.6 required via ctypes not found
+67465 WARNING: Library libcudart.so required via ctypes not found
+67468 WARNING: Library user32 required via ctypes not found
+67510 INFO: Analyzing run-time hooks ...
+67537 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/rthooks'
+67538 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/rthooks'
+67539 INFO: Including run-time hook 'pyi_rth_setuptools.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/rthooks'
+67540 INFO: Including run-time hook 'pyi_rth_cryptography_openssl.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/_pyinstaller_hooks_contrib/rthooks'
+67542 INFO: Including run-time hook 'pyi_rth_inspect.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/rthooks'
+67542 INFO: Including run-time hook 'pyi_rth_pyqt5.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/rthooks'
+67543 INFO: Processing pre-find-module-path hook 'hook-_pyi_rth_utils.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks/pre_find_module_path'
+67544 INFO: Processing standard module hook 'hook-_pyi_rth_utils.py' from '/Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/hooks'
+67779 INFO: Creating base_library.zip...
+67792 INFO: Looking for dynamic libraries
+68620 INFO: Warnings written to /Users/milin/2026/AI桌面助手/build/aide/warn-aide.txt
+68940 INFO: Graph cross-reference written to /Users/milin/2026/AI桌面助手/build/aide/xref-aide.html
+69274 INFO: checking PYZ
+69274 INFO: Building PYZ because PYZ-00.toc is non existent
+69274 INFO: Building PYZ (ZlibArchive) /Users/milin/2026/AI桌面助手/build/aide/PYZ-00.pyz
+72584 INFO: Building PYZ (ZlibArchive) /Users/milin/2026/AI桌面助手/build/aide/PYZ-00.pyz completed successfully.
+72673 INFO: EXE target arch: arm64
+72673 INFO: Code signing identity: None
+72674 INFO: checking PKG
+72674 INFO: Building PKG because PKG-00.toc is non existent
+72674 INFO: Building PKG (CArchive) AI桌面助手.pkg
+72703 INFO: Building PKG (CArchive) AI桌面助手.pkg completed successfully.
+72704 INFO: Bootloader /Users/milin/.pyenv/versions/3.10.13/lib/python3.10/site-packages/PyInstaller/bootloader/Darwin-64bit/runw
+72704 INFO: checking EXE
+72704 INFO: Building EXE because EXE-00.toc is non existent
+72704 INFO: Building EXE from EXE-00.toc
+72704 INFO: Copying bootloader EXE to /Users/milin/2026/AI桌面助手/build/aide/AI桌面助手
+72705 INFO: Converting EXE to target arch (arm64)
+72727 INFO: Removing signature(s) from EXE
+72745 INFO: Modifying Mach-O image UUID(s) in EXE
+72769 INFO: Appending PKG archive to EXE
+72780 INFO: Fixing EXE headers for code signing
+72782 INFO: Rewriting the executable's macOS SDK version (26.2.0) to match the SDK version of the Python library (15.5.0) in order to avoid inconsistent behavior and potential UI issues in the frozen application.
+72783 INFO: Re-signing the EXE
+72836 INFO: Building EXE from EXE-00.toc completed successfully.
+72867 INFO: checking COLLECT
+72867 INFO: Building COLLECT because COLLECT-00.toc is non existent
+72867 INFO: Building COLLECT COLLECT-00.toc
+86009 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+86114 INFO: checking BUNDLE
+86114 INFO: Building BUNDLE because BUNDLE-00.toc is non existent
+86114 INFO: Building BUNDLE BUNDLE-00.toc
+93317 INFO: Signing the BUNDLE...
+94608 INFO: Building BUNDLE BUNDLE-00.toc completed successfully.
+94682 INFO: Build complete! The results are available in: /Users/milin/2026/AI桌面助手/dist
+==> [5/6] 签名并验证 .app...
+    使用稳定签名身份：AI Desktop Assistant（Hardened Runtime + entitlements）
+/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app: replacing existing signature
+    稳定凭据助手 CDHash: b7ad3818df159c01861d67622a26a3e2f375c20d
+/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app: replacing existing signature
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/thinc/layers/sparselinear.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/thinc/layers/sparselinear.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/aiohttp/_http_writer.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/aiohttp/_http_writer.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/aiohttp/_http_parser.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/aiohttp/_http_parser.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/aiohttp/_websocket/mask.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/aiohttp/_websocket/mask.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/aiohttp/_websocket/reader_c.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/aiohttp/_websocket/reader_c.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/thinc/layers/premap_ids.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/thinc/layers/premap_ids.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/orjson/orjson.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/orjson/orjson.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/thinc/backends/numpy_ops.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/thinc/backends/numpy_ops.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/libpython3.10.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/libpython3.10.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/thinc/backends/cblas.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/thinc/backends/cblas.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/thinc/backends/linalg.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/thinc/backends/linalg.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/thinc/extra/search.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/thinc/extra/search.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/markupsafe/_speedups.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/markupsafe/_speedups.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/HIServices/_HIServices.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/HIServices/_HIServices.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/murmurhash/mrmr.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/murmurhash/mrmr.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/propcache/_helpers_c.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/propcache/_helpers_c.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/rpds/rpds.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/rpds/rpds.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/preshed/maps.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/preshed/maps.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/preshed/bloom.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/tokenizers/tokenizers.abi3.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/preshed/bloom.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/tokenizers/tokenizers.abi3.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/cymem/cymem.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/cymem/cymem.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/hf_xet/hf_xet.abi3.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/hf_xet/hf_xet.abi3.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Security/_Security.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Security/_Security.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/frozenlist/_frozenlist.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/frozenlist/_frozenlist.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/bcrypt/_bcrypt.abi3.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/bcrypt/_bcrypt.abi3.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/google/_upb/_message.abi3.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/google/_upb/_message.abi3.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/_cffi_backend.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/_cffi_backend.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/libssl.3.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/libssl.3.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Foundation/_inlines.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Foundation/_inlines.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Foundation/_Foundation.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Foundation/_Foundation.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/_C.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/_C.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/cryptography/hazmat/bindings/_rust.abi3.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/cryptography/hazmat/bindings/_rust.abi3.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/bin/torch_shm_manager
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/bin/torch_shm_manager
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/bin/protoc-3.21.12.0
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/bin/protoc-3.21.12.0
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/bin/protoc
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/bin/protoc
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/lib/libtorch.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/lib/libtorch.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/lib/libtorch_global_deps.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/lib/libtorch_global_deps.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/lib/libshm.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/lib/libshm.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/lib/libomp.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/lib/libomp.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/lib/libc10.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/lib/libc10.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/espeakng_loader/libespeak-ng.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/espeakng_loader/libespeak-ng.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/espeakng_loader/libespeak-ng.1.52.0.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/espeakng_loader/libespeak-ng.1.52.0.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/websockets/speedups.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/espeakng_loader/libespeak-ng.1.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/websockets/speedups.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/espeakng_loader/libespeak-ng.1.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/_soundfile_data/libsndfile_arm64.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/_soundfile_data/libsndfile_arm64.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/libcrypto.3.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/libcrypto.3.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/wrapt/_wrappers.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Vision/_Vision.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/wrapt/_wrappers.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Vision/_Vision.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/core/_multiarray_tests.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/core/_multiarray_tests.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/__dot__dylibs/libgcc_s.1.1.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/linalg/_umath_linalg.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/regex/_regex.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/linalg/_umath_linalg.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/regex/_regex.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/__dot__dylibs/libgcc_s.1.1.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/fft/_pocketfft_internal.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/fft/_pocketfft_internal.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/__dot__dylibs/libquadmath.0.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/__dot__dylibs/libquadmath.0.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/_sfc64.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/_generator.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/_sfc64.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/_generator.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/mtrand.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/_common.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/mtrand.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/_common.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/core/_multiarray_umath.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/__dot__dylibs/libgfortran.5.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/core/_multiarray_umath.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/__dot__dylibs/libgfortran.5.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/_bounded_integers.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/_bounded_integers.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/bit_generator.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/_philox.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/bit_generator.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/_philox.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/_mt19937.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/_pcg64.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/_mt19937.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/random/_pcg64.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/QtSvg.abi3.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/QtSvg.abi3.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/QtNetwork.abi3.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/QtNetwork.abi3.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/QtCore.abi3.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/QtCore.abi3.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/QtGui.abi3.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/QtGui.abi3.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/sip.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/sip.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/platformthemes/libqxdgdesktopportal.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/QtWidgets.abi3.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/QtWidgets.abi3.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/platformthemes/libqxdgdesktopportal.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/platforms/libqminimal.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/QtXml.abi3.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/platforms/libqminimal.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/QtXml.abi3.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/platforms/libqwebgl.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/platforms/libqoffscreen.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/platforms/libqoffscreen.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/platforms/libqwebgl.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/platforms/libqcocoa.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/platforms/libqcocoa.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/styles/libqmacstyle.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqgif.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/styles/libqmacstyle.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqgif.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/bearer/libqgenericbearer.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqwbmp.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/bearer/libqgenericbearer.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqwbmp.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/iconengines/libqsvgicon.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/iconengines/libqsvgicon.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqwebp.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqwebp.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/lib/libtorch_python.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/lib/libtorch_python.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqmacheif.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqmacheif.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqico.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqico.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/generic/libqtuiotouchplugin.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/generic/libqtuiotouchplugin.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqicns.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqicns.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqjpeg.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqsvg.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqjpeg.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqtga.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqsvg.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqtga.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqmacjp2.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqtiff.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqmacjp2.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/plugins/imageformats/libqtiff.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtWebSockets.framework/Versions/Current/.
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtDBus.framework/Versions/Current/.
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtPrintSupport.framework/Versions/Current/.
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtXml.framework/Versions/Current/.
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtWebSockets.framework/Versions/Current/.
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtDBus.framework/Versions/Current/.
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtXml.framework/Versions/Current/.
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtPrintSupport.framework/Versions/Current/.
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/__dot__dylibs/libopenblas64_.0.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/numpy/__dot__dylibs/libopenblas64_.0.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/charset_normalizer/md.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/charset_normalizer/md.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtGui.framework/Versions/Current/.
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtQmlModels.framework/Versions/Current/.
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtSvg.framework/Versions/Current/.
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/charset_normalizer/md__mypyc.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/charset_normalizer/md__mypyc.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/httptools/parser/parser.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/httptools/parser/parser.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtGui.framework/Versions/Current/.
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtNetwork.framework/Versions/Current/.
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtQmlModels.framework/Versions/Current/.
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtSvg.framework/Versions/Current/.
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/httptools/parser/url_parser.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/httptools/parser/url_parser.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtNetwork.framework/Versions/Current/.
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtQml.framework/Versions/Current/.
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/CoreML/_CoreML.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/multidict/_multidict.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtCore.framework/Versions/Current/.
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/multidict/_multidict.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtQuick.framework/Versions/Current/.
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/CoreML/_CoreML.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtQml.framework/Versions/Current/.
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtCore.framework/Versions/Current/.
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtQuick.framework/Versions/Current/.
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtWidgets.framework/Versions/Current/.
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/PyQt5/Qt5/lib/QtWidgets.framework/Versions/Current/.
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/tiktoken/_tiktoken.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/tiktoken/_tiktoken.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_datetime.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_datetime.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_bz2.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/mmap.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/mmap.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_bz2.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_ctypes.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_dbm.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_ctypes.cpython-310-darwin.so--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_multiprocessing.cpython-310-darwin.so
+
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_scproxy.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_codecs_jp.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_scproxy.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_multiprocessing.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_codecs_iso2022.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_codecs_jp.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_md5.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/math.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_codecs_iso2022.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_dbm.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_md5.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/math.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_sqlite3.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_sqlite3.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_codecs_tw.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_codecs_tw.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_codecs_kr.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_opcode.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_codecs_kr.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_opcode.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_uuid.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_uuid.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_heapq.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_heapq.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_elementtree.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_elementtree.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_json.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/cmath.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_json.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/cmath.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_lsprof.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_codecs_hk.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_lsprof.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_codecs_hk.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/resource.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_random.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/resource.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_random.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_contextvars.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_contextvars.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/audioop.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_queue.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/audioop.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/array.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_queue.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/array.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_blake2.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_struct.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_blake2.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_struct.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/binascii.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/binascii.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_zoneinfo.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_zoneinfo.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_posixshmem.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_posixshmem.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_socket.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_hashlib.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_socket.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_hashlib.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_sha1.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_sha1.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_sha3.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_sha3.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_decimal.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_decimal.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/grp.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/grp.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/fcntl.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/fcntl.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_bisect.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/zlib.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_bisect.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_ssl.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_statistics.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_ssl.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_statistics.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/zlib.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_csv.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/termios.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_csv.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/termios.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_sha256.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_sha256.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_codecs_cn.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/unicodedata.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_codecs_cn.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/unicodedata.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_multibytecodec.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/syslog.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_multibytecodec.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/syslog.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_sha512.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_sha512.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_asyncio.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_asyncio.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_pickle.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_posixsubprocess.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_pickle.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/_posixsubprocess.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/select.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/readline.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/select.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/srsly/ujson/ujson.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/srsly/msgpack/_packer.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/readline.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/srsly/msgpack/_packer.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/srsly/msgpack/_epoch.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/srsly/msgpack/_epoch.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/srsly/msgpack/_unpacker.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/srsly/ujson/ujson.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/pyexpat.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/srsly/msgpack/_unpacker.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/python3__dot__10/lib-dynload/pyexpat.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/safetensors/_safetensors_rust.abi3.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/safetensors/_safetensors_rust.abi3.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/AppKit/_inlines.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/AppKit/_inlines.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/yaml/_yaml.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/uvloop/loop.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/AppKit/_AppKit.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/yaml/_yaml.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/uvloop/loop.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/AppKit/_AppKit.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/CoreGraphics/_inlines.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/CoreGraphics/_sortandmap.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/CoreGraphics/_inlines.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/CoreGraphics/_sortandmap.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/CoreGraphics/_coregraphics.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/QuickLookUI/_QuickLookUI.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/CoreGraphics/_coregraphics.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/libreadline.8.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/QuickLookUI/_QuickLookUI.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/libreadline.8.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/CoreGraphics/_doubleindirect.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/CoreGraphics/_callbacks.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/CoreGraphics/_doubleindirect.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/CoreGraphics/_callbacks.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/PDFKit/_PDFKit.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/PDFKit/_PDFKit.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/QuartzCore/_quartzcore.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/QuartzCore/_quartzcore.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/ImageKit/_imagekit.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/CoreVideo/_CVPixelBuffer.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/ImageKit/_imagekit.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/Quartz/CoreVideo/_CVPixelBuffer.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/tagger.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/sentencizer.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/vectors.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/tagger.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/sentencizer.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/vectors.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/senter.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/dep_parser.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/senter.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/dep_parser.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/morphologizer.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/morphologizer.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_parser_internals/_beam_utils.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_parser_internals/_beam_utils.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_parser_internals/transition_system.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_parser_internals/transition_system.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_parser_internals/arc_eager.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_parser_internals/arc_eager.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_parser_internals/nonproj.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_parser_internals/nonproj.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_parser_internals/_state.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_parser_internals/stateclass.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_parser_internals/_state.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_parser_internals/ner.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_parser_internals/stateclass.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_parser_internals/ner.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/multitask.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/multitask.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/transition_parser.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/transition_parser.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/pipe.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/pipe.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/ner.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/trainable_pipe.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/ner.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_edit_tree_internals/edit_trees.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/trainable_pipe.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/pipeline/_edit_tree_internals/edit_trees.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/attrs.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/kb/kb.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/strings.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/attrs.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/kb/candidate.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/kb/kb.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/strings.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/kb/kb_in_memory.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/kb/candidate.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/kb/kb_in_memory.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/morphology.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/training/alignment_array.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/morphology.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/training/alignment_array.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/training/example.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/training/example.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/training/align.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/training/align.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/training/gold_io.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/training/gold_io.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/matcher/dependencymatcher.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/matcher/dependencymatcher.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokenizer.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/lexeme.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokenizer.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/lexeme.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/matcher/matcher.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/matcher/matcher.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/vocab.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/vocab.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/matcher/levenshtein.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/matcher/phrasematcher.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/matcher/levenshtein.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/matcher/phrasematcher.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/ml/parser_model.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/ml/parser_model.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokens/token.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokens/token.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokens/_retokenize.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/symbols.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokens/graph.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokens/_retokenize.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/symbols.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokens/graph.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokens/span.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokens/span.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokens/span_group.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokens/span_group.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokens/doc.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokens/doc.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokens/morphanalysis.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/tokens/morphanalysis.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/parts_of_speech.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/spacy/parts_of_speech.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/objc/_machsignals.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/objc/_machsignals.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/libz.1.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/libz.1.dylib
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/lxml/html/diff.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/lxml/html/diff.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/lxml/_elementpath.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/lxml/_elementpath.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/lxml/builder.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/objc/_objc.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/lxml/builder.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/objc/_objc.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/lxml/sax.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/lxml/html/_difflib.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/lxml/sax.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/lxml/html/_difflib.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/lxml/objectify.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/lxml/objectify.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/CoreFoundation/_CoreFoundation.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/CoreFoundation/_CoreFoundation.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/CoreFoundation/_inlines.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/CoreFoundation/_inlines.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/yarl/_quoting_c.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/yarl/_quoting_c.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/blis/cy.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/lxml/etree.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/blis/cy.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/lxml/etree.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/blis/py.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/blis/py.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/_ruamel_yaml.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/_ruamel_yaml.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/watchfiles/_rust_notify.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/watchfiles/_rust_notify.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Helpers/AIDESearchCredentials
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Helpers/AIDESearchCredentials
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/pydantic_core/_pydantic_core.cpython-310-darwin.so
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/pydantic_core/_pydantic_core.cpython-310-darwin.so
+--prepared:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/lib/libtorch_cpu.dylib
+--validated:/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app/Contents/Frameworks/torch/lib/libtorch_cpu.dylib
+/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app: valid on disk
+/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app: satisfies its Designated Requirement
+Release preflight passed for 1.5.0 and bundle /Users/milin/2026/AI桌面助手/dist/AI桌面助手.app
+==> [6/6] 运行隔离冒烟测试...
+==> Smoke environment
+    macOS: 26.6.2 (arm64)
+    Source/bundle version: 1.5.0/1.5.0
+==> Checking packaged Apple Vision OCR runtime
+==> Checking packaged English speech runtime
+==> Checking packaged search Keychain bridge (no credential access)
+==> Checking packaged Bash runtime with a fixed temporary read-only fixture
+==> Launching packaged executable with isolated data and logs
+==> Packaged Fluent command card confirmation/output lifecycle passed
+==> Packaged Fluent search card and verified citations passed without network
+==> Packaged audit schema, retention and read-only history passed without tools
+==> Packaged explicit task authorization and model-step cards passed without execution
+==> Packaged app initialized schema 5 and exited cleanly — SMOKE TEST PASSED
+==> Launching packaged app against synthetic schema 0
+==> Packaged schema-0 upgrade, 14 persistent settings and backup verification passed
+==> ✅ /Users/milin/2026/AI桌面助手/dist/AI桌面助手.app
+867M	/Users/milin/2026/AI桌面助手/dist/AI桌面助手.app
+==> 构建完成

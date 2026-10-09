@@ -178,8 +178,12 @@ class RunWorker(QThread):
             return transport.result
         finally:
             timer.stop()
+            timer.timeout.disconnect(transport.limit)
             self._cancel_requested.disconnect(transport.cancel)
             transport.cancel()
+            transport.stream_event.disconnect(self._forward_event)
+            transport.done.disconnect(loop.quit)
+            timer.deleteLater()
             transport.deleteLater()
             QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 

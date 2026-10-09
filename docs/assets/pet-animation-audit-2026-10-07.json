@@ -1,0 +1,38 @@
+{
+  "platform": "offscreen",
+  "sample_step_ms": 50,
+  "pets": {
+    "owl-v2": {
+      "profile": "",
+      "sampled_frames": 270,
+      "clipped_pixels": 0,
+      "idle_choices": 7,
+      "signature": "screen_check",
+      "original_files_unchanged": true
+    },
+    "astra": {
+      "profile": "petdex-astra-v1",
+      "sampled_frames": 270,
+      "clipped_pixels": 0,
+      "idle_choices": 7,
+      "signature": "wing_acknowledge",
+      "original_files_unchanged": true
+    },
+    "boba": {
+      "profile": "petdex-boba-v1",
+      "sampled_frames": 270,
+      "clipped_pixels": 0,
+      "idle_choices": 7,
+      "signature": "tea_salute",
+      "original_files_unchanged": true
+    },
+    "shinchan": {
+      "profile": "petdex-shinchan-v1",
+      "sampled_frames": 270,
+      "clipped_pixels": 0,
+      "idle_choices": 7,
+      "signature": "little_reply",
+      "original_files_unchanged": true
+    }
+  }
+}

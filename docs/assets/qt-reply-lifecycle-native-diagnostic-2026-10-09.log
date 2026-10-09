@@ -1,0 +1,26 @@
+Round 1 0
+
+Round 2 0
+
+Round 3 1
+INVALIDATE_REPLY wrapper=0x1111a3010 data=0xbcfa24700 refcount=1 thread=8513249664
+0   sip.cpython-310-darwin.so           0x0000000105a2a4cc clear_access_func + 144
+1   sip.cpython-310-darwin.so           0x0000000105a288d0 sip_api_instance_destroyed_ex + 252
+2   sip.cpython-310-darwin.so           0x0000000105a287c8 sip_api_instance_destroyed + 24
+3   QtCore.abi3.so                      0x0000000105e352f8 _ZN11PyQtMonitor12on_destroyedEP7QObject + 252
+4   QtCore                              0x000000010676b0c4 _ZN7QObject5eventEP6QEvent + 600
+5   QtWidgets                           0x000000010f75f2cc _ZN19QApplicationPrivate13notify_helperEP7QObjectP6QEvent + 292
+6   QtWidgets                           0x000000010f7607e4 _ZN12QApplication6notifyEP7QObjectP6QEvent + 508
+7   QtWidgets.abi3.so                   0x0000000110aafee8 _ZN15sipQApplication6notifyEP7QObjectP6QEvent + 248
+8   QtCore                              0x00000001067438ac _ZN16QCoreApplication15notifyInternal2EP7QObjectP6QEvent + 292
+9   QtCore                              0x0000000106744a98 _ZN23QCoreApplicationPrivate16sendPostedEventsEP7QObjectiP11QThreadData + 496
+10  QtCore                              0x00000001067a0c64 _ZN20QEventDispatcherUNIX13processEventsE6QFlagsIN10QEventLoop17ProcessEventsFlagEE + 84
+11  libqoffscreen.dylib                 0x0000000111082c10 qt_plugin_instance + 10796
+12  QtCore                              0x0000000106743ef0 _ZN16QCoreApplication13processEventsE6QFlagsIN10QEventLoop17ProcessEventsFlagEEi + 100
+13  QtCore                              0x0000000106792068 _ZN5QTest5qWaitEi + 64
+14  QtTest.abi3.so                      0x0000000105a65468 _ZL16meth_QTest_qWaitP7_objectS0_ + 76
+15  libpython3.10.dylib                 0x0000000100e40418 cfunction_call + 180
+Traceback (most recent call last):
+  File "/private/tmp/aide-network-diagnostic-run.py", line 70, in <module>
+    assert results[0].status == expected, (index, results[0])
+AssertionError: (4, ChatResult(request_id='69fef25cb94845bc88544aaf992717c8', status=<ResultStatus.FAILED: 'failed'>, text='', error='连接意外结束，请重试。', error_code=<ErrorCode.CONNECTION: 'connection'>, turn=None, run_id='a6e9dd4d87864659afa24f760c8eb0a1', step_id='a228fce1cf7d44f6bdda9dc8fcdb6647', conversation_id=0))

@@ -1,0 +1,36 @@
+{
+  "astra": {
+    "original_files_unchanged": true,
+    "patches_loaded": true,
+    "patch_sha256": "4f503a30d5df371df52b188331f7bd4902a2149095d3abfa0a5251076b14a8ab",
+    "total_frames": 76,
+    "appended_frames": 4,
+    "changed_pixels_per_pose": [
+      2287,
+      2577,
+      2641,
+      2428
+    ],
+    "body_outside_limb_unchanged": true,
+    "head_unchanged": true,
+    "feet_unchanged": true,
+    "tea_cup_unchanged": null
+  },
+  "boba": {
+    "original_files_unchanged": true,
+    "patches_loaded": true,
+    "patch_sha256": "3360a6c9ac362ca02f35f678a9725259e72c2560cb9d0b5819a0e675ae2fe3cb",
+    "total_frames": 92,
+    "appended_frames": 4,
+    "changed_pixels_per_pose": [
+      1671,
+      1854,
+      1980,
+      2190
+    ],
+    "body_outside_limb_unchanged": true,
+    "head_unchanged": true,
+    "feet_unchanged": true,
+    "tea_cup_unchanged": true
+  }
+}

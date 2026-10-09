@@ -6,7 +6,7 @@
     "frame_width": 312,
     "frame_height": 330,
     "columns": 8,
-    "frame_count": 11
+    "frame_count": 18
   },
   "anchor": {
     "x": 0.5,
@@ -24,14 +24,16 @@
         "double_blink",
         "slow_blink",
         "observe",
-        "rest_eyes"
+        "rest_eyes",
+        "scan",
+        "screen_check"
       ]
     },
     "hover": {
       "base": "attention",
       "reactions": [
         "greet",
-        "nod",
+        "acknowledge",
         "curious",
         "friendly",
         "hello_twice"
@@ -45,6 +47,18 @@
     },
     "listening": {
       "base": "attention"
+    },
+    "searching": {
+      "base": "focus"
+    },
+    "executing": {
+      "base": "focus"
+    },
+    "waiting": {
+      "base": "attention"
+    },
+    "cancelled": {
+      "base": "rest"
     },
     "success": {
       "base": "success"
@@ -87,78 +101,122 @@
     "blink": {
       "frames": [
         0,
-        1,
+        4,
+        5,
         2,
-        1,
+        5,
+        4,
         0
       ],
       "durations_ms": [
-        50,
+        80,
         35,
-        95,
         35,
-        80
+        85,
+        35,
+        45,
+        100
       ],
       "fps": 12,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "double_blink": {
       "frames": [
         0,
-        1,
+        4,
+        5,
         2,
-        1,
+        5,
+        4,
         0,
-        1,
+        4,
+        5,
         2,
-        1,
+        5,
+        4,
         0
       ],
       "durations_ms": [
-        50,
-        35,
-        85,
-        35,
-        160,
-        35,
         80,
-        35,
-        80
+        30,
+        30,
+        80,
+        30,
+        40,
+        170,
+        30,
+        30,
+        70,
+        30,
+        40,
+        100
       ],
       "fps": 12,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "slow_blink": {
       "frames": [
         0,
-        1,
+        4,
+        5,
         2,
-        1,
+        5,
+        4,
         0
       ],
       "durations_ms": [
         120,
-        100,
+        70,
+        90,
         180,
-        100,
+        80,
+        90,
         160
       ],
       "fps": 12,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "observe": {
       "frames": [
         0,
+        4,
+        5,
+        2,
+        7,
+        6,
         3,
+        6,
+        7,
+        2,
+        5,
+        4,
         0
       ],
       "durations_ms": [
-        100,
+        80,
+        30,
+        30,
+        60,
+        30,
+        40,
         620,
-        140
+        30,
+        30,
+        60,
+        30,
+        40,
+        100
       ],
       "fps": 12,
-      "loop": false
+      "loop": false,
+      "family": "observe",
+      "tempo_variation": 0.08
     },
     "rest_eyes": {
       "frames": [
@@ -172,51 +230,57 @@
         140
       ],
       "fps": 12,
-      "loop": false
+      "loop": false,
+      "family": "focus",
+      "tempo_variation": 0.08
     },
     "greet": {
       "frames": [
-        3,
-        1,
+        0,
+        4,
+        5,
         2,
-        1,
+        7,
+        6,
+        3
+      ],
+      "durations_ms": [
+        80,
+        35,
+        35,
+        100,
+        40,
+        50,
+        260
+      ],
+      "fps": 12,
+      "loop": false,
+      "family": "observe",
+      "tempo_variation": 0.08
+    },
+    "acknowledge": {
+      "frames": [
+        3,
+        6,
+        7,
+        2,
+        7,
+        6,
         3
       ],
       "durations_ms": [
         160,
-        40,
-        100,
-        40,
-        260
-      ],
-      "fps": 12,
-      "loop": false
-    },
-    "nod": {
-      "frames": [
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        3
-      ],
-      "durations_ms": [
-        120,
-        45,
-        45,
-        45,
-        70,
-        45,
-        45,
-        45,
+        65,
+        80,
+        160,
+        75,
+        80,
         240
       ],
       "fps": 12,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "curious": {
       "frames": [
@@ -230,67 +294,87 @@
         360
       ],
       "fps": 12,
-      "loop": false
+      "loop": false,
+      "family": "focus",
+      "tempo_variation": 0.08
     },
     "friendly": {
       "frames": [
         3,
-        1,
+        6,
+        7,
         2,
-        1,
+        7,
+        6,
         3
       ],
       "durations_ms": [
         240,
-        100,
+        70,
+        80,
         180,
-        100,
+        75,
+        80,
         320
       ],
       "fps": 12,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "hello_twice": {
       "frames": [
         3,
+        6,
+        7,
         2,
+        7,
+        6,
         3,
+        6,
+        7,
         2,
+        7,
+        6,
         3
       ],
       "durations_ms": [
         120,
-        90,
+        30,
+        30,
+        80,
+        30,
+        40,
         170,
-        90,
+        30,
+        30,
+        80,
+        30,
+        40,
         260
       ],
       "fps": 12,
-      "loop": false
+      "loop": false,
+      "family": "blink",
+      "tempo_variation": 0.08
     },
     "success": {
       "frames": [
         3,
-        4,
-        5,
         6,
         7,
-        8,
-        9,
-        10,
-        3,
+        2,
+        5,
+        4,
         0
       ],
       "durations_ms": [
-        100,
-        45,
-        45,
-        45,
+        160,
+        60,
         70,
-        45,
-        45,
-        45,
-        240,
+        120,
+        60,
+        70,
         160
       ],
       "fps": 12,
@@ -300,21 +384,951 @@
     "error": {
       "frames": [
         0,
-        1,
+        4,
+        5,
         2,
-        1,
+        5,
+        4,
         0
       ],
       "durations_ms": [
         120,
-        140,
+        80,
+        100,
         200,
-        140,
+        80,
+        100,
         300
       ],
       "fps": 12,
       "loop": false,
       "next_state": "idle"
+    },
+    "screen_check": {
+      "frames": [
+        0,
+        4,
+        5,
+        2,
+        9,
+        8,
+        1,
+        9,
+        2,
+        7,
+        6,
+        3,
+        6,
+        7,
+        2,
+        5,
+        4,
+        0
+      ],
+      "durations_ms": [
+        80,
+        30,
+        30,
+        60,
+        30,
+        40,
+        260,
+        40,
+        60,
+        30,
+        40,
+        260,
+        30,
+        30,
+        60,
+        30,
+        40,
+        100
+      ],
+      "fps": 12,
+      "loop": false,
+      "family": "signature",
+      "weight": 0.3,
+      "cooldown_ms": 45000,
+      "tempo_variation": 0.08
+    },
+    "scan": {
+      "frames": [
+        0,
+        14,
+        10,
+        14,
+        0,
+        15,
+        11,
+        15,
+        0
+      ],
+      "durations_ms": [
+        120,
+        50,
+        280,
+        60,
+        180,
+        50,
+        280,
+        60,
+        120
+      ],
+      "fps": 12,
+      "loop": false,
+      "family": "observe",
+      "tempo_variation": 0.08
+    },
+    "press": {
+      "frames": [
+        5
+      ],
+      "durations_ms": [
+        100
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "grab": {
+      "frames": [
+        3
+      ],
+      "durations_ms": [
+        100
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "click": {
+      "frames": [
+        5,
+        2,
+        7,
+        6,
+        3
+      ],
+      "durations_ms": [
+        35,
+        60,
+        40,
+        50,
+        100
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "release": {
+      "frames": [
+        3,
+        6,
+        7,
+        2,
+        7,
+        6,
+        3
+      ],
+      "durations_ms": [
+        60,
+        35,
+        35,
+        70,
+        40,
+        50,
+        100
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "to_focus_0": {
+      "frames": [
+        0,
+        4,
+        5,
+        2,
+        9,
+        8,
+        1
+      ],
+      "durations_ms": [
+        45,
+        30,
+        30,
+        55,
+        35,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "to_focus_1": {
+      "frames": [
+        3,
+        6,
+        7,
+        2,
+        9,
+        8,
+        1
+      ],
+      "durations_ms": [
+        45,
+        30,
+        30,
+        55,
+        35,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "to_attention_0": {
+      "frames": [
+        0,
+        4,
+        5,
+        2,
+        7,
+        6,
+        3
+      ],
+      "durations_ms": [
+        45,
+        30,
+        30,
+        55,
+        35,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "to_attention_1": {
+      "frames": [
+        1,
+        8,
+        9,
+        2,
+        7,
+        6,
+        3
+      ],
+      "durations_ms": [
+        45,
+        30,
+        30,
+        55,
+        35,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "to_rest_0": {
+      "frames": [
+        3,
+        6,
+        7,
+        2,
+        5,
+        4,
+        0
+      ],
+      "durations_ms": [
+        45,
+        30,
+        30,
+        55,
+        35,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "to_rest_1": {
+      "frames": [
+        1,
+        8,
+        9,
+        2,
+        5,
+        4,
+        0
+      ],
+      "durations_ms": [
+        45,
+        30,
+        30,
+        55,
+        35,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "look_left": {
+      "frames": [
+        3,
+        6,
+        7,
+        2,
+        5,
+        4,
+        0,
+        14,
+        10,
+        14,
+        0,
+        4,
+        5,
+        2,
+        7,
+        6,
+        3
+      ],
+      "durations_ms": [
+        30,
+        25,
+        25,
+        35,
+        25,
+        30,
+        45,
+        45,
+        260,
+        55,
+        55,
+        30,
+        30,
+        55,
+        35,
+        45,
+        100
+      ],
+      "fps": 12,
+      "loop": false,
+      "tempo_variation": 0.08
+    },
+    "from_left": {
+      "frames": [
+        10,
+        14,
+        0
+      ],
+      "durations_ms": [
+        45,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "from_left_to_focus": {
+      "frames": [
+        10,
+        14,
+        0,
+        4,
+        5,
+        2,
+        9,
+        8,
+        1
+      ],
+      "durations_ms": [
+        35,
+        35,
+        45,
+        30,
+        30,
+        55,
+        35,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "from_left_to_attention": {
+      "frames": [
+        10,
+        14,
+        0,
+        4,
+        5,
+        2,
+        7,
+        6,
+        3
+      ],
+      "durations_ms": [
+        35,
+        35,
+        45,
+        30,
+        30,
+        55,
+        35,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "look_right": {
+      "frames": [
+        3,
+        6,
+        7,
+        2,
+        5,
+        4,
+        0,
+        15,
+        11,
+        15,
+        0,
+        4,
+        5,
+        2,
+        7,
+        6,
+        3
+      ],
+      "durations_ms": [
+        30,
+        25,
+        25,
+        35,
+        25,
+        30,
+        45,
+        45,
+        260,
+        55,
+        55,
+        30,
+        30,
+        55,
+        35,
+        45,
+        100
+      ],
+      "fps": 12,
+      "loop": false,
+      "tempo_variation": 0.08
+    },
+    "from_right": {
+      "frames": [
+        11,
+        15,
+        0
+      ],
+      "durations_ms": [
+        45,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "from_right_to_focus": {
+      "frames": [
+        11,
+        15,
+        0,
+        4,
+        5,
+        2,
+        9,
+        8,
+        1
+      ],
+      "durations_ms": [
+        35,
+        35,
+        45,
+        30,
+        30,
+        55,
+        35,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "from_right_to_attention": {
+      "frames": [
+        11,
+        15,
+        0,
+        4,
+        5,
+        2,
+        7,
+        6,
+        3
+      ],
+      "durations_ms": [
+        35,
+        35,
+        45,
+        30,
+        30,
+        55,
+        35,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "look_up": {
+      "frames": [
+        3,
+        6,
+        7,
+        2,
+        5,
+        4,
+        0,
+        16,
+        12,
+        16,
+        0,
+        4,
+        5,
+        2,
+        7,
+        6,
+        3
+      ],
+      "durations_ms": [
+        30,
+        25,
+        25,
+        35,
+        25,
+        30,
+        45,
+        45,
+        260,
+        55,
+        55,
+        30,
+        30,
+        55,
+        35,
+        45,
+        100
+      ],
+      "fps": 12,
+      "loop": false,
+      "tempo_variation": 0.08
+    },
+    "from_up": {
+      "frames": [
+        12,
+        16,
+        0
+      ],
+      "durations_ms": [
+        45,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "from_up_to_focus": {
+      "frames": [
+        12,
+        16,
+        0,
+        4,
+        5,
+        2,
+        9,
+        8,
+        1
+      ],
+      "durations_ms": [
+        35,
+        35,
+        45,
+        30,
+        30,
+        55,
+        35,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "from_up_to_attention": {
+      "frames": [
+        12,
+        16,
+        0,
+        4,
+        5,
+        2,
+        7,
+        6,
+        3
+      ],
+      "durations_ms": [
+        35,
+        35,
+        45,
+        30,
+        30,
+        55,
+        35,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "look_down": {
+      "frames": [
+        3,
+        6,
+        7,
+        2,
+        5,
+        4,
+        0,
+        17,
+        13,
+        17,
+        0,
+        4,
+        5,
+        2,
+        7,
+        6,
+        3
+      ],
+      "durations_ms": [
+        30,
+        25,
+        25,
+        35,
+        25,
+        30,
+        45,
+        45,
+        260,
+        55,
+        55,
+        30,
+        30,
+        55,
+        35,
+        45,
+        100
+      ],
+      "fps": 12,
+      "loop": false,
+      "tempo_variation": 0.08
+    },
+    "from_down": {
+      "frames": [
+        13,
+        17,
+        0
+      ],
+      "durations_ms": [
+        45,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "from_down_to_focus": {
+      "frames": [
+        13,
+        17,
+        0,
+        4,
+        5,
+        2,
+        9,
+        8,
+        1
+      ],
+      "durations_ms": [
+        35,
+        35,
+        45,
+        30,
+        30,
+        55,
+        35,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
+    },
+    "from_down_to_attention": {
+      "frames": [
+        13,
+        17,
+        0,
+        4,
+        5,
+        2,
+        7,
+        6,
+        3
+      ],
+      "durations_ms": [
+        35,
+        35,
+        45,
+        30,
+        30,
+        55,
+        35,
+        45,
+        60
+      ],
+      "fps": 12,
+      "loop": false
     }
+  },
+  "transitions": {
+    "focus": [
+      "to_focus_0",
+      "to_focus_1",
+      "from_left_to_focus",
+      "from_right_to_focus",
+      "from_up_to_focus",
+      "from_down_to_focus"
+    ],
+    "attention": [
+      "to_attention_0",
+      "to_attention_1",
+      "from_left_to_attention",
+      "from_right_to_attention",
+      "from_up_to_attention",
+      "from_down_to_attention"
+    ],
+    "rest": [
+      "to_rest_0",
+      "to_rest_1",
+      "from_left",
+      "from_right",
+      "from_up",
+      "from_down"
+    ],
+    "success": [
+      "to_attention_0",
+      "to_attention_1",
+      "from_left_to_attention",
+      "from_right_to_attention",
+      "from_up_to_attention",
+      "from_down_to_attention"
+    ],
+    "error": [
+      "to_rest_0",
+      "to_rest_1",
+      "from_left",
+      "from_right",
+      "from_up",
+      "from_down"
+    ]
+  },
+  "interactions": {
+    "press": "press",
+    "grab": "grab",
+    "click": "click",
+    "release": "release",
+    "look_left": "look_left",
+    "look_right": "look_right",
+    "look_up": "look_up",
+    "look_down": "look_down",
+    "signature": "screen_check"
+  },
+  "secondary_motion": {
+    "frames": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17
+    ],
+    "duration_ms": 640,
+    "fps": 24,
+    "triggers": {
+      "signature": 1,
+      "release": 0.85,
+      "look_left": 0.7,
+      "look_right": 0.7,
+      "look_up": 0.6,
+      "look_down": 0.6,
+      "observe": 0.4
+    },
+    "parts": [
+      {
+        "name": "left_ear_feathers",
+        "source_mask": [
+          [
+            49,
+            8
+          ],
+          [
+            67,
+            8
+          ],
+          [
+            109,
+            36
+          ],
+          [
+            107,
+            59
+          ],
+          [
+            70,
+            59
+          ],
+          [
+            49,
+            39
+          ]
+        ],
+        "cutout_mask": [
+          [
+            48,
+            7
+          ],
+          [
+            66,
+            7
+          ],
+          [
+            101,
+            33
+          ],
+          [
+            93,
+            44
+          ],
+          [
+            66,
+            44
+          ],
+          [
+            48,
+            36
+          ]
+        ],
+        "bounds": [
+          42,
+          2,
+          75,
+          70
+        ],
+        "pivot": [
+          81,
+          45
+        ],
+        "angle_deg": 6,
+        "delay_ms": 90
+      },
+      {
+        "name": "right_ear_feathers",
+        "source_mask": [
+          [
+            263,
+            8
+          ],
+          [
+            245,
+            8
+          ],
+          [
+            203,
+            36
+          ],
+          [
+            205,
+            59
+          ],
+          [
+            242,
+            59
+          ],
+          [
+            263,
+            39
+          ]
+        ],
+        "cutout_mask": [
+          [
+            264,
+            7
+          ],
+          [
+            246,
+            7
+          ],
+          [
+            211,
+            33
+          ],
+          [
+            219,
+            44
+          ],
+          [
+            246,
+            44
+          ],
+          [
+            264,
+            36
+          ]
+        ],
+        "bounds": [
+          195,
+          2,
+          75,
+          70
+        ],
+        "pivot": [
+          231,
+          45
+        ],
+        "angle_deg": -6,
+        "delay_ms": 130
+      }
+    ]
   }
 }

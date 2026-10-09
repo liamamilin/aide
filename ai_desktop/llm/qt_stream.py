@@ -9,6 +9,7 @@ from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkReques
 from ai_desktop.llm.chat_client import _exception_error
 from ai_desktop.llm.events import ChatResult, ErrorCode, EventKind, RequestContext, ResultStatus, StreamEvent
 from ai_desktop.llm.ollama_protocol import StreamProtocolError, TurnAssembler
+from ai_desktop.services.qt_reply import ReplyUnavailableError, call_reply, dispose_reply
 
 logger = logging.getLogger(__name__)
 
@@ -107,22 +108,28 @@ class QtChatTransport(QObject):
         # Preserve POST semantics and report redirects as HTTP errors.
         request.setAttribute(QNetworkRequest.RedirectPolicyAttribute, QNetworkRequest.ManualRedirectPolicy)
         self._reply = self._manager.post(request, payload)
-        self._reply.uploadProgress.connect(self._upload_progress)
-        self._reply.metaDataChanged.connect(self._headers_received)
-        self._reply.readyRead.connect(self._ready_read)
-        self._reply.finished.connect(self._finished)
+        for signal, slot in (('destroyed', self._reply_destroyed),
+                             ('uploadProgress', self._upload_progress),
+                             ('metaDataChanged', self._headers_received),
+                             ('readyRead', self._ready_read), ('finished', self._finished)):
+            self._call_reply(lambda reply: getattr(reply, signal).connect(slot))
+            if self.result is not None:
+                return
         self._connect_timer.start(max(1, int(self.request.connect_timeout * 1000)))
 
     @pyqtSlot()
     def cancel(self) -> None:
         self._finish(ResultStatus.CANCELLED)
 
+    @pyqtSlot()
     def limit(self) -> None:
         self._finish(ResultStatus.LIMITED, "任务达到活动时间上限。")
 
+    @pyqtSlot()
     def _connection_timeout(self) -> None:
         self._finish(ResultStatus.FAILED, "连接 Ollama 超时，请检查服务地址。", ErrorCode.TIMEOUT)
 
+    @pyqtSlot()
     def _idle_timeout(self) -> None:
         self._finish(ResultStatus.FAILED, "等待 Ollama 响应超时，请重试。", ErrorCode.TIMEOUT)
 
@@ -133,15 +140,35 @@ class QtChatTransport(QObject):
         self._connect_timer.stop()
         self._idle_timer.start(max(1, int(self.request.timeout * 1000)))
 
+    @pyqtSlot("qint64", "qint64")
     def _upload_progress(self, sent: int, total: int) -> None:
         if sent > 0:
             self._activity()
 
+    @pyqtSlot()
+    def _reply_destroyed(self) -> None:
+        # A reply can disappear before a queued callback or cancellation is
+        # delivered. Clear its wrapper before finishing, so cleanup never reads it.
+        self._reply = None
+        if self.result is None:
+            self._finish(ResultStatus.FAILED, "连接意外结束，请重试。", ErrorCode.CONNECTION)
+
+    def _call_reply(self, operation):
+        if self.result is not None or not self._started:
+            return None
+        try:
+            reply, value = call_reply(self._manager, self._reply, operation)
+            if self.result is None:
+                self._reply = reply
+            return value
+        except ReplyUnavailableError:
+            self._reply_destroyed()
+            return None
+
+    @pyqtSlot()
     def _headers_received(self) -> None:
-        if self.result is not None:
-            return
-        status = self._reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)
-        if status is None:
+        status = self._call_reply(lambda reply: reply.attribute(QNetworkRequest.HttpStatusCodeAttribute))
+        if self.result is not None or status is None:
             return
         self._activity()
         if status != 200:
@@ -170,24 +197,30 @@ class QtChatTransport(QObject):
                            exc_info=code == ErrorCode.INTERNAL)
             self._finish(ResultStatus.FAILED, error, code)
 
+    @pyqtSlot()
     def _ready_read(self) -> None:
-        if self.result is not None:
+        if self.result is not None or not self._started:
             return
         self._headers_received()
         if self.result is not None:
             return
-        data = bytes(self._reply.readAll())
+        data = self._call_reply(lambda reply: bytes(reply.readAll()))
+        if self.result is not None:
+            return
         if data:
             self._activity()
             self._consume(data)
 
+    @pyqtSlot()
     def _finished(self) -> None:
-        if self.result is not None:
+        if self.result is not None or not self._started:
             return
         self._ready_read()
         if self.result is not None:
             return
-        error = self._reply.error()
+        error = self._call_reply(lambda reply: reply.error())
+        if self.result is not None:
+            return
         if error == QNetworkReply.NoError:
             self._consume(b"", final=True)
         elif error == QNetworkReply.TimeoutError:
@@ -206,8 +239,13 @@ class QtChatTransport(QObject):
                                  self.request.conversation_id)
         self._connect_timer.stop()
         self._idle_timer.stop()
-        if self._reply is not None:
-            if self._reply.isRunning():
-                self._reply.abort()
-            self._reply.deleteLater()
+        # Tear down Python-backed timer connections while we hold the GIL.
+        # Leaving them for QObject's worker-thread destructor can invert the
+        # Qt connection lock and GIL while the UI updates a widget.
+        self._connect_timer.timeout.disconnect(self._connection_timeout)
+        self._idle_timer.timeout.disconnect(self._idle_timeout)
+        # Drop the reference before abort (which may re-enter finished) and
+        # deferred deletion. A late signal can no longer retain a stale reply.
+        reply, self._reply = self._reply, None
+        dispose_reply(self._manager, reply)
         self.done.emit(self.result)

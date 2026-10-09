@@ -1,0 +1,233 @@
+WORKER PRESSURE ROUND 1
+F                                                                        [100%]
+=================================== FAILURES ===================================
+______________ test_worker_cleanup_does_not_block_widget_updates _______________
+
+    def test_worker_cleanup_does_not_block_widget_updates():
+        # A native lock inversion cannot be interrupted by qtbot's Python timeout.
+        # Keep this race regression in a child with a hard process-level bound.
+        program = textwrap.dedent('''
+            import faulthandler
+            import os
+            import tempfile
+            import time
+            from collections import deque
+            faulthandler.dump_traceback_later(20)
+            with tempfile.TemporaryDirectory(prefix='aide-worker-lifecycle-') as data:
+                os.environ['AIDE_DATA_DIR'] = data
+                from PyQt5.QtCore import QCoreApplication, QEvent, QTimer
+                from PyQt5.QtTest import QTest
+                from PyQt5.QtWidgets import QApplication, QLabel
+                from ai_desktop import config
+                from ai_desktop.llm.events import ResultStatus
+                from ai_desktop.llm.run_worker import RunWorker
+                from ai_desktop.services.search_credentials import SearchCredentials
+                from ai_desktop.services.web_search import ENDPOINTS, SearchSettings
+                from ai_desktop.utils import storage
+                from tests.fake_ollama import FakeOllama
+                app = QApplication([])
+                storage.init_db()
+                model, search = FakeOllama(), FakeOllama()
+                config.OLLAMA_BASE_URL = model.url
+                ENDPOINTS['exa'] = search.url + '/search'
+                SearchCredentials.get = lambda *args, **kwargs: 'test-only-key'
+                labels = deque(maxlen=128)
+                pulses = [0]
+                def update_widgets():
+                    pulses[0] += 1
+                    for _ in range(8):
+                        label = QLabel()
+                        label.setText(str(pulses[0]))
+                        labels.append(label)
+                timer = QTimer()
+                timer.timeout.connect(update_widgets)
+                timer.start(1)
+                try:
+                    for index in range(24):
+                        mode = index % 3
+                        model.enqueue({'message': {'role': 'assistant', 'tool_calls': [
+                            {'function': {'name': 'web_search', 'arguments': {'query': 'Python'}}}
+                        ]}, 'done': True})
+                        if mode == 2:
+                            scenario = search.enqueue({'results': []}, before_headers=True)
+                        else:
+                            search.enqueue({'results': []}, status=401 if mode else 200)
+                            model.enqueue({'message': {'content': 'finished'}, 'done': True})
+                        worker = RunWorker([], '', agent_id='general_assistant',
+                                           think=False, options={'num_ctx': 8192, 'num_predict': 1024},
+                                           tools_admitted=True, search_settings=SearchSettings('exa', 1))
+                        results = []
+                        worker.done.connect(results.append)
+                        worker.start()
+                        deadline = time.monotonic() + 3
+                        while not results and time.monotonic() < deadline:
+                            QTest.qWait(5)
+                            if mode == 2 and scenario.received.is_set():
+                                worker.cancel()
+                        assert len(results) == 1, (index, results)
+                        assert worker.wait(2000), index
+                        expected = ResultStatus.CANCELLED if mode == 2 else ResultStatus.SUCCEEDED
+                        assert results[0].status == expected, (index, results[0])
+                        worker.deleteLater()
+                        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+                    assert pulses[0] > 20, pulses[0]
+                    assert len(search.requests) == 24
+                    assert len(model.requests) == 40
+                finally:
+                    timer.stop()
+                    timer.timeout.disconnect(update_widgets)
+                    model.close()
+                    search.close()
+                    storage.close_db()
+                faulthandler.cancel_dump_traceback_later()
+        ''')
+        result = subprocess.run(
+            [sys.executable, '-X', 'faulthandler', '-c', program],
+            cwd=Path(__file__).resolve().parents[1],
+            env=dict(os.environ, QT_QPA_PLATFORM='offscreen'),
+            capture_output=True, text=True, timeout=25,
+        )
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 62, in <module>
+E         AssertionError: (21, ChatResult(request_id='71c78fd7431f4f2ab6ab7065952ea9d5', status=<ResultStatus.FAILED: 'failed'>, text='', error='连接意外结束，请重试。', error_code=<ErrorCode.CONNECTION: 'connection'>, turn=None, run_id='d3b58dca5ce24b00ad306608393d339b', step_id='d60acf4bdc7742a2965a9e868ecdc8fb', conversation_id=0))
+E
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/Users/milin/.pyenv/versions/3.10.13/bin/python3', '-X', 'faulthandler', '-c', "\nimport fault...one, run_id=\'d3b58dca5ce24b00ad306608393d339b\', step_id=\'d60acf4bdc7742a2965a9e868ecdc8fb\', conversation_id=0))\n').returncode
+
+tests/test_qt_worker_lifecycle.py:93: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_qt_worker_lifecycle.py::test_worker_cleanup_does_not_block_widget_updates
+1 failed in 0.73s
+WORKER PRESSURE ROUND 2
+.                                                                        [100%]
+1 passed in 0.76s
+WORKER PRESSURE ROUND 3
+.                                                                        [100%]
+1 passed in 0.73s
+WORKER PRESSURE ROUND 4
+.                                                                        [100%]
+1 passed in 0.73s
+WORKER PRESSURE ROUND 5
+.                                                                        [100%]
+1 passed in 0.74s
+WORKER PRESSURE ROUND 6
+F                                                                        [100%]
+=================================== FAILURES ===================================
+______________ test_worker_cleanup_does_not_block_widget_updates _______________
+
+    def test_worker_cleanup_does_not_block_widget_updates():
+        # A native lock inversion cannot be interrupted by qtbot's Python timeout.
+        # Keep this race regression in a child with a hard process-level bound.
+        program = textwrap.dedent('''
+            import faulthandler
+            import os
+            import tempfile
+            import time
+            from collections import deque
+            faulthandler.dump_traceback_later(20)
+            with tempfile.TemporaryDirectory(prefix='aide-worker-lifecycle-') as data:
+                os.environ['AIDE_DATA_DIR'] = data
+                from PyQt5.QtCore import QCoreApplication, QEvent, QTimer
+                from PyQt5.QtTest import QTest
+                from PyQt5.QtWidgets import QApplication, QLabel
+                from ai_desktop import config
+                from ai_desktop.llm.events import ResultStatus
+                from ai_desktop.llm.run_worker import RunWorker
+                from ai_desktop.services.search_credentials import SearchCredentials
+                from ai_desktop.services.web_search import ENDPOINTS, SearchSettings
+                from ai_desktop.utils import storage
+                from tests.fake_ollama import FakeOllama
+                app = QApplication([])
+                storage.init_db()
+                model, search = FakeOllama(), FakeOllama()
+                config.OLLAMA_BASE_URL = model.url
+                ENDPOINTS['exa'] = search.url + '/search'
+                SearchCredentials.get = lambda *args, **kwargs: 'test-only-key'
+                labels = deque(maxlen=128)
+                pulses = [0]
+                def update_widgets():
+                    pulses[0] += 1
+                    for _ in range(8):
+                        label = QLabel()
+                        label.setText(str(pulses[0]))
+                        labels.append(label)
+                timer = QTimer()
+                timer.timeout.connect(update_widgets)
+                timer.start(1)
+                try:
+                    for index in range(24):
+                        mode = index % 3
+                        model.enqueue({'message': {'role': 'assistant', 'tool_calls': [
+                            {'function': {'name': 'web_search', 'arguments': {'query': 'Python'}}}
+                        ]}, 'done': True})
+                        if mode == 2:
+                            scenario = search.enqueue({'results': []}, before_headers=True)
+                        else:
+                            search.enqueue({'results': []}, status=401 if mode else 200)
+                            model.enqueue({'message': {'content': 'finished'}, 'done': True})
+                        worker = RunWorker([], '', agent_id='general_assistant',
+                                           think=False, options={'num_ctx': 8192, 'num_predict': 1024},
+                                           tools_admitted=True, search_settings=SearchSettings('exa', 1))
+                        results = []
+                        worker.done.connect(results.append)
+                        worker.start()
+                        deadline = time.monotonic() + 3
+                        while not results and time.monotonic() < deadline:
+                            QTest.qWait(5)
+                            if mode == 2 and scenario.received.is_set():
+                                worker.cancel()
+                        assert len(results) == 1, (index, results)
+                        assert worker.wait(2000), index
+                        expected = ResultStatus.CANCELLED if mode == 2 else ResultStatus.SUCCEEDED
+                        assert results[0].status == expected, (index, results[0])
+                        worker.deleteLater()
+                        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+                    assert pulses[0] > 20, pulses[0]
+                    assert len(search.requests) == 24
+                    assert len(model.requests) == 40
+                finally:
+                    timer.stop()
+                    timer.timeout.disconnect(update_widgets)
+                    model.close()
+                    search.close()
+                    storage.close_db()
+                faulthandler.cancel_dump_traceback_later()
+        ''')
+        result = subprocess.run(
+            [sys.executable, '-X', 'faulthandler', '-c', program],
+            cwd=Path(__file__).resolve().parents[1],
+            env=dict(os.environ, QT_QPA_PLATFORM='offscreen'),
+            capture_output=True, text=True, timeout=25,
+        )
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 62, in <module>
+E         AssertionError: (21, ChatResult(request_id='15f0813d31454ecc9166aa0f9c0bbe2c', status=<ResultStatus.FAILED: 'failed'>, text='', error='连接意外结束，请重试。', error_code=<ErrorCode.CONNECTION: 'connection'>, turn=None, run_id='9312a47903f44f7c98796e46bff3eb1e', step_id='79c9c2d7399a45f98442103a795f3a0d', conversation_id=0))
+E
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/Users/milin/.pyenv/versions/3.10.13/bin/python3', '-X', 'faulthandler', '-c', "\nimport fault...one, run_id=\'9312a47903f44f7c98796e46bff3eb1e\', step_id=\'79c9c2d7399a45f98442103a795f3a0d\', conversation_id=0))\n').returncode
+
+tests/test_qt_worker_lifecycle.py:93: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_qt_worker_lifecycle.py::test_worker_cleanup_does_not_block_widget_updates
+1 failed in 0.71s
+WORKER PRESSURE ROUND 7
+.                                                                        [100%]
+1 passed in 0.75s
+WORKER PRESSURE ROUND 8
+.                                                                        [100%]
+1 passed in 0.74s
+WORKER PRESSURE ROUND 9
+.                                                                        [100%]
+1 passed in 0.77s
+WORKER PRESSURE ROUND 10
+.                                                                        [100%]
+1 passed in 0.73s
+WORKER PRESSURE ROUND 11
+.                                                                        [100%]
+1 passed in 0.73s
+WORKER PRESSURE ROUND 12
+.                                                                        [100%]
+1 passed in 0.76s
+ROUND EXIT CODES [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]

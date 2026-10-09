@@ -1,0 +1,19 @@
+{
+  "modules": {
+    "ai_desktop.main": true,
+    "ai_desktop.ui.float_button": true,
+    "ai_desktop.ui.pet_toolbar": true,
+    "ai_desktop.ui.result_bubble": true,
+    "ai_desktop.ui.pet_profiles": true,
+    "ai_desktop.ui.pet_manifest": true,
+    "ai_desktop.ui.pet_animator": true,
+    "ai_desktop.ui.spritesheet": true
+  },
+  "assets": {
+    "owl-v2/pet.json": true,
+    "owl-v2/spritesheet.png": true,
+    "petdex-profiles/astra.json": true,
+    "petdex-profiles/boba.json": true,
+    "petdex-profiles/shinchan.json": true
+  }
+}

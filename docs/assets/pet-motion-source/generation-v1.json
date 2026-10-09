@@ -1,0 +1,40 @@
+{
+  "tool": "built-in image_gen",
+  "selected_assets": [
+    "astra-wing-generated-v2.png",
+    "boba-paw-generated-v1.png"
+  ],
+  "references": {
+    "astra": {
+      "source": "~/.petdex/pets/astra/spritesheet.webp",
+      "frames": [
+        49,
+        52
+      ]
+    },
+    "boba": {
+      "source": "~/.petdex/pets/boba/spritesheet.webp",
+      "frames": [
+        0,
+        26
+      ]
+    }
+  },
+  "prompts": [
+    {
+      "asset": "astra-wing-generated-v1.png",
+      "selected": false,
+      "prompt": "Use case: identity-preserve. Asset type: one transparent animation sprite strip for an existing desktop pet. Input image 1 is the exact edit target, Astra, a blue and gold owl; image 2 is supporting reference for the fully extended wing pose only. Produce ONE image containing exactly THREE full-body sprites in three equal-width cells in ONE horizontal row, with wide transparent gutters, no text, no labels. All three use the identical head, face, gaze, gold crest, body, cape, feet, scale, baseline and drawing style of input 1. Change ONLY the wing on the viewer's LEFT. Cell 1: the wing has lifted and extended outward by approximately 20 percent of the movement toward input 2. Cell 2: the wing is halfway out, approximately 45 percent. Cell 3: the wing is almost extended, approximately 75 percent. Draw genuinely distinct progressively changing feather silhouettes and wrist angles, with continuous shoulder attachment. Keep the viewer's right wing and all other body parts locked. Preserve the existing smooth painted cartoon line art, blue feathers and gold feather tips. Front-facing stationary mascot, no walking, no bounce, no props, no background, no shadows. True alpha transparency everywhere outside the owl, no pink or magenta edge/matte. Entire sprites uncropped. Intended strip proportions about 3:1; every cell has the same canvas, full owl centered and feet on exactly the same baseline. Identity and continuity matter more than adding detail."
+    },
+    {
+      "asset": "astra-wing-generated-v2.png",
+      "selected": true,
+      "prompt": "Use case: precise-object-edit. Edit target image 1 is a three-sprite strip. Images 2 and 3 are the true animation endpoints from the existing owl and must define the motion range. Correct ONLY the wing on the viewer's LEFT in all three strip cells. The current strip opens the wing MUCH TOO HIGH and FAR. Make the motion tiny, between the lowered wing in image 2 and the modest diagonal wing in image 3. The feather tips must remain BELOW the shoulder in every cell, never horizontal or pointing upward. Cell 1 wing points diagonally DOWN-left, about 47 degrees below horizontal. Cell 2 points DOWN-left about 38 degrees below horizontal. Cell 3 points DOWN-left about 30 degrees below horizontal. Shoulder joint is fixed. Feather tips lift progressively by only a small amount: conceptual original 192x208 coordinates for shoulder (67,124), wingtip cell 1 (19,167), cell 2 (15,160), cell 3 (11,154). Fold feathers progressively, keep the wing compact, do not fan it far out. Keep the entire rest of image 1 pixel-for-pixel unchanged: its three-cell layout, head, face, eyes, right wing, cape, chest, feet, scale, baseline and transparent canvas. No text, no new decoration, no background, true alpha transparency. Preserve original blue and gold outlined cartoon drawing. Match the source endpoint wing thickness and silhouette closely."
+    },
+    {
+      "asset": "boba-paw-generated-v1.png",
+      "selected": true,
+      "prompt": "Use case: identity-preserve. Asset type: ONE transparent three-frame animation sprite strip for the existing Boba desktop pet. Image 1 is the exact character edit target and neutral pose; image 2 is the supporting final raised-paw pose. Produce exactly THREE sprites in THREE equal-width cells in ONE horizontal row, with transparent gutters, no labels or text. Lock the head, face, ears, smile, tea cup, straw, body, tail, feet and baseline to image 1 in all cells. Change ONLY the arm/paw on the viewer's RIGHT: cell 1 just begins raising its paw off the cup; cell 2 paw halfway raised, elbow visibly bending; cell 3 paw nearly at its greeting position as in image 2. Progressive continuous silhouettes, not three duplicates, no extra limbs. Imagine each cell is 192x208: shoulder about (118,127), moving paw centers approximately (130,116), (142,102), (153,89) in cells 1,2,3. Paw remains outside the right cheek and does not change the face. Match image 1's simple low-resolution pixel art, large crisp square pixel clusters, dark brown pixel contour and limited brown/tan palette. No antialiasing, no gradients added, no new texture/detail, no 3D effect. Original tea cup stays exactly vertical, at the same height and held by the other paw. Do not move or rescale the character across cells. Full body uncropped, real transparent alpha outside each sprite, no pink/magenta edge or background. One wide strip, about 3:1 overall proportions."
+    }
+  ]
+}

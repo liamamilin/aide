@@ -1,0 +1,203 @@
+{
+  "platform": "offscreen",
+  "sample_step_ms": 50,
+  "pets": {
+    "owl-v2": {
+      "profile": "",
+      "sampled_frames": 360,
+      "clipped_pixels": 0,
+      "scenarios": [
+        "task",
+        "signature",
+        "pointer",
+        "hover"
+      ],
+      "hover_dwell_ms": 140,
+      "variable_gestures": 16,
+      "idle_choices": 7,
+      "signature": "screen_check",
+      "patches_loaded": false,
+      "total_frames": 18,
+      "secondary_parts": [
+        "left_ear_feathers",
+        "right_ear_feathers"
+      ],
+      "secondary_sampling": {
+        "task": {
+          "secondary_samples": 0,
+          "secondary_poses": 0
+        },
+        "signature": {
+          "secondary_samples": 10,
+          "secondary_poses": 10
+        },
+        "pointer": {
+          "secondary_samples": 9,
+          "secondary_poses": 9
+        },
+        "hover": {
+          "secondary_samples": 9,
+          "secondary_poses": 9
+        }
+      },
+      "hover_trace": {
+        "4": "rest",
+        "5": "rest",
+        "12": "rest",
+        "15": "look_right",
+        "22": "look_right",
+        "29": "look_right",
+        "42": "to_rest_0",
+        "60": "rest",
+        "89": "rest"
+      },
+      "original_files_unchanged": true
+    },
+    "astra": {
+      "profile": "petdex-astra-v1",
+      "sampled_frames": 360,
+      "clipped_pixels": 0,
+      "scenarios": [
+        "task",
+        "signature",
+        "pointer",
+        "hover"
+      ],
+      "hover_dwell_ms": 140,
+      "variable_gestures": 13,
+      "idle_choices": 7,
+      "signature": "wing_acknowledge",
+      "patches_loaded": true,
+      "total_frames": 76,
+      "secondary_parts": [],
+      "secondary_sampling": {
+        "task": {
+          "secondary_samples": 0,
+          "secondary_poses": 0
+        },
+        "signature": {
+          "secondary_samples": 0,
+          "secondary_poses": 0
+        },
+        "pointer": {
+          "secondary_samples": 0,
+          "secondary_poses": 0
+        },
+        "hover": {
+          "secondary_samples": 0,
+          "secondary_poses": 0
+        }
+      },
+      "hover_trace": {
+        "4": "rest",
+        "5": "rest",
+        "12": "rest",
+        "15": "look_right",
+        "22": "look_right",
+        "29": "rest",
+        "42": "rest",
+        "60": "rest",
+        "89": "rest"
+      },
+      "original_files_unchanged": true
+    },
+    "boba": {
+      "profile": "petdex-boba-v1",
+      "sampled_frames": 360,
+      "clipped_pixels": 0,
+      "scenarios": [
+        "task",
+        "signature",
+        "pointer",
+        "hover"
+      ],
+      "hover_dwell_ms": 140,
+      "variable_gestures": 12,
+      "idle_choices": 7,
+      "signature": "tea_salute",
+      "patches_loaded": true,
+      "total_frames": 92,
+      "secondary_parts": [
+        "tail"
+      ],
+      "secondary_sampling": {
+        "task": {
+          "secondary_samples": 0,
+          "secondary_poses": 0
+        },
+        "signature": {
+          "secondary_samples": 14,
+          "secondary_poses": 10
+        },
+        "pointer": {
+          "secondary_samples": 14,
+          "secondary_poses": 10
+        },
+        "hover": {
+          "secondary_samples": 0,
+          "secondary_poses": 0
+        }
+      },
+      "hover_trace": {
+        "4": "rest",
+        "5": "rest",
+        "12": "rest",
+        "15": "hover_friendly_blink",
+        "22": "hover_friendly_blink",
+        "29": "rest",
+        "42": "rest",
+        "60": "rest",
+        "89": "rest"
+      },
+      "original_files_unchanged": true
+    },
+    "shinchan": {
+      "profile": "petdex-shinchan-v1",
+      "sampled_frames": 360,
+      "clipped_pixels": 0,
+      "scenarios": [
+        "task",
+        "signature",
+        "pointer",
+        "hover"
+      ],
+      "hover_dwell_ms": 140,
+      "variable_gestures": 12,
+      "idle_choices": 7,
+      "signature": "little_reply",
+      "patches_loaded": false,
+      "total_frames": 72,
+      "secondary_parts": [],
+      "secondary_sampling": {
+        "task": {
+          "secondary_samples": 0,
+          "secondary_poses": 0
+        },
+        "signature": {
+          "secondary_samples": 0,
+          "secondary_poses": 0
+        },
+        "pointer": {
+          "secondary_samples": 0,
+          "secondary_poses": 0
+        },
+        "hover": {
+          "secondary_samples": 0,
+          "secondary_poses": 0
+        }
+      },
+      "hover_trace": {
+        "4": "rest",
+        "5": "rest",
+        "12": "rest",
+        "15": "hover_quiet_greeting",
+        "22": "hover_quiet_greeting",
+        "29": "hover_quiet_greeting",
+        "42": "rest",
+        "60": "rest",
+        "89": "rest"
+      },
+      "original_files_unchanged": true
+    }
+  }
+}

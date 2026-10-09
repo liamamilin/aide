@@ -100,6 +100,9 @@ def test_cancel_with_already_deleted_reply_emits_once_and_releases_waiter(qtbot,
     job.finished.connect(finished.append)
     job.start()
     qtbot.waitUntil(scenario.received.is_set)
+    # Model a delayed destroyed notification; cancellation must also handle
+    # a native reply that has already gone before its callback arrives.
+    job._reply.destroyed.disconnect(job._reply_destroyed)
     sip.delete(job._manager)  # Native ownership destroys its network reply.
     assert sip.isdeleted(job._reply)
     with qtbot.waitSignal(job.finished, timeout=500):
