@@ -11,6 +11,7 @@ from ai_desktop.services.audit_store import RETENTION_SECONDS
 from ai_desktop.services.command_confirmation import CommandConfirmation
 from ai_desktop.services.web_search import normalized_sources as search_sources
 from ai_desktop.services.web_search import safe_source_url
+from ai_desktop.ui import native_tool_view
 from ai_desktop.ui.fluent import (
     BodyLabel,
     CaptionLabel,
@@ -106,11 +107,14 @@ class ToolCard(SimpleCardWidget):
         layout.addWidget(self.directory)
         self.command_view = PlainTextEdit(self)
         self.command_view.setReadOnly(True)
-        self.command_view.setPlainText(self.command or str(args.get('query', '') or args.get('path', '')
-                                                 or args.get('title', '') or args.get('app', '')))
-        self.command_view.setAccessibleName('完整命令或搜索参数')
+        self.native = event.tool_name in native_tool_view.NATIVE_TOOLS
+        self.command_view.setPlainText(
+            native_tool_view.describe_call(event.tool_name, args) if self.native else
+            self.command or str(args.get('query', '') or args.get('path', '') or args.get('title', '')
+                                or args.get('app', '')))
+        self.command_view.setAccessibleName('本机操作说明' if self.native else '完整命令或搜索参数')
         self.command_view.setMinimumWidth(0)
-        self.command_view.setFixedHeight(88)
+        self.command_view.setFixedHeight(52 if self.native else 88)
         layout.addWidget(self.command_view)
         self.reason = plain_label(BodyLabel, '', self)
         self.reason.hide()
@@ -118,6 +122,12 @@ class ToolCard(SimpleCardWidget):
         self.countdown = plain_label(CaptionLabel, '', self)
         self.countdown.hide()
         layout.addWidget(self.countdown)
+        self.permission_button = TransparentPushButton('打开系统设置授权', self)
+        self.permission_button.setAccessibleName('打开系统设置中的对应权限页面')
+        self.permission_button.hide()
+        self._permission_pane = None
+        self.permission_button.clicked.connect(self._open_permission_pane)
+        layout.addWidget(self.permission_button, alignment=Qt.AlignLeft)
         self.details_button = TransparentPushButton('查看输出', self)
         self.details_button.setAccessibleName('展开或收起工具输出')
         self.details_button.hide()
@@ -296,7 +306,19 @@ class ToolCard(SimpleCardWidget):
         else:
             self.summary.setText('工具结果摘录')
             self.output_view.setPlainText(event.output.text)
+            if self.native:
+                self.status.setText(native_tool_view.describe_result(
+                    self.tool_name, event.output.text, event.output.error))
+                if event.output.error:
+                    self.reason.setText(event.output.text)
+                    self.reason.show()
+                    self._permission_pane = native_tool_view.permission_pane(event.output.text)
+                    self.permission_button.setVisible(self._permission_pane is not None)
         self.details_button.show()
+
+    def _open_permission_pane(self):
+        if self._permission_pane:
+            QDesktopServices.openUrl(QUrl(self._permission_pane))
 
     def _open_source(self, url):
         if not self.purge_expired_payload():

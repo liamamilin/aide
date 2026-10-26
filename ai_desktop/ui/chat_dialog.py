@@ -73,6 +73,9 @@ from ai_desktop.utils.window_state import (
 logger = logging.getLogger(__name__)
 
 
+EXAMPLE_PROMPTS = ("打开备忘录", "找一下我上周写的文档", "提醒事项目前有哪些", "记一下：")
+
+
 class _UserMessageBubble(QWidget):
     """Own hover feedback without inspecting a QObject tree during destruction."""
 
@@ -769,7 +772,29 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         shortcuts.setAlignment(Qt.AlignCenter)
         shortcuts.setWordWrap(True)
         layout.addWidget(shortcuts)
+
+        if config.DESKTOP_TOOLS_ENABLED and config.CHAT_TOOLS_ENABLED:
+            layout.addSpacing(14)
+            hint = CaptionLabel("试试对它说（点一下填入输入框，不会自动发送）")
+            hint.setAlignment(Qt.AlignCenter)
+            hint.setWordWrap(True)
+            layout.addWidget(hint)
+            self._example_buttons = []
+            for example in EXAMPLE_PROMPTS:
+                button = TransparentPushButton(example)
+                button.setAccessibleName(f"示例：{example}")
+                button.setAutoDefault(False)
+                button.clicked.connect(lambda checked=False, text=example: self._use_example(text))
+                layout.addWidget(button, alignment=Qt.AlignCenter)
+                self._example_buttons.append(button)
         return panel
+
+    def _use_example(self, text: str) -> None:
+        self.set_input_text(text)
+        self._input.setFocus()
+        cursor = self._input.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        self._input.setTextCursor(cursor)
 
     def _update_responsive_layout(self) -> None:
         """Keep wide windows readable while preserving the compact 400px layout."""
@@ -1810,8 +1835,9 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
             parts = ['工具模型：' + (model or self._active_model)]
             if authorization.execution:
                 from ai_desktop.services.execution_context import BashPolicy
-                mode = '全部确认' if authorization.execution.policy == BashPolicy.CONFIRM_ALL else '只读允许列表自动'
-                parts += [Path(authorization.execution.workspace).name or '/', mode]
+                mode = ('每条命令都需确认' if authorization.execution.policy == BashPolicy.CONFIRM_ALL
+                        else '只读命令自动执行，其余需确认')
+                parts += ['工作区 ' + (Path(authorization.execution.workspace).name or '/'), mode]
             if authorization.search:
                 parts.append({'parallel': 'Parallel', 'exa': 'Exa'}[authorization.search.provider])
             if checking:

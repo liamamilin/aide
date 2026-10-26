@@ -301,9 +301,9 @@ def test_empty_answer_hidden_until_content_or_error(controller):
 def test_desktop_tool_cards_are_not_labelled_as_web_search(qtbot):
     from ai_desktop.ui.tool_card import StrongBodyLabel
     for name, args, title, text in (
-            ('find_apps', {'query': '备忘录'}, '查找应用', '备忘录'),
-            ('find_files', {'query': '方案'}, '查找文件', '方案'),
-            ('open_path', {'path': '/Applications/Safari.app'}, '打开项目', '/Applications/Safari.app')):
+            ('find_apps', {'query': '备忘录'}, '查找应用', '查找应用：备忘录'),
+            ('find_files', {'query': '方案'}, '查找文件', '查找文件：方案'),
+            ('open_path', {'path': '/Applications/Safari.app'}, '打开项目', '打开：Safari.app')):
         event = RunEvent('run', 1, 'step', 'request', 3, RunEventKind.TOOL_STARTED, 'call',
                          tool_name=name, arguments_json=json.dumps(args))
         card = ToolCard(event, '/tmp/workspace')

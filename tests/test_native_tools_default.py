@@ -156,3 +156,12 @@ def test_tool_row_is_hidden_when_off_and_settings_live_in_the_menu(qtbot, contro
     with qtbot.waitSignal(dialog.task_settings_requested):
         dialog._tools_action.trigger()
     assert "本机操作" in dialog._task_btn.toolTip()
+
+
+def test_empty_state_offers_examples_that_fill_the_input_without_sending(qtbot, controller, ollama_server):
+    use_agent(controller, "general_assistant")
+    dialog = controller._dialog
+    assert [button.text() for button in dialog._example_buttons][0] == "打开备忘录"
+    dialog._example_buttons[1].click()
+    assert dialog._input.toPlainText() == "找一下我上周写的文档" and ollama_server.requests == []
+    assert dialog._input.hasFocus() or dialog._input.textCursor().atEnd()
