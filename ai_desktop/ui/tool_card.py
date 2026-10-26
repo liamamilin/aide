@@ -38,7 +38,7 @@ _TITLES = {'bash': '命令执行', 'web_search': '联网搜索', 'find_apps': '�
 _START_STATUS = {'bash': '检查命令', 'web_search': '正在搜索', 'find_apps': '正在查找',
                  'find_files': '正在查找', 'open_path': '正在打开', 'list_windows': '正在查看',
                  'arrange_window': '正在调整', 'create_note': '正在创建', 'create_reminder': '正在创建',
-                 'list_notes': '正在查看', 'list_reminders': '正在查看', 'delete_note': '正在核对'}
+                 'list_notes': '正在查看', 'list_reminders': '正在读取（可能需要半分钟）', 'delete_note': '正在核对'}
 _SEARCH_ERRORS = {
     'cancelled': '已停止', 'timeout': '搜索超时', 'active_limit': '任务超时',
     'authentication': '密钥或权限无效', 'quota': '账户额度不足', 'rate_limit': '请求过多',

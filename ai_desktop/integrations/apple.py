@@ -42,19 +42,23 @@ _LIST_NOTES_SCRIPT = """on run argv
     return out
 end run"""
 
+# `reminders whose completed is false` takes minutes on large lists; three bulk reads per list are faster.
 _LIST_REMINDERS_SCRIPT = """on run argv
-    tell application "Reminders"
-        set pending to (reminders whose completed is false)
-        set reminderIds to id of pending
-        set reminderNames to name of pending
-    end tell
     set fieldSep to character id 31
     set recordSep to character id 30
     set out to ""
-    repeat with i from 1 to (count of reminderIds)
-        if i > 2000 then exit repeat
-        set out to out & (item i of reminderIds) & fieldSep & (item i of reminderNames) & recordSep
-    end repeat
+    tell application "Reminders"
+        repeat with theList in lists
+            set theIds to id of reminders of theList
+            set theNames to name of reminders of theList
+            set theDone to completed of reminders of theList
+            repeat with i from 1 to (count of theIds)
+                if not (item i of theDone) then
+                    set out to out & (item i of theIds) & fieldSep & (item i of theNames) & recordSep
+                end if
+            end repeat
+        end repeat
+    end tell
     return out
 end run"""
 
@@ -67,6 +71,8 @@ _DELETE_NOTE_SCRIPT = """on run argv
 end run"""
 
 MAX_LISTED = 50
+NOTES_TIMEOUT = 60.0
+REMINDERS_TIMEOUT = 120.0  # Reminders scripting needs ~10 s per property per 600 items
 NOTE_ID_PREFIX = "x-coredata://"
 
 
@@ -105,7 +111,7 @@ class NoteInfo:
 def list_notes(*, runner: Runner = run_command) -> list[NoteInfo]:
     """Every note's id, title and age, newest first. Bodies are never read."""
     found = []
-    for record in run_script(_LIST_NOTES_SCRIPT, runner=runner).split(_RECORD_SEP):
+    for record in run_script(_LIST_NOTES_SCRIPT, runner=runner, timeout=NOTES_TIMEOUT).split(_RECORD_SEP):
         fields = record.strip("\n").split(_FIELD_SEP)
         if len(fields) != 3 or not fields[0].startswith(NOTE_ID_PREFIX):
             continue
@@ -126,7 +132,7 @@ class ReminderInfo:
 def list_reminders(*, runner: Runner = run_command) -> list[ReminderInfo]:
     """Every uncompleted reminder's id and title; notes and due dates are not read."""
     found = []
-    for record in run_script(_LIST_REMINDERS_SCRIPT, runner=runner, timeout=30.0).split(_RECORD_SEP):
+    for record in run_script(_LIST_REMINDERS_SCRIPT, runner=runner, timeout=REMINDERS_TIMEOUT).split(_RECORD_SEP):
         fields = record.strip("\n").split(_FIELD_SEP)
         if len(fields) == 2 and fields[0]:
             found.append(ReminderInfo(fields[0], fields[1]))
