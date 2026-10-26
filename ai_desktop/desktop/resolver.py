@@ -1,6 +1,7 @@
 """Turn a typed phrase into ranked local candidates without involving a model."""
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from ai_desktop.desktop.runner import Runner, run_command
 from ai_desktop.desktop.search import Candidate, find_apps, find_files
@@ -13,7 +14,7 @@ _SENTENCE_MARKS = re.compile(r"[，。！？；：,.!?;:\n]")
 _REQUEST_WORDS = re.compile(r"[把帮请让给吗呢么]|怎么|如何|什么|为什么|整理|总结|翻译|解释")
 MAX_SHORT_WORDS = 4
 _KIND_ORDER = {"app": 0, "folder": 1, "file": 2}
-MAX_ACTION_REQUEST = 60
+MAX_ACTION_REQUEST = 120
 _OPEN_VERBS = re.compile(r"^(请|帮我|麻烦)?\s*(打开|启动)|^(please\s+)?(open|launch)\b", re.IGNORECASE)
 _FIND_VERBS = re.compile(r"^(请|帮我|麻烦)?\s*(找一下|找到|找出|找|查找|定位)|^(please\s+)?(find|locate|reveal)\b",
                          re.IGNORECASE)
@@ -23,6 +24,8 @@ _CAPTURE_VERBS = re.compile(r"^(请|帮我|麻烦)?\s*(记一下|记下|记录|�
 _CAPTURE_OBJECTS = re.compile(r"笔记|备忘|提醒|待办|想法|\bnote\b|\breminder\b|remind me", re.IGNORECASE)
 _WINDOW_WORDS = re.compile(r"窗口|\bwindow", re.IGNORECASE)
 _LAYOUT_WORDS = re.compile(r"并排|摆放|排列|最大化|左半|右半|居中|side by side|maximi[sz]e", re.IGNORECASE)
+# Things only this Mac has, so a mention is enough even without an opening verb.
+_LOCAL_THINGS = re.compile(r"备忘录|笔记本|提醒事项|待办|文件夹|窗口|我的文件|我的文档|下载目录|桌面上", re.IGNORECASE)
 _WEB_WORDS = re.compile(r"网上|网页|网络|联网|在线|搜索引擎|百度|google|bing|online|web", re.IGNORECASE)
 
 
@@ -45,11 +48,14 @@ def resolve(query: str, *, runner: Runner = run_command, limit: int = 8) -> list
     if not is_short_query(query):
         return []
     found: list[Candidate] = []
-    for finder in (find_apps, find_files):
-        try:
-            found.extend(finder(query, runner=runner, limit=limit))
-        except (OSError, ValueError):
-            logger.warning("local lookup failed", exc_info=True)
+    # The two Spotlight queries are independent; run them together so a slow machine pays once.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(finder, query, runner=runner, limit=limit) for finder in (find_apps, find_files)]
+        for future in futures:
+            try:
+                found.extend(future.result())
+            except (OSError, ValueError) as exc:
+                logger.warning("local lookup failed: %s", exc)
     seen, unique = set(), []
     for candidate in sorted(found, key=lambda item: _rank(query, item)):
         if candidate.path not in seen:
@@ -68,5 +74,7 @@ def wants_desktop_action(text: str) -> bool:
     if _CAPTURE_VERBS.search(text) and _CAPTURE_OBJECTS.search(text):
         return True
     if _WINDOW_WORDS.search(text) and _LAYOUT_WORDS.search(text):
+        return True
+    if _LOCAL_THINGS.search(text):
         return True
     return bool(_FIND_VERBS.search(text) and _LOCAL_OBJECTS.search(text))

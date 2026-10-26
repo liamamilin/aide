@@ -114,7 +114,7 @@ def test_lookup_clears_immediately_for_sentences_and_drops_stale_answers(qtbot):
     assert seen == [("把文件整理一下", 0)]
     lookup.request("notes")
     lookup._on_finished(0, "old", [NOTES])
-    assert seen[-1] == ("把文件整理一下", 0)
+    assert all(text != "old" for text, _ in seen)  # a stale answer is never delivered
     qtbot.waitUntil(lambda: ("notes", 1) in seen, timeout=2000)
 
 

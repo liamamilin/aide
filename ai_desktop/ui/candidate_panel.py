@@ -29,6 +29,7 @@ class CandidateLookup(QObject):
         self._seq = 0
         self._pending = ""
         self._closed = False
+        self._inflight = False
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.setInterval(debounce_ms)
@@ -57,6 +58,9 @@ class CandidateLookup(QObject):
         if not self._run_async:
             self._on_finished(seq, text, self._lookup(text))
             return
+        if self._inflight:
+            return  # the running lookup restarts for the latest text when it finishes
+        self._inflight = True
         threading.Thread(target=self._work, args=(seq, text), daemon=True).start()
 
     def _lookup(self, text):
@@ -74,8 +78,13 @@ class CandidateLookup(QObject):
             pass  # the dialog was destroyed while the lookup was running
 
     def _on_finished(self, seq: int, text: str, candidates) -> None:
-        if not self._closed and seq == self._seq:
+        self._inflight = False
+        if self._closed:
+            return
+        if seq == self._seq:
             self.resolved.emit(seq, text, candidates)
+        elif resolver.is_short_query(self._pending):
+            self._start()  # typing moved on while this lookup ran
 
 
 class CandidatePanel(SimpleCardWidget):

@@ -27,16 +27,18 @@ def use_agent(controller, agent_id):
     controller._sync_action_context()
 
 
-@pytest.mark.parametrize("text", ["打开备忘录", "帮我打开微信", "启动 Safari", "open Notes", "找一下我的产品方案文档",
-                                  "查找下载文件夹里的 PDF", "Find the report app", "帮我记一下刚才的想法到笔记",
-                                  "提醒我明天交周报，创建提醒", "把两个窗口并排放好", "Put the windows side by side"])
+@pytest.mark.parametrize("text", [
+    "打开备忘录", "帮我打开微信", "启动 Safari", "open Notes", "找一下我的产品方案文档",
+    "查找下载文件夹里的 PDF", "Find the report app", "帮我记一下刚才的想法到笔记",
+    "提醒我明天交周报，创建提醒", "帮我看下备忘录有多少条", "下载文件夹里有什么",
+    "把两个窗口并排放好", "Put the windows side by side"])
 def test_requests_that_open_or_locate_things_are_recognised(text):
     assert wants_desktop_action(text)
 
 
 @pytest.mark.parametrize("text", ["", "你好", "解释一下这段代码", "找个笑话", "上网找一下最新新闻",
                                   "在网上搜索 Python 文档", "把这段话翻译成英文", "打开\n第二行",
-                                  "打开" + "很长" * 40])
+                                  "打开" + "很长" * 70])
 def test_other_messages_are_not(text):
     assert not wants_desktop_action(text)
 

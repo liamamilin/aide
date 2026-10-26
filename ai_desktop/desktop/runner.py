@@ -8,8 +8,11 @@ OSASCRIPT = "/usr/bin/osascript"
 
 Runner = Callable[[Sequence[str]], str]
 
+# Spotlight can take several seconds when the machine is busy (for example while a model is running).
+QUERY_TIMEOUT = 20.0
 
-def run_command(argv: Sequence[str], timeout: float = 5.0) -> str:
+
+def run_command(argv: Sequence[str], timeout: float = QUERY_TIMEOUT) -> str:
     """Return stdout; raise OSError for a failing or timed-out command."""
     try:
         result = subprocess.run(list(argv), capture_output=True, text=True, timeout=timeout, check=False)
