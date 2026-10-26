@@ -21,6 +21,7 @@ from ai_desktop.llm.run_types import (
     RunEventKind,
     ToolExecutionContext,
     ToolOutput,
+    counts_as_search,
     validate_tool_arguments,
 )
 
@@ -285,7 +286,7 @@ class RunLoop:
             return self._finish(ResultStatus.LIMITED, text=turn.content, turn=turn,
                                 error="达到模型轮次上限，未执行后续工具。")
         # Never execute only a prefix when the returned batch exceeds a budget.
-        searches = sum(call.name == "web_search" for call in turn.tool_calls)
+        searches = sum(counts_as_search(call.name) for call in turn.tool_calls)
         if self.tool_calls + len(turn.tool_calls) > self.context.limits.max_tool_calls:
             return self._finish(ResultStatus.LIMITED, text=turn.content, turn=turn, error="达到工具调用上限。")
         if self.search_calls + searches > self.context.limits.max_search_calls:
@@ -295,7 +296,7 @@ class RunLoop:
             if interrupted is not None:
                 return interrupted
             self.tool_calls += 1
-            self.search_calls += call.name == "web_search"
+            self.search_calls += counts_as_search(call.name)
             self._emit(RunEventKind.TOOL_STARTED, call=call)
             spec = registry.get(call.name)
             try:
