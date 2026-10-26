@@ -9,7 +9,7 @@ from tests.test_task_entry import answer, bounded_task_fixture, controller, disc
 __all__ = ["bounded_task_fixture", "controller"]  # fixtures re-exported for pytest
 
 NATIVE = ["find_apps", "find_files", "open_path", "list_windows", "arrange_window", "create_note",
-          "create_reminder"]
+          "create_reminder", "list_notes", "delete_note"]
 
 
 @pytest.fixture(autouse=True)

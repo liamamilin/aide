@@ -76,11 +76,20 @@ def test_windows_need_both_apps_in_opposite_halves():
     assert run("s5_windows", *same)[0]
 
 
-def test_unsupported_requests_must_not_be_faked():
-    assert run("f2_cancel_note", say("我目前无法修改或删除已有笔记。"))[0] == ""
+def test_notes_questions_need_real_tool_results():
+    latest = "x-coredata://AAA/ICNote/p41"
+    listing = use(call("list_notes"))
+    assert run("f1_count_notes", listing, say("共有 12 条备忘录。"))[0] == ""
+    assert "12" in run("f1_count_notes", listing, say("有几十条。"))[0]
+    assert "list_notes" in run("f1_count_notes", say("您的备忘录共有 12 条。"))[0]
+    assert run("f2_cancel_note", listing, use(call("delete_note", id=latest)), say("已删除"))[0] == ""
+    wrong = use(call("delete_note", id="x-coredata://AAA/ICNote/p5"))
+    assert "错误" in run("f2_cancel_note", listing, wrong, say("已删除"))[0]
+    assert "list_notes" in run("f2_cancel_note", use(call("delete_note", id=latest)), say("已删除"))[0]
     assert run("f2_cancel_note", say("已为您取消了那条备忘录。"))[0]
-    assert run("f1_count_notes", say("我还不能读取备忘录。"))[0] == ""
-    assert run("f1_count_notes", say("您的备忘录共有 12 条。"))[0]
+
+
+def test_unsupported_file_organizing_must_not_be_faked():
     assert run("s4_organize", say("目前不能移动文件。"))[0] == ""
     assert run("s4_organize", say("已整理完成。"))[0]
 

@@ -72,7 +72,7 @@ def test_worker_grants_desktop_tools_only_in_admitted_runs(qtbot, monkeypatch):
     admitted = RunWorker(messages, "sys", "m", tools_admitted=True, **kwargs)
     assert [t.name for t in admitted.context.tools] == [
         "web_search", "find_apps", "find_files", "open_path", "list_windows", "arrange_window", "create_note",
-        "create_reminder"]
+        "create_reminder", "list_notes", "delete_note"]
     assert "find_apps" in admitted.request.system_prompt
     plain = RunWorker(messages, "sys", "m", agent_id="general_assistant")
     assert plain.context.tools == ()
@@ -135,3 +135,87 @@ def test_arrange_window_sends_app_and_layout_as_arguments():
     runner = Scripts()
     assert not DesktopToolbox(runner).arrange_window({"app": "Safari", "layout": "left_half"}, _context()).error
     assert runner.calls[0][-2:] == ["Safari", "left_half"]
+
+
+SEP, REC = "\x1f", "\x1e"
+NOTE_A, NOTE_B = "x-coredata://AAA/ICNote/p1", "x-coredata://AAA/ICNote/p2"
+
+
+def _listing():
+    return (f"{NOTE_B}{SEP}较旧的想法{SEP}86400.0{REC}\n{NOTE_A}{SEP}录制课程{SEP}30{REC}\n"
+            f"junk line{REC}bad{SEP}x{SEP}1{REC}")
+
+
+def test_list_notes_counts_all_and_returns_newest_first_without_bodies():
+    runner = Scripts(_listing())
+    out = DesktopToolbox(runner).list_notes({}, _context())
+    record = json.loads(out.text)
+    assert record["total_notes"] == 2 and record["matching"] == 2
+    assert [n["title"] for n in record["notes"]] == ["录制课程", "较旧的想法"]
+    assert record["notes"][0] == {"id": NOTE_A, "title": "录制课程", "age_seconds": 30}
+    assert "body" not in runner.calls[0][2].split("every note")[0]
+
+
+def test_list_notes_filters_and_limits_but_keeps_the_total():
+    toolbox = DesktopToolbox(Scripts(_listing()))
+    record = json.loads(toolbox.list_notes({"query": "课程", "limit": 1}, _context()).text)
+    assert record["total_notes"] == 2 and record["matching"] == 1 and len(record["notes"]) == 1
+    assert toolbox.list_notes({}, _context(True)).error
+
+
+def test_create_note_returns_the_id_for_later_reference():
+    out = DesktopToolbox(Scripts(NOTE_A + "\n")).create_note({"title": "录制课程"}, _context())
+    assert json.loads(out.text) == {"result": "已在备忘录中新建笔记。", "id": NOTE_A, "title": "录制课程"}
+
+
+class Approver:
+    """A broker whose 'UI' answers immediately and remembers what the user was shown."""
+
+    def __init__(self, approve):
+        from ai_desktop.services.command_confirmation import ConfirmationBroker
+        self.shown = []
+        self.broker = ConfirmationBroker(self._ask)
+        self.approve = approve
+
+    def _ask(self, request):
+        self.shown.append(request)
+        threading.Thread(target=lambda: self.broker.respond(request, self.approve)).start()
+
+
+def _action_context():
+    request = SimpleNamespace(run_id="r", step_id="s", request_id="q", conversation_id=1)
+    return SimpleNamespace(cancelled=threading.Event(), request=request, on_state=None, budget=None,
+                           call=SimpleNamespace(local_call_id="c1"))
+
+
+class TitleThenAck(Scripts):
+    def __call__(self, argv):
+        self.calls.append(list(argv))
+        return "录制课程\n" if "return name of note id" in argv[2] else ""
+
+
+def test_delete_note_shows_the_title_and_deletes_only_after_approval():
+    approver, runner = Approver(True), TitleThenAck()
+    out = DesktopToolbox(runner, approver.broker).delete_note({"id": NOTE_A}, _action_context())
+    assert not out.error and "最近删除" in out.text
+    assert [r.command for r in approver.shown] == ["删除备忘录：录制课程"]
+    assert "delete note id" in runner.calls[-1][2] and runner.calls[-1][-1] == NOTE_A
+
+
+def test_delete_note_does_nothing_when_denied():
+    approver, runner = Approver(False), TitleThenAck()
+    out = DesktopToolbox(runner, approver.broker).delete_note({"id": NOTE_A}, _action_context())
+    assert out.error and "拒绝" in out.text
+    assert not any("delete note id" in call[2] for call in runner.calls)
+
+
+def test_destructive_tools_fail_closed_without_a_confirmation_channel():
+    runner = TitleThenAck()
+    out = DesktopToolbox(runner).executors()["delete_note"]({"id": NOTE_A}, _action_context())
+    assert out.error and runner.calls == []
+
+
+def test_delete_note_rejects_a_guessed_id_before_touching_notes():
+    runner = TitleThenAck()
+    out = DesktopToolbox(runner, Approver(True).broker).delete_note({"id": "not-an-id"}, _action_context())
+    assert out.error and runner.calls == []

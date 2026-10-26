@@ -60,7 +60,7 @@ class RunWorker(QThread):
         tools = ()
         allowed = tools_admitted and chat_tools_eligible(self.request.agent_id, self.request.origin)
         self.confirmations = confirmations
-        if allowed and execution is not None and confirmations is None:
+        if allowed and confirmations is None and (execution is not None or native_tools):
             self.confirmations = ConfirmationBroker(self.confirmation_requested.emit)
         if allowed and execution is not None and self.confirmations is not None:
             tools = (ToolSpec.create('bash', BashExecutor(self.confirmations)),)
@@ -70,7 +70,7 @@ class RunWorker(QThread):
             tools += (ToolSpec.create('web_search', self.search_executor),)
         if allowed and (tools or native_tools) and config.DESKTOP_TOOLS_ENABLED:
             tools += tuple(ToolSpec.create(name, execute)
-                           for name, execute in DesktopToolbox().executors().items())
+                           for name, execute in DesktopToolbox(confirmations=self.confirmations).executors().items())
         self.context = RunContext.create(self.request, tools=tools, tools_admitted=tools_admitted,
                                          limits=RunLimits.from_config() if tools_admitted else None,
                                          execution=execution, search_settings=search_settings)

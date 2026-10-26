@@ -12,9 +12,11 @@ _DESKTOP = ('查找或打开本机应用和文件时使用 find_apps、find_file
             '只打开用户要求的项目，多个匹配项时先让用户选择。'
             '记录想法、备忘用 create_note（备忘录），待办、提醒用 create_reminder（提醒事项），'
             '用户说“记到备忘录”就用 create_note；摆放窗口用 list_windows 和 '
-            'arrange_window；只新建内容，不修改已有笔记。open_path 只能使用 find_apps 或 find_files 返回的路径，'
-            '不要自己编造路径。整理或删除文件、修改或删除笔记等没有对应工具的操作，如实说明做不到，'
-            '不要用别的工具替代，也不要声称已完成。')
+            'arrange_window。查看备忘录数量或标题用 list_notes（total_notes 是全部数量，不要凭空估计）；'
+            '“刚才那条”指最新的一条：先 list_notes 取最新项，再 delete_note，用户会在确认卡片上看到标题。'
+            '不要编造笔记 id，只用 list_notes 或 create_note 返回的 id。不能修改已有笔记内容。'
+            'open_path 只能使用 find_apps 或 find_files 返回的路径，不要自己编造路径。'
+            '整理或删除文件、修改笔记等没有对应工具的操作，如实说明做不到，不要用别的工具替代，也不要声称已完成。')
 _SOURCES = '引用搜索来源时使用返回的来源编号 [S1]、[S2]，不要编造编号或来源。'
 
 
