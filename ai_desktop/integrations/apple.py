@@ -62,6 +62,18 @@ _LIST_REMINDERS_SCRIPT = """on run argv
     return out
 end run"""
 
+_REMINDER_TITLE_SCRIPT = """on run argv
+    tell application "Reminders" to return name of reminder id (item 1 of argv)
+end run"""
+
+_COMPLETE_REMINDER_SCRIPT = """on run argv
+    tell application "Reminders" to set completed of reminder id (item 1 of argv) to true
+end run"""
+
+_DELETE_REMINDER_SCRIPT = """on run argv
+    tell application "Reminders" to delete reminder id (item 1 of argv)
+end run"""
+
 _NOTE_TITLE_SCRIPT = """on run argv
     tell application "Notes" to return name of note id (item 1 of argv)
 end run"""
@@ -74,6 +86,7 @@ MAX_LISTED = 50
 NOTES_TIMEOUT = 60.0
 REMINDERS_TIMEOUT = 120.0  # Reminders scripting needs ~10 s per property per 600 items
 NOTE_ID_PREFIX = "x-coredata://"
+REMINDER_ID_PREFIX = "x-apple-reminder://"
 
 
 def _text(value, limit, what, *, required):
@@ -139,11 +152,32 @@ def list_reminders(*, runner: Runner = run_command) -> list[ReminderInfo]:
     return found
 
 
+def _check_id(value, prefix, what) -> str:
+    if (not isinstance(value, str) or not value.startswith(prefix) or len(value) > 500
+            or any(ord(ch) < 32 for ch in value)):
+        raise ValueError(f"Invalid {what} id")
+    return value
+
+
 def check_note_id(note_id) -> str:
-    if (not isinstance(note_id, str) or not note_id.startswith(NOTE_ID_PREFIX) or len(note_id) > 500
-            or any(ord(ch) < 32 for ch in note_id)):
-        raise ValueError("Invalid note id")
-    return note_id
+    return _check_id(note_id, NOTE_ID_PREFIX, "note")
+
+
+def check_reminder_id(reminder_id) -> str:
+    return _check_id(reminder_id, REMINDER_ID_PREFIX, "reminder")
+
+
+def reminder_title(reminder_id: str, *, runner: Runner = run_command) -> str:
+    return run_script(_REMINDER_TITLE_SCRIPT, [check_reminder_id(reminder_id)], runner=runner).strip()
+
+
+def complete_reminder(reminder_id: str, *, runner: Runner = run_command) -> None:
+    run_script(_COMPLETE_REMINDER_SCRIPT, [check_reminder_id(reminder_id)], runner=runner)
+
+
+def delete_reminder(reminder_id: str, *, runner: Runner = run_command) -> None:
+    """Reminders has no Recently Deleted folder: this cannot be undone."""
+    run_script(_DELETE_REMINDER_SCRIPT, [check_reminder_id(reminder_id)], runner=runner)
 
 
 def note_title(note_id: str, *, runner: Runner = run_command) -> str:

@@ -67,13 +67,11 @@ def test_worker_grants_desktop_tools_only_in_admitted_runs(qtbot, monkeypatch):
     from ai_desktop.services.web_search import SearchSettings
     monkeypatch.setattr(config, "DESKTOP_TOOLS_ENABLED", True)
     search = SearchSettings.from_config()
-    kwargs = dict(agent_id="general_assistant", search_settings=search)
+    kwargs = dict(agent_id="general_assistant", search_settings=search,
+                  options={"num_ctx": 16384, "num_predict": 1024})
     messages = [Message('user', 'hi')]
     admitted = RunWorker(messages, "sys", "m", tools_admitted=True, **kwargs)
-    assert [t.name for t in admitted.context.tools] == [
-        "web_search", "find_apps", "find_files", "open_path", "list_windows", "arrange_window", "create_note",
-        "create_reminder", "list_notes", "list_reminders",
-        "delete_note"]
+    assert [t.name for t in admitted.context.tools] == ["web_search", *DesktopToolbox().executors()]
     assert "find_apps" in admitted.request.system_prompt
     plain = RunWorker(messages, "sys", "m", agent_id="general_assistant")
     assert plain.context.tools == ()
@@ -230,3 +228,38 @@ def test_list_reminders_counts_open_items_and_filters():
     assert "Reminders" in runner.calls[0][2]
     filtered = json.loads(toolbox.list_reminders({"query": "牛奶"}, _context()).text)
     assert filtered["matching"] == 1 and filtered["total_open_reminders"] == 2
+
+
+REMINDER = "x-apple-reminder://3452D796-78BC-4316-BA35-BA0C5C7D22AA"
+
+
+class ReminderTitle(Scripts):
+    def __call__(self, argv):
+        self.calls.append(list(argv))
+        return "明天要录制课程\n" if "return name of reminder id" in argv[2] else ""
+
+
+def test_complete_reminder_marks_it_done_without_asking():
+    runner = ReminderTitle()
+    out = DesktopToolbox(runner).complete_reminder({"id": REMINDER}, _context())
+    assert json.loads(out.text) == {"result": "已标记为完成。", "title": "明天要录制课程"}
+    assert "set completed of reminder id" in runner.calls[-1][2] and runner.calls[-1][-1] == REMINDER
+
+
+def test_delete_reminder_warns_it_is_permanent_and_needs_approval():
+    approver, runner = Approver(True), ReminderTitle()
+    out = DesktopToolbox(runner, approver.broker).delete_reminder({"id": REMINDER}, _action_context())
+    assert not out.error and "delete reminder id" in runner.calls[-1][2]
+    shown = approver.shown[0]
+    assert shown.command == "永久删除提醒：明天要录制课程" and "无法恢复" in shown.reason
+    denied, runner = Approver(False), ReminderTitle()
+    assert DesktopToolbox(runner, denied.broker).delete_reminder({"id": REMINDER}, _action_context()).error
+    assert not any("delete reminder id" in call[2] for call in runner.calls)
+
+
+def test_reminder_tools_reject_guessed_ids_and_fail_closed_without_confirmation():
+    runner = ReminderTitle()
+    toolbox = DesktopToolbox(runner)
+    assert toolbox.complete_reminder({"id": NOTE_A}, _context()).error
+    assert toolbox.executors()["delete_reminder"]({"id": REMINDER}, _action_context()).error
+    assert runner.calls == []

@@ -2,20 +2,20 @@
 import pytest
 
 from ai_desktop import config
+from ai_desktop.desktop.tools import DesktopToolbox
 from ai_desktop.services import audit_store
 from ai_desktop.services.task_admission import TASK_MODEL, TaskAuthorization
 from tests.test_task_entry import answer, bounded_task_fixture, controller, discovery, enqueue_discovery, idle
 
 __all__ = ["bounded_task_fixture", "controller"]  # fixtures re-exported for pytest
 
-NATIVE = ["find_apps", "find_files", "open_path", "list_windows", "arrange_window", "create_note",
-          "create_reminder", "list_notes", "list_reminders",
-          "delete_note"]
+NATIVE = list(DesktopToolbox().executors())
 
 
 @pytest.fixture(autouse=True)
 def native_tools_on(monkeypatch):
     monkeypatch.setattr(config, "DESKTOP_TOOLS_ENABLED", True)
+    monkeypatch.setattr(config, "OLLAMA_NUM_CTX", 16384)  # room for every native tool
 
 
 def use_agent(controller, agent_id):
@@ -72,13 +72,14 @@ def test_ordinary_messages_also_take_the_tool_path_and_read_like_plain_replies(q
     assert card.regenerate.text() == "重新生成"
 
 
-def test_other_roles_stay_on_plain_chat(qtbot, controller, ollama_server):
+def test_every_role_shares_the_same_native_tools(qtbot, controller, ollama_server):
     use_agent(controller, "translator")
+    enqueue_discovery(ollama_server)
     ollama_server.enqueue(answer("ok"))
     controller._on_user_message("打开备忘录")
     idle(qtbot, controller)
-    assert [r["path"] for r in ollama_server.requests] == ["/api/chat"]
-    assert "tools" not in ollama_server.requests[0]["payload"]
+    sent = ollama_server.requests[-1]["payload"]
+    assert [tool["function"]["name"] for tool in sent["tools"]] == NATIVE
 
 
 def test_images_stay_on_plain_chat(qtbot, controller, ollama_server, tmp_path):

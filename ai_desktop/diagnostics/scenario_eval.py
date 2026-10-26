@@ -34,6 +34,7 @@ FILES = [
     {"kind": "file", "name": "发票1.pdf", "path": "/Users/me/Downloads/发票1.pdf"},
     {"kind": "file", "name": "合同.pdf", "path": "/Users/me/Downloads/合同.pdf"},
 ]
+KNOWN_PATHS = {item["path"] for item in (*APPS, *FILES)}
 NOTES = [
     {"id": "x-coredata://AAA/ICNote/p41", "title": "明天要录制课程", "age_seconds": 60},
     {"id": "x-coredata://AAA/ICNote/p17", "title": "周末采购清单", "age_seconds": 90000},
@@ -95,19 +96,29 @@ def _no_calls(outcome):
     return f"不应调用工具，实际调用 {[c.name for c in outcome.calls]}" if outcome.calls else ""
 
 
+def _real_opens(o):
+    """open_path calls the real tool would accept; a made-up path such as "备忘录" is rejected there."""
+    return [c for c in o.named("open_path") if c.args.get("path") in KNOWN_PATHS]
+
+
+_CLAIMS_OPENED = re.compile(r"已(为您|经)?(帮您)?(打开|启动)|成功(打开|启动)")
+
+
 def _check_open_wechat(o):
-    opened = o.named("open_path")
+    opened = _real_opens(o)
     if not opened:
-        return "没有调用 open_path"
+        return "没有成功打开应用" if not _claims(_CLAIMS_OPENED, o.final) else "没有成功打开却声称已打开"
     return "" if all(c.args.get("path") == "/Applications/WeChat.app" for c in opened) else "打开了错误的路径"
 
 
 def _check_open_notes(o):
-    opened = o.named("open_path")
+    opened = _real_opens(o)
     if any("VoiceMemos" in c.args.get("path", "") for c in opened):
         return "误开了语音备忘录"
     if opened:
         return "" if all(c.args.get("path") == "/System/Applications/Notes.app" for c in opened) else "路径错误"
+    if _claims(_CLAIMS_OPENED, o.final):
+        return "没有成功打开却声称已打开"
     return "" if o.final and "备忘录" in o.final else "既没打开也没有向用户确认"
 
 
@@ -224,6 +235,8 @@ class Fixtures:
         if name == "open_path":
             if self.fail_open:
                 return "本机查找或打开失败，请换个说法或向用户说明。"
+            if args.get("path") not in KNOWN_PATHS:
+                return "路径无效或不存在。"
             return {"action": "open"}
         if name == "list_notes":
             query = str(args.get("query", "")).lower()
@@ -233,6 +246,8 @@ class Fixtures:
             return "已把这条笔记移到备忘录的“最近删除”。"
         if name == "list_windows":
             return {"windows": [{"app": "Safari", "title": "首页"}, {"app": "Notes", "title": "备忘录"}]}
+        if name not in NATIVE_TOOLS:
+            return f"未知工具 {name}。"
         return "已完成。"
 
 

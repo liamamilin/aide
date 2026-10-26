@@ -1619,13 +1619,11 @@ class ChatController(QObject):
 
     @staticmethod
     def _native_tools_for(agent) -> bool:
-        """The general assistant always runs with the native desktop tools; the model decides when to use them.
+        """Every role shares the native desktop tools; the model decides when to use them.
 
-        Text-transform roles (translator, polisher, ...) never get them implicitly: their input is
-        arbitrary text that may merely start with "open".
+        The role's own prompt still governs behaviour, and destructive tools always ask the user.
         """
-        return bool(config.DESKTOP_TOOLS_ENABLED and config.CHAT_TOOLS_ENABLED
-                    and agent.id == 'general_assistant')
+        return bool(config.DESKTOP_TOOLS_ENABLED and config.CHAT_TOOLS_ENABLED and agent is not None)
 
     def _begin_task_check(self, text, images, *, regenerate=False, implicit=False):
         from ai_desktop.utils import storage

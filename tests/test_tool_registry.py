@@ -87,17 +87,27 @@ def test_desktop_tools_are_registered_with_risk_and_group():
         validate_tool_arguments(_call("find_files", query="x" * 201))
 
 
-def test_native_tools_leave_room_for_a_conversation_in_the_task_context():
-    """Real task runs use a fixed 8192-token window; the schemas and rules must not eat it."""
+def test_native_tools_leave_room_for_a_conversation_in_the_default_context():
+    """The schemas and rules of every native tool must leave most of the context window to the conversation."""
     import json
 
+    from ai_desktop import config
     from ai_desktop.desktop.tools import DesktopToolbox
     from ai_desktop.llm.run_types import ToolSpec
     from ai_desktop.llm.tool_prompt import tool_rules
-    from ai_desktop.services.task_admission import TASK_OPTIONS
     names = list(DesktopToolbox().executors())
     schemas = [ToolSpec.create(name, lambda *_: None).wire() for name in names]
     fixed = len(json.dumps(schemas, ensure_ascii=False).encode()) + len(tool_rules(names).encode())
-    options = dict(TASK_OPTIONS)
-    budget = options["num_ctx"] - options["num_predict"] - 512  # RunLimits.context_reserve
-    assert fixed < budget * 0.75, (fixed, budget)  # about 1.6 KB stays for history
+    budget = config.OLLAMA_NUM_CTX - 1024 - 512  # output limit and RunLimits.context_reserve
+    assert fixed < budget * 0.5, (fixed, budget)
+
+
+def test_a_small_context_window_keeps_core_tools_instead_of_failing():
+    from ai_desktop.desktop.tools import DesktopToolbox
+    from ai_desktop.llm.run_types import ToolSpec
+    from ai_desktop.llm.tool_prompt import fit_tools
+    tools = tuple(ToolSpec.create(name, lambda *_: None) for name in DesktopToolbox().executors())
+    big = {name.name for name in fit_tools(tools, {"num_ctx": 32768, "num_predict": 1024})}
+    small = {name.name for name in fit_tools(tools, {"num_ctx": 8192, "num_predict": 1024})}
+    assert big == {tool.name for tool in tools}
+    assert small < big and {"find_apps", "find_files", "open_path", "create_note"} <= small

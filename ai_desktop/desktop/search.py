@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from ai_desktop import config
 from ai_desktop.desktop.runner import MDFIND, Runner, run_command
 
 APP_TYPE = "com.apple.application-bundle"
@@ -22,9 +23,20 @@ class Candidate:
     path: str
 
 
+# Bulk or system data that would only add noise (and private app data) to a name search of the home folder.
+_SKIPPED_PARTS = frozenset({"Library", "node_modules", ".git", ".Trash", "venv", ".venv", "__pycache__",
+                            "site-packages"})
+
+
 def default_file_roots() -> tuple[str, ...]:
-    home = Path.home()
-    return tuple(str(home / name) for name in ("Documents", "Desktop", "Downloads"))
+    """The configured search folders, or the whole home folder."""
+    configured = tuple(root for root in config.FILE_SEARCH_ROOTS if isinstance(root, str) and root.startswith("/"))
+    return configured or (str(Path.home()),)
+
+
+def _is_skipped(path: str) -> bool:
+    parts = Path(path).parts
+    return any(part in _SKIPPED_PARTS or (part.startswith(".") and part not in (".", "..")) for part in parts[1:])
 
 
 def app_roots() -> tuple[str, ...]:
@@ -78,12 +90,11 @@ def find_apps(query: str, *, runner: Runner = run_command, roots=None, limit: in
 
 def find_files(query: str, *, runner: Runner = run_command, roots=None, limit: int = 8) -> list[Candidate]:
     """Match file and folder names under the search roots, excluding app bundles."""
-    text = _quote(_clean(query))
-    predicate = f'kMDItemDisplayName == "*{text}*"wcd && kMDItemContentType != "{APP_TYPE}"'
-    paths = runner([MDFIND, *_onlyin(roots or default_file_roots()), predicate]).splitlines()
+    # `mdfind -name` matches Chinese names mid-string; a leading-wildcard attribute predicate does not.
+    paths = runner([MDFIND, *_onlyin(roots or default_file_roots()), "-name", _clean(query)]).splitlines()
     found = []
     for path in paths:
-        if not path.startswith("/") or path.endswith(".app"):
+        if not path.startswith("/") or path.endswith(".app") or _is_skipped(path):
             continue
         found.append(Candidate("folder" if os.path.isdir(path) else "file", os.path.basename(path), path))
         if len(found) >= limit:

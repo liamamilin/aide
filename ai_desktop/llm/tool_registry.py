@@ -145,7 +145,7 @@ FIND_FILES = register(ToolDefinition(
     name="find_files",
     group="desktop",
     risk=ToolRisk.READ,
-    description="Find files and folders by name in Documents, Desktop and Downloads. Returns names and paths.",
+    description="Find files and folders by name in the user's home folder. Returns names and paths.",
     properties={"query": {"type": "string", "minLength": 1, "maxLength": 200}},
     required=("query",),
     validate=_validate_query,
@@ -208,6 +208,15 @@ def _validate_note_id(args: dict) -> None:
         raise ValueError("Invalid note id")
 
 
+def _validate_reminder_id(args: dict) -> None:
+    if set(args) != {"id"}:
+        raise ValueError("A reminder id is required")
+    value = args["id"]
+    if (not isinstance(value, str) or not value.startswith("x-apple-reminder://") or len(value) > 500
+            or any(ord(ch) < 32 for ch in value)):
+        raise ValueError("Invalid reminder id")
+
+
 LIST_WINDOWS = register(ToolDefinition(
     name="list_windows",
     group="windows",
@@ -262,6 +271,28 @@ LIST_REMINDERS = register(ToolDefinition(
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50}},
     required=(),
     validate=_validate_list_notes,
+))
+
+COMPLETE_REMINDER = register(ToolDefinition(
+    name="complete_reminder",
+    group="notes",
+    risk=ToolRisk.REVERSIBLE,
+    description=("Mark a reminder done by the id returned by list_reminders or create_reminder. "
+                 "Prefer this over delete_reminder."),
+    properties={"id": {"type": "string", "minLength": 1, "maxLength": 500}},
+    required=("id",),
+    validate=_validate_reminder_id,
+))
+
+DELETE_REMINDER = register(ToolDefinition(
+    name="delete_reminder",
+    group="notes",
+    risk=ToolRisk.DESTRUCTIVE,
+    description=("Permanently delete a reminder by id from list_reminders or create_reminder. The user "
+                 "confirms the title; it cannot be undone. Only when asked to delete, not to finish."),
+    properties={"id": {"type": "string", "minLength": 1, "maxLength": 500}},
+    required=("id",),
+    validate=_validate_reminder_id,
 ))
 
 DELETE_NOTE = register(ToolDefinition(

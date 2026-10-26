@@ -31,8 +31,10 @@ def test_find_apps_builds_one_query_over_all_roots_and_names():
 
 def test_query_is_escaped_and_bounded():
     runner = FakeRunner()
-    search.find_files('a"b*c\\d', runner=runner)
-    assert 'a\\"b\\*c\\\\d' in runner.calls[0][-1]
+    search.find_files('-x "y"', runner=runner)
+    assert runner.calls[0][-2:] == ["-name", '-x "y"']  # a value of -name, never a separate option
+    search.find_apps('a"b*c\\d', runner=runner)
+    assert 'a\\"b\\*c\\\\d' in runner.calls[1][-1]
     for bad in ("", "   ", "x" * 201):
         with pytest.raises(ValueError):
             search.find_files(bad, runner=runner)
@@ -114,3 +116,15 @@ def test_only_apps_in_standard_locations_are_launched(tmp_path, monkeypatch):
     monkeypatch.setattr(opener, "app_roots", lambda: (str(tmp_path),))
     assert opener.open_path(str(app), runner=runner) == "open"
     assert runner.calls[-1] == [OPEN, str(app)]
+
+
+def test_file_search_defaults_to_home_and_skips_library_hidden_and_build_folders(monkeypatch):
+    monkeypatch.setattr(search.config, "FILE_SEARCH_ROOTS", ())
+    assert search.default_file_roots() == (str(search.Path.home()),)
+    monkeypatch.setattr(search.config, "FILE_SEARCH_ROOTS", ("/Volumes/Data", "relative"))
+    assert search.default_file_roots() == ("/Volumes/Data",)
+    paths = ["/Users/me/Documents/方案.docx", "/Users/me/Library/Caches/方案.db", "/Users/me/.config/方案",
+             "/Users/me/app/node_modules/方案/index.js", "/Users/me/proj/.git/方案"]
+    monkeypatch.setattr(search.os.path, "isdir", lambda path: False)
+    found = search.find_files("方案", runner=lambda argv: "\n".join(paths), roots=["/Users/me"])
+    assert [c.path for c in found] == ["/Users/me/Documents/方案.docx"]

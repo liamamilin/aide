@@ -124,6 +124,30 @@ class DesktopToolbox:
             "reminders": [{"id": r.id, "title": r.title} for r in matching[:args.get("limit", 20)]],
         }, ensure_ascii=False))
 
+    def complete_reminder(self, args, context):
+        if context.cancelled.is_set():
+            return ToolOutput("已取消。", error=True)
+        try:
+            title = apple.reminder_title(args["id"], runner=self._runner)
+            apple.complete_reminder(args["id"], runner=self._runner)
+        except (OSError, ValueError):
+            return ToolOutput("无法完成这条提醒；请先用 list_reminders 查看，并允许控制提醒事项。", error=True)
+        return ToolOutput(json.dumps({"result": "已标记为完成。", "title": title}, ensure_ascii=False))
+
+    def delete_reminder(self, args, context):
+        if context.cancelled.is_set():
+            return ToolOutput("已取消。", error=True)
+        try:
+            title = apple.reminder_title(args["id"], runner=self._runner)
+        except (OSError, ValueError):
+            return ToolOutput("找不到这条提醒，请先用 list_reminders 查看。", error=True)
+        refused = self._confirm(context, "delete_reminder", f"永久删除提醒：{title}",
+                                "提醒事项没有“最近删除”，删除后无法恢复。如只是做完了，请选择拒绝并改为标记完成。")
+        if refused is not None:
+            return refused
+        return self._act(lambda: apple.delete_reminder(args["id"], runner=self._runner),
+                         context, "已删除这条提醒。", "无法删除提醒。")
+
     def delete_note(self, args, context):
         if context.cancelled.is_set():
             return ToolOutput("已取消。", error=True)
@@ -163,6 +187,7 @@ class DesktopToolbox:
                  "list_windows": self.list_windows, "arrange_window": self.arrange_window,
                  "create_note": self.create_note, "create_reminder": self.create_reminder,
                  "list_notes": self.list_notes, "list_reminders": self.list_reminders,
+                 "complete_reminder": self.complete_reminder, "delete_reminder": self.delete_reminder,
                  "delete_note": self.delete_note}
         return {name: self._guarded(name, execute) for name, execute in tools.items()}
 

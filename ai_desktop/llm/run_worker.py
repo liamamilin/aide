@@ -15,7 +15,7 @@ from ai_desktop.llm.qt_stream import QtChatTransport
 from ai_desktop.llm.run_loop import RunLoop
 from ai_desktop.llm.run_types import RunContext, RunLimits, ToolSpec, chat_tools_eligible
 from ai_desktop.llm.thinking import ThinkSetting
-from ai_desktop.llm.tool_prompt import tool_rules
+from ai_desktop.llm.tool_prompt import fit_tools, tool_rules
 from ai_desktop.services.bash_executor import BashExecutor
 from ai_desktop.services.command_confirmation import ConfirmationBroker
 from ai_desktop.services.execution_context import ExecutionSnapshot
@@ -71,6 +71,7 @@ class RunWorker(QThread):
         if allowed and (tools or native_tools) and config.DESKTOP_TOOLS_ENABLED:
             tools += tuple(ToolSpec.create(name, execute)
                            for name, execute in DesktopToolbox(confirmations=self.confirmations).executors().items())
+            tools = fit_tools(tools, dict(self.request.options))
         self.context = RunContext.create(self.request, tools=tools, tools_admitted=tools_admitted,
                                          limits=RunLimits.from_config() if tools_admitted else None,
                                          execution=execution, search_settings=search_settings)
