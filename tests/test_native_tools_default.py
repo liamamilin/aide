@@ -146,11 +146,13 @@ def test_native_authorization_is_valid_alone_and_never_saved():
         TaskAuthorization(agent_id="general_assistant")
 
 
-def test_button_names_only_commands_and_search_and_the_caption_says_native_tools_need_no_setup(
-        qtbot, controller):
+def test_tool_row_is_hidden_when_off_and_settings_live_in_the_menu(qtbot, controller):
     use_agent(controller, "general_assistant")
     dialog = controller._dialog
+    dialog.show()
     dialog.set_task_authorization(None)
-    assert dialog._task_btn.text() == "命令与搜索：关闭"
-    assert "无需开启" in dialog._task_status.text() and not dialog._task_status.isHidden()
+    assert dialog._task_row.isHidden() and dialog._task_btn.text() == "命令与搜索：关闭"
+    assert dialog._tools_action.text() == "命令与搜索设置…"
+    with qtbot.waitSignal(dialog.task_settings_requested):
+        dialog._tools_action.trigger()
     assert "本机操作" in dialog._task_btn.toolTip()

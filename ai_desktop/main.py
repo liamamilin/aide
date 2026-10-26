@@ -175,7 +175,7 @@ class ChatController(QObject):
         self._messages: list[Message] = []
         self._restore_last: bool = True  # 首次打开自动恢复上次对话
         self._worker: Optional[RunWorker] = None
-        self._tool_preferences = ToolPreferences.load()
+        self._tool_preferences = ToolPreferences.initial()
         self._task_authorization: TaskAuthorization | None = None
         self._inherit_tool_settings()
         self._task_epoch = 0

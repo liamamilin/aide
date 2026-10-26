@@ -565,6 +565,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self._run_history_action = more_menu.addAction("运行记录…")
         more_menu.addSeparator()
         self._manage_agents_action = more_menu.addAction("管理 Agent…")
+        self._tools_action = more_menu.addAction("命令与搜索设置…")
         more_menu.addSeparator()
         window_menu = more_menu.addMenu("窗口大小")
         self._expand_window_action = window_menu.addAction("放大到当前屏幕")
@@ -576,6 +577,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self._export_action.triggered.connect(self.export_requested.emit)
         self._run_history_action.triggered.connect(self.run_history_requested.emit)
         self._manage_agents_action.triggered.connect(self.manage_agents_requested.emit)
+        self._tools_action.triggered.connect(self.task_settings_requested.emit)
         self._expand_window_action.triggered.connect(self.toggle_expanded_window)
         self._grow_window_action.triggered.connect(lambda: self.scale_window(1.15))
         self._shrink_window_action.triggered.connect(lambda: self.scale_window(1 / 1.15))
@@ -652,7 +654,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self._task_status.setWordWrap(True)
         task_layout.addWidget(self._task_status)
         self._task_status.hide()
-        self._task_row.setVisible(True)
+        self._task_row.setVisible(False)
         root.addWidget(self._task_row)
 
         # ── 输入区域 ──
@@ -1775,6 +1777,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
 
     def set_thinking(self, thinking: bool) -> None:
         self._task_btn.setEnabled(not thinking and config.CHAT_TOOLS_ENABLED)
+        self._tools_action.setEnabled(not thinking and config.CHAT_TOOLS_ENABLED)
         self._send_btn.setEnabled(True)
         try:
             self._send_btn.clicked.disconnect()
@@ -1795,11 +1798,10 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
     def set_task_authorization(self, authorization, *, model=None, checking=False):
         if authorization is not None and authorization.agent_id != self._active_agent.id:
             authorization = None
-        self._task_row.setVisible(True)
         self._task_btn.setText('命令与搜索：已启用' if authorization else '命令与搜索：关闭')
-        self._task_btn.setToolTip('这里只管命令执行（Bash）和联网搜索。应用、文件、备忘录、提醒事项、窗口等本机操作'
-                                 '自动可用，无需开启。设置自动沿用到新建、切换对话及其他 Agent，重启后保留。'
-                                 '关闭工具后后续对话保持关闭。命令确认逐条生效；'
+        self._task_btn.setToolTip('点击打开设置（也可在右上角“…”菜单中打开）。这里只管命令执行（Bash）和联网搜索；'
+                                 '应用、文件、备忘录、提醒事项、窗口等本机操作自动可用。设置自动沿用到新建、'
+                                 '切换对话及其他 Agent，重启后保留。命令确认逐条生效；'
                                  '工具模型跟随顶栏，每次发送前检查工具能力。')
         if not config.CHAT_TOOLS_ENABLED:
             self._task_btn.setText('命令与搜索：设置中已禁用')
@@ -1816,11 +1818,9 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
                 parts.append('检查模型中…')
             self._task_status.setText(' · '.join(parts))
             self._task_status.setToolTip(authorization.execution.workspace if authorization.execution else '仅联网搜索')
-        elif config.DESKTOP_TOOLS_ENABLED and config.CHAT_TOOLS_ENABLED:
-            self._task_status.setText('本机操作（应用、文件、备忘录、提醒事项、窗口）自动可用，无需开启')
-            self._task_status.setToolTip('')
-        self._task_status.setVisible(authorization is not None or (config.DESKTOP_TOOLS_ENABLED
-                                                                    and config.CHAT_TOOLS_ENABLED))
+        # Off means nothing to show: the settings live in the "…" menu, and native tools need no setup.
+        self._task_status.setVisible(authorization is not None)
+        self._task_row.setVisible(authorization is not None)
 
     def clear_messages(self) -> None:
         self._run_sources = {}

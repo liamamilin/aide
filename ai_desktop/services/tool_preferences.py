@@ -59,6 +59,24 @@ class ToolPreferences:
         save_setting(SETTING_KEY, json.dumps(record, ensure_ascii=False))
 
     @classmethod
+    def initial(cls):
+        """Saved choices; before the user ever chose, Bash is on in the workspace they already approved.
+
+        Web search is never on by default: it sends queries off the machine and needs the user's own key.
+        An explicit "off" is stored as null and stays off.
+        """
+        if get_setting(SETTING_KEY):
+            return cls.load()
+        from ai_desktop.services.execution_context import load_execution_preferences, load_workspace_policy
+        workspace = load_execution_preferences()['execution_workspace']
+        if not workspace:
+            return None
+        try:
+            return cls(ExecutionSnapshot.create(workspace, load_workspace_policy(workspace)), None)
+        except (ValueError, OSError):
+            return None
+
+    @classmethod
     def load(cls):
         raw = get_setting(SETTING_KEY)
         if not raw:

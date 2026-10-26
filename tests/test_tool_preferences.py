@@ -239,3 +239,32 @@ def test_workspace_settings_change_updates_future_choices(controller, tmp_path):
     grant = controller._task_authorization
     assert grant.execution.workspace == str(second) and grant.execution.policy == BashPolicy.CONFIRM_ALL
     assert ToolPreferences.load().execution == grant.execution
+
+
+def test_before_any_choice_bash_defaults_on_in_the_approved_workspace_and_search_stays_off(tmp_path):
+    from ai_desktop.services.execution_context import save_execution_preferences
+    from ai_desktop.services.tool_preferences import SETTING_KEY, ToolPreferences
+    from ai_desktop.utils.storage import save_setting
+    save_setting(SETTING_KEY, "")
+    save_setting("execution_workspace", "")
+    assert ToolPreferences.initial() is None  # no approved workspace: nothing to turn on
+    save_execution_preferences({"execution_workspace": str(tmp_path)})
+    default = ToolPreferences.initial()
+    assert default.execution.workspace == str(tmp_path.resolve()) and default.search_provider is None
+    assert default.for_agent("general_assistant").search is None
+
+
+def test_an_explicit_off_stays_off_and_a_vanished_workspace_is_not_trusted(tmp_path):
+    import shutil
+
+    from ai_desktop.services.execution_context import save_execution_preferences
+    from ai_desktop.services.tool_preferences import SETTING_KEY, ToolPreferences
+    from ai_desktop.utils.storage import save_setting
+    folder = tmp_path / "work"
+    folder.mkdir()
+    save_execution_preferences({"execution_workspace": str(folder)})
+    ToolPreferences.save(None)  # the user turned tools off
+    assert ToolPreferences.initial() is None
+    save_setting(SETTING_KEY, "")
+    shutil.rmtree(folder)
+    assert ToolPreferences.initial() is None
