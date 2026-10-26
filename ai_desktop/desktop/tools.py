@@ -110,6 +110,20 @@ class DesktopToolbox:
             "notes": [{"id": n.id, "title": n.title, "age_seconds": n.age_seconds} for n in shown],
         }, ensure_ascii=False))
 
+    def list_reminders(self, args, context):
+        if context.cancelled.is_set():
+            return ToolOutput("已取消。", error=True)
+        try:
+            reminders = apple.list_reminders(runner=self._runner)
+        except (OSError, ValueError):
+            return ToolOutput("无法读取提醒事项；请允许控制提醒事项。", error=True)
+        query = args.get("query", "").strip().casefold()
+        matching = [item for item in reminders if query in item.title.casefold()]
+        return ToolOutput(json.dumps({
+            "total_open_reminders": len(reminders), "matching": len(matching),
+            "reminders": [{"id": r.id, "title": r.title} for r in matching[:args.get("limit", 20)]],
+        }, ensure_ascii=False))
+
     def delete_note(self, args, context):
         if context.cancelled.is_set():
             return ToolOutput("已取消。", error=True)
@@ -148,7 +162,8 @@ class DesktopToolbox:
         tools = {"find_apps": self.find_apps, "find_files": self.find_files, "open_path": self.open_path,
                  "list_windows": self.list_windows, "arrange_window": self.arrange_window,
                  "create_note": self.create_note, "create_reminder": self.create_reminder,
-                 "list_notes": self.list_notes, "delete_note": self.delete_note}
+                 "list_notes": self.list_notes, "list_reminders": self.list_reminders,
+                 "delete_note": self.delete_note}
         return {name: self._guarded(name, execute) for name, execute in tools.items()}
 
     def _guarded(self, name, execute):

@@ -72,7 +72,8 @@ def test_worker_grants_desktop_tools_only_in_admitted_runs(qtbot, monkeypatch):
     admitted = RunWorker(messages, "sys", "m", tools_admitted=True, **kwargs)
     assert [t.name for t in admitted.context.tools] == [
         "web_search", "find_apps", "find_files", "open_path", "list_windows", "arrange_window", "create_note",
-        "create_reminder", "list_notes", "delete_note"]
+        "create_reminder", "list_notes", "list_reminders",
+        "delete_note"]
     assert "find_apps" in admitted.request.system_prompt
     plain = RunWorker(messages, "sys", "m", agent_id="general_assistant")
     assert plain.context.tools == ()
@@ -219,3 +220,13 @@ def test_delete_note_rejects_a_guessed_id_before_touching_notes():
     runner = TitleThenAck()
     out = DesktopToolbox(runner, Approver(True).broker).delete_note({"id": "not-an-id"}, _action_context())
     assert out.error and runner.calls == []
+
+
+def test_list_reminders_counts_open_items_and_filters():
+    runner = Scripts(f"r1{SEP}交周报{REC}\nr2{SEP}买牛奶{REC}")
+    toolbox = DesktopToolbox(runner)
+    record = json.loads(toolbox.list_reminders({}, _context()).text)
+    assert record["total_open_reminders"] == 2 and record["reminders"][0] == {"id": "r1", "title": "交周报"}
+    assert "Reminders" in runner.calls[0][2]
+    filtered = json.loads(toolbox.list_reminders({"query": "牛奶"}, _context()).text)
+    assert filtered["matching"] == 1 and filtered["total_open_reminders"] == 2

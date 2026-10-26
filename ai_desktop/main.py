@@ -81,6 +81,7 @@ from ai_desktop.utils.storage import (
 )
 
 logger = logging.getLogger(__name__)
+_SEARCH_ACTIVITY_TOOLS = frozenset({"web_search", "find_apps", "find_files", "list_notes", "list_reminders"})
 
 
 def _safe_slot(fn):
@@ -2529,7 +2530,7 @@ class ChatController(QObject):
             self.float_btn.set_task_activity("working")
         elif event.kind in {RunEventKind.TOOL_STARTED, RunEventKind.TOOL_UPDATED}:
             activity = ("waiting" if event.status == "waiting_confirmation" else
-                        "searching" if event.tool_name in {"web_search", "find_apps", "find_files", "list_notes"}
+                        "searching" if event.tool_name in _SEARCH_ACTIVITY_TOOLS
                         else "executing")
             self.float_btn.set_task_activity(activity)
         elif event.kind == RunEventKind.TOOL_FINISHED:

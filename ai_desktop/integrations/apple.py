@@ -42,6 +42,22 @@ _LIST_NOTES_SCRIPT = """on run argv
     return out
 end run"""
 
+_LIST_REMINDERS_SCRIPT = """on run argv
+    tell application "Reminders"
+        set pending to (reminders whose completed is false)
+        set reminderIds to id of pending
+        set reminderNames to name of pending
+    end tell
+    set fieldSep to character id 31
+    set recordSep to character id 30
+    set out to ""
+    repeat with i from 1 to (count of reminderIds)
+        if i > 2000 then exit repeat
+        set out to out & (item i of reminderIds) & fieldSep & (item i of reminderNames) & recordSep
+    end repeat
+    return out
+end run"""
+
 _NOTE_TITLE_SCRIPT = """on run argv
     tell application "Notes" to return name of note id (item 1 of argv)
 end run"""
@@ -99,6 +115,22 @@ def list_notes(*, runner: Runner = run_command) -> list[NoteInfo]:
             continue
         found.append(NoteInfo(fields[0], fields[1], age))
     return sorted(found, key=lambda note: note.age_seconds)
+
+
+@dataclass(frozen=True)
+class ReminderInfo:
+    id: str
+    title: str
+
+
+def list_reminders(*, runner: Runner = run_command) -> list[ReminderInfo]:
+    """Every uncompleted reminder's id and title; notes and due dates are not read."""
+    found = []
+    for record in run_script(_LIST_REMINDERS_SCRIPT, runner=runner, timeout=30.0).split(_RECORD_SEP):
+        fields = record.strip("\n").split(_FIELD_SEP)
+        if len(fields) == 2 and fields[0]:
+            found.append(ReminderInfo(fields[0], fields[1]))
+    return found
 
 
 def check_note_id(note_id) -> str:
