@@ -1,8 +1,7 @@
-"""Open/locate requests get the desktop tools without setup; any failure degrades to plain chat."""
+"""The general assistant sends every message through the tool path; any failure degrades to plain chat."""
 import pytest
 
 from ai_desktop import config
-from ai_desktop.desktop.resolver import wants_desktop_action
 from ai_desktop.services import audit_store
 from ai_desktop.services.task_admission import TASK_MODEL, TaskAuthorization
 from tests.test_task_entry import answer, bounded_task_fixture, controller, discovery, enqueue_discovery, idle
@@ -25,22 +24,6 @@ def use_agent(controller, agent_id):
     controller._active_agent = agent
     controller._dialog.set_active_agent(agent)
     controller._sync_action_context()
-
-
-@pytest.mark.parametrize("text", [
-    "打开备忘录", "帮我打开微信", "启动 Safari", "open Notes", "找一下我的产品方案文档",
-    "查找下载文件夹里的 PDF", "Find the report app", "帮我记一下刚才的想法到笔记",
-    "提醒我明天交周报，创建提醒", "帮我看下备忘录有多少条", "下载文件夹里有什么",
-    "把两个窗口并排放好", "Put the windows side by side"])
-def test_requests_that_open_or_locate_things_are_recognised(text):
-    assert wants_desktop_action(text)
-
-
-@pytest.mark.parametrize("text", ["", "你好", "解释一下这段代码", "找个笑话", "上网找一下最新新闻",
-                                  "在网上搜索 Python 文档", "把这段话翻译成英文", "打开\n第二行",
-                                  "打开" + "很长" * 70])
-def test_other_messages_are_not(text):
-    assert not wants_desktop_action(text)
 
 
 def test_open_request_runs_with_native_tools_and_leaves_settings_alone(qtbot, controller, ollama_server):
@@ -75,14 +58,74 @@ def test_failed_capability_check_falls_back_to_plain_chat(qtbot, controller, oll
     assert controller._dialog._input.toPlainText() == ""
 
 
-@pytest.mark.parametrize("agent_id,text", [("translator", "打开备忘录"), ("general_assistant", "你好")])
-def test_no_check_or_tools_for_other_roles_and_ordinary_messages(qtbot, controller, ollama_server, agent_id, text):
-    use_agent(controller, agent_id)
+def test_ordinary_messages_also_take_the_tool_path_and_read_like_plain_replies(qtbot, controller, ollama_server):
+    use_agent(controller, "general_assistant")
+    enqueue_discovery(ollama_server)
+    ollama_server.enqueue(answer("你好！"))
+    controller._on_user_message("你好")
+    idle(qtbot, controller)
+    assert [r["path"] for r in ollama_server.requests][-1] == "/api/chat"
+    assert [t["function"]["name"] for t in ollama_server.requests[-1]["payload"]["tools"]] == NATIVE
+    card = next(iter(controller._dialog._task_model_cards.values()))
+    assert card.isHidden() is False and card.header.isHidden() and card.status.isHidden()
+    assert card.regenerate.text() == "重新生成"
+
+
+def test_other_roles_stay_on_plain_chat(qtbot, controller, ollama_server):
+    use_agent(controller, "translator")
     ollama_server.enqueue(answer("ok"))
-    controller._on_user_message(text)
+    controller._on_user_message("打开备忘录")
     idle(qtbot, controller)
     assert [r["path"] for r in ollama_server.requests] == ["/api/chat"]
     assert "tools" not in ollama_server.requests[0]["payload"]
+
+
+def test_images_stay_on_plain_chat(qtbot, controller, ollama_server, tmp_path):
+    from PyQt5.QtGui import QImage
+    image = QImage(4, 4, QImage.Format_RGB32)
+    image.fill(0xffffff)
+    path = tmp_path / "x.png"
+    assert image.save(str(path))
+    use_agent(controller, "general_assistant")
+    controller._dialog.attach_image_paths([str(path)])
+    ollama_server.enqueue(answer("看到了"))
+    controller._on_user_message("看看这张图", images=controller._dialog.get_pending_images())
+    idle(qtbot, controller)
+    assert "tools" not in ollama_server.requests[-1]["payload"]
+
+
+def test_regenerating_a_native_answer_uses_the_tool_path_again(qtbot, controller, ollama_server):
+    use_agent(controller, "general_assistant")
+    enqueue_discovery(ollama_server)
+    ollama_server.enqueue(answer("第一次"))
+    controller._on_user_message("你好")
+    idle(qtbot, controller)
+    enqueue_discovery(ollama_server)
+    ollama_server.enqueue(answer("第二次"))
+    controller._on_regenerate_requested()
+    idle(qtbot, controller)
+    assert [r["path"] for r in ollama_server.requests][-4:] == ["/api/version", "/api/tags", "/api/show", "/api/chat"]
+    assert "tools" in ollama_server.requests[-1]["payload"]
+    assert controller._messages[-1].content == "第二次"
+
+
+def test_regeneration_falls_back_to_plain_chat_when_the_check_fails(qtbot, controller, ollama_server, monkeypatch):
+    use_agent(controller, "general_assistant")
+    enqueue_discovery(ollama_server)
+    ollama_server.enqueue(answer("第一次"))
+    controller._on_user_message("你好")
+    idle(qtbot, controller)
+    notices = []
+    monkeypatch.setattr(controller, "_show_notice", lambda *args: notices.append(args))
+    version, tags, show = discovery()
+    show["capabilities"].remove("tools")
+    enqueue_discovery(ollama_server, (version, tags, show))
+    ollama_server.enqueue(answer("第二次"))
+    controller._on_regenerate_requested()
+    idle(qtbot, controller)
+    assert "tools" not in ollama_server.requests[-1]["payload"]
+    assert controller._messages[-1].content == "第二次"
+    assert not [n for n in notices if "启用工具" in n[1] or "工具任务未启动" in n[1]]
 
 
 def test_global_tool_switch_disables_implicit_tools(qtbot, controller, ollama_server, monkeypatch):

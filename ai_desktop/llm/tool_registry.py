@@ -58,6 +58,14 @@ def registered_names() -> frozenset[str]:
     return frozenset(_DEFINITIONS)
 
 
+NATIVE_GROUPS = frozenset({"desktop", "windows", "notes"})
+
+
+def native_tool_names() -> frozenset[str]:
+    """Tools that control this Mac directly and need no workspace or credentials."""
+    return frozenset(name for name, definition in _DEFINITIONS.items() if definition.group in NATIVE_GROUPS)
+
+
 def _validate_bash(args: dict) -> None:
     if set(args) - {"command", "timeout"}:
         raise ValueError("Unexpected Bash argument")
@@ -212,7 +220,8 @@ CREATE_NOTE = register(ToolDefinition(
     name="create_note",
     group="notes",
     risk=ToolRisk.REVERSIBLE,
-    description="Create a new note in the Notes app. It never edits or deletes existing notes.",
+    description=("Create a new note in the Notes app (备忘录) to record an idea, memo or any text to keep. "
+                 "It never edits or deletes existing notes. Not for to-dos with a time: use create_reminder."),
     properties={"title": {"type": "string", "minLength": 1, "maxLength": 200},
                 "body": {"type": "string", "maxLength": 8000}},
     required=("title",),
@@ -223,7 +232,8 @@ CREATE_REMINDER = register(ToolDefinition(
     name="create_reminder",
     group="notes",
     risk=ToolRisk.REVERSIBLE,
-    description="Create a new reminder in the Reminders app (default list, no due date).",
+    description=("Create a new reminder in the Reminders app (提醒事项) for a to-do or something to be reminded "
+                 "of. Not for recording ideas: use create_note."),
     properties={"title": {"type": "string", "minLength": 1, "maxLength": 200},
                 "notes": {"type": "string", "maxLength": 8000}},
     required=("title",),

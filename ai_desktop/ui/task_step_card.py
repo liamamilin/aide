@@ -57,6 +57,12 @@ class TaskStepCard(SimpleCardWidget):
         buttons.addStretch()
         layout.addLayout(buttons)
 
+    def set_chrome(self, visible: bool):
+        """Step header and status only matter when the run also has tool steps; a plain reply reads as a bubble."""
+        self.header.setVisible(visible)
+        self.status.setVisible(visible)
+        self.regenerate.setText('重新执行' if visible else '重新生成')
+
     def matches(self, event):
         return self.identity == (event.run_id, event.step_id, event.request_id)
 

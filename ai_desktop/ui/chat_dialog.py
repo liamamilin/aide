@@ -1867,6 +1867,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
             if identity in self._task_model_cards:
                 return
             card = TaskStepCard(event, self._msg_container, label_factory=_SelectableMessageLabel)
+            card.set_chrome(any(key[0] == event.run_id for key in self._tool_cards))
             self._task_model_cards[identity] = card
             self._stream_container = card
             self._stream_bubble = card.body
@@ -1915,6 +1916,9 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
             if key in self._tool_cards:
                 return
             card = ToolCard(event, workspace, self._msg_container)
+            for model_card in self._task_model_cards.values():
+                if model_card.identity[0] == event.run_id:
+                    model_card.set_chrome(True)
             card.confirmation_decided.connect(self.command_decided.emit)
             card.stop_requested.connect(self.tool_stop_requested.emit)
             self._tool_cards[key] = card
