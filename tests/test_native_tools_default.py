@@ -39,7 +39,7 @@ def test_open_request_runs_with_native_tools_and_leaves_settings_alone(qtbot, co
     run = audit_store.list_runs(controller._convo_id)[0]
     assert run["config"]["allowed_tools"] == NATIVE
     assert controller._task_authorization is None
-    assert controller._dialog._task_btn.text() == "工具：关闭"
+    assert controller._dialog._task_btn.text() == "命令与搜索：关闭"
 
 
 def test_failed_capability_check_falls_back_to_plain_chat(qtbot, controller, ollama_server, monkeypatch):
@@ -144,3 +144,13 @@ def test_native_authorization_is_valid_alone_and_never_saved():
     assert grant.record()["native"] is True
     with pytest.raises(ValueError):
         TaskAuthorization(agent_id="general_assistant")
+
+
+def test_button_names_only_commands_and_search_and_the_caption_says_native_tools_need_no_setup(
+        qtbot, controller):
+    use_agent(controller, "general_assistant")
+    dialog = controller._dialog
+    dialog.set_task_authorization(None)
+    assert dialog._task_btn.text() == "命令与搜索：关闭"
+    assert "无需开启" in dialog._task_status.text() and not dialog._task_status.isHidden()
+    assert "本机操作" in dialog._task_btn.toolTip()

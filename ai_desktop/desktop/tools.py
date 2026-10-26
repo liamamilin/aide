@@ -4,7 +4,7 @@ import time
 from contextlib import nullcontext
 
 from ai_desktop.desktop import opener, windows
-from ai_desktop.desktop.runner import Runner, run_command
+from ai_desktop.desktop.runner import Runner, cancellable, run_command
 from ai_desktop.desktop.search import find_apps, find_files
 from ai_desktop.integrations import apple
 from ai_desktop.llm.run_types import ToolOutput
@@ -219,6 +219,10 @@ class DesktopToolbox:
     def _guarded(self, name, execute):
         """A destructive tool is only offered when the user can be asked; it fails closed otherwise."""
         definition = get_definition(name)
-        if definition is None or definition.risk != ToolRisk.DESTRUCTIVE or self._confirmations is not None:
-            return execute
-        return lambda args, context: ToolOutput(_NOT_CONFIRMED[ConfirmationOutcome.UNAVAILABLE], error=True)
+        if definition is not None and definition.risk == ToolRisk.DESTRUCTIVE and self._confirmations is None:
+            return lambda args, context: ToolOutput(_NOT_CONFIRMED[ConfirmationOutcome.UNAVAILABLE], error=True)
+
+        def run(args, context):
+            with cancellable(context.cancelled):  # stop kills a slow osascript/mdfind instead of waiting it out
+                return execute(args, context)
+        return run

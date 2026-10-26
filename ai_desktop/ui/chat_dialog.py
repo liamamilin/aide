@@ -643,7 +643,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         task_layout = QVBoxLayout(self._task_row)
         task_layout.setContentsMargins(16, 0, 16, 0)
         task_layout.setSpacing(4)
-        self._task_btn = TransparentPushButton('工具：关闭')
+        self._task_btn = TransparentPushButton('命令与搜索：关闭')
         self._task_btn.setEnabled(config.CHAT_TOOLS_ENABLED)
         self._task_btn.setAccessibleName('工具设置')
         self._task_btn.clicked.connect(self.task_settings_requested.emit)
@@ -1796,12 +1796,13 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         if authorization is not None and authorization.agent_id != self._active_agent.id:
             authorization = None
         self._task_row.setVisible(True)
-        self._task_btn.setText('工具：已启用' if authorization else '工具：关闭')
-        self._task_btn.setToolTip('工具设置自动沿用到新建、切换对话及其他 Agent，重启后保留。'
+        self._task_btn.setText('命令与搜索：已启用' if authorization else '命令与搜索：关闭')
+        self._task_btn.setToolTip('这里只管命令执行（Bash）和联网搜索。应用、文件、备忘录、提醒事项、窗口等本机操作'
+                                 '自动可用，无需开启。设置自动沿用到新建、切换对话及其他 Agent，重启后保留。'
                                  '关闭工具后后续对话保持关闭。命令确认逐条生效；'
                                  '工具模型跟随顶栏，每次发送前检查工具能力。')
         if not config.CHAT_TOOLS_ENABLED:
-            self._task_btn.setText('工具：设置中已禁用')
+            self._task_btn.setText('命令与搜索：设置中已禁用')
         self._task_btn.setEnabled(config.CHAT_TOOLS_ENABLED and self._input.isEnabled())
         if authorization:
             parts = ['工具模型：' + (model or self._active_model)]
@@ -1815,7 +1816,11 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
                 parts.append('检查模型中…')
             self._task_status.setText(' · '.join(parts))
             self._task_status.setToolTip(authorization.execution.workspace if authorization.execution else '仅联网搜索')
-        self._task_status.setVisible(authorization is not None)
+        elif config.DESKTOP_TOOLS_ENABLED and config.CHAT_TOOLS_ENABLED:
+            self._task_status.setText('本机操作（应用、文件、备忘录、提醒事项、窗口）自动可用，无需开启')
+            self._task_status.setToolTip('')
+        self._task_status.setVisible(authorization is not None or (config.DESKTOP_TOOLS_ENABLED
+                                                                    and config.CHAT_TOOLS_ENABLED))
 
     def clear_messages(self) -> None:
         self._run_sources = {}

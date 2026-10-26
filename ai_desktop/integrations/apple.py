@@ -1,8 +1,12 @@
 """Create items in Apple Notes and Reminders. Text travels as script arguments, never in the source."""
 import html
+import logging
 from dataclasses import dataclass
 
 from ai_desktop.desktop.runner import Runner, run_command, run_script
+from ai_desktop.integrations import reminders_eventkit
+
+logger = logging.getLogger(__name__)
 
 _FIELD_SEP = "\x1f"
 _RECORD_SEP = "\x1e"
@@ -149,8 +153,23 @@ class ReminderInfo:
     title: str
 
 
+def _eventkit_first(runner, native, fallback):
+    """Use EventKit for the real system; an injected runner (tests) or an EventKit failure uses AppleScript."""
+    if runner is run_command:
+        try:
+            return native()
+        except OSError:
+            logger.info("EventKit unavailable for Reminders; using AppleScript", exc_info=True)
+    return fallback()
+
+
 def list_reminders(*, runner: Runner = run_command) -> list[ReminderInfo]:
     """Every uncompleted reminder's id and title; notes and due dates are not read."""
+    return _eventkit_first(runner, lambda: [ReminderInfo(*item) for item in reminders_eventkit.list_open()],
+                           lambda: _list_reminders_script(runner))
+
+
+def _list_reminders_script(runner) -> list[ReminderInfo]:
     found = []
     for record in run_script(_LIST_REMINDERS_SCRIPT, runner=runner, timeout=REMINDERS_TIMEOUT).split(_RECORD_SEP):
         fields = record.strip("\n").split(_FIELD_SEP)
@@ -175,16 +194,22 @@ def check_reminder_id(reminder_id) -> str:
 
 
 def reminder_title(reminder_id: str, *, runner: Runner = run_command) -> str:
-    return run_script(_REMINDER_TITLE_SCRIPT, [check_reminder_id(reminder_id)], runner=runner).strip()
+    reminder_id = check_reminder_id(reminder_id)
+    return _eventkit_first(runner, lambda: reminders_eventkit.title_of(reminder_id),
+                           lambda: run_script(_REMINDER_TITLE_SCRIPT, [reminder_id], runner=runner).strip())
 
 
 def complete_reminder(reminder_id: str, *, runner: Runner = run_command) -> None:
-    run_script(_COMPLETE_REMINDER_SCRIPT, [check_reminder_id(reminder_id)], runner=runner)
+    reminder_id = check_reminder_id(reminder_id)
+    _eventkit_first(runner, lambda: reminders_eventkit.complete(reminder_id),
+                    lambda: run_script(_COMPLETE_REMINDER_SCRIPT, [reminder_id], runner=runner))
 
 
 def delete_reminder(reminder_id: str, *, runner: Runner = run_command) -> None:
     """Reminders has no Recently Deleted folder: this cannot be undone."""
-    run_script(_DELETE_REMINDER_SCRIPT, [check_reminder_id(reminder_id)], runner=runner)
+    reminder_id = check_reminder_id(reminder_id)
+    _eventkit_first(runner, lambda: reminders_eventkit.delete(reminder_id),
+                    lambda: run_script(_DELETE_REMINDER_SCRIPT, [reminder_id], runner=runner))
 
 
 def note_title(note_id: str, *, runner: Runner = run_command) -> str:

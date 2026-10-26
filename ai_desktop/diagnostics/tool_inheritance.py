@@ -20,7 +20,7 @@ def resume_probe():
     assert grant.execution.workspace == str(root/'workspace') and grant.execution.valid()
     assert grant.search.provider == 'exa'
     assert ctl._worker is None and ctl._pending_task is None
-    assert ctl._dialog._task_btn.text() == '工具：已启用'
+    assert ctl._dialog._task_btn.text() == '命令与搜索：已启用'
     ctl.stop()
     app.processEvents()
     print(json.dumps({'saved_settings_loaded': True, 'pending_task_restored': False,
@@ -47,7 +47,7 @@ def acceptance(ctl, workspace):
         grant = ctl._task_authorization
         assert grant is not original and grant.agent_id == agent.id
         assert grant.execution == original.execution and grant.search.provider == 'exa'
-        assert ctl._dialog._task_btn.text() == '工具：已启用'
+        assert ctl._dialog._task_btn.text() == '命令与搜索：已启用'
         roles.append(agent.id)
     conversation = storage.create_conversation('translator', '继承验收历史')
     ctl._on_conversation_selected(conversation.id)

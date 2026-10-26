@@ -168,3 +168,21 @@ def test_open_with_an_app_uses_open_dash_a_only_for_safe_targets(tmp_path, monke
     monkeypatch.setattr(opener, "app_roots", lambda: ("/Applications",))
     with pytest.raises(ValueError):
         opener.open_path(str(project), app=str(outside), runner=runner)
+
+
+def test_a_cancelled_command_is_killed_promptly_and_a_slow_one_times_out():
+    import threading
+    import time
+
+    from ai_desktop.desktop import runner
+    event = threading.Event()
+    threading.Timer(0.3, event.set).start()
+    started = time.monotonic()
+    with runner.cancellable(event), pytest.raises(OSError, match="cancelled"):
+        runner.run_command(["/bin/sleep", "30"], timeout=30)
+    assert time.monotonic() - started < 3
+    with pytest.raises(OSError, match="timed out"):
+        runner.run_command(["/bin/sleep", "30"], timeout=0.3)
+    assert runner.run_command(["/bin/echo", "ok"]).strip() == "ok"
+    with pytest.raises(OSError, match="status 1"):
+        runner.run_command(["/usr/bin/false"])

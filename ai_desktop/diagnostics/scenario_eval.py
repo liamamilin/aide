@@ -276,7 +276,10 @@ def ollama_chat(base_url: str, timeout: float = 600.0) -> ChatFn:
     import requests
 
     def chat(payload: dict) -> dict:
-        response = requests.post(f"{base_url}/api/chat", json=payload, timeout=timeout)
+        for attempt in range(2):  # the app retries a bare HTTP 500 once too (a malformed tool call)
+            response = requests.post(f"{base_url}/api/chat", json=payload, timeout=timeout)
+            if response.status_code != 500 or attempt:
+                break
         response.raise_for_status()
         return response.json()
     return chat

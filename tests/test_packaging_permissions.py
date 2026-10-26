@@ -15,3 +15,11 @@ def test_apple_events_usage_text_names_what_the_app_controls():
     spec = (SCRIPTS / "aide.spec").read_text(encoding="utf-8")
     text = re.search(r"'NSAppleEventsUsageDescription': '([^']+)'", spec).group(1)
     assert all(word in text for word in ("备忘录", "提醒事项", "窗口"))
+
+
+def test_reminders_eventkit_is_packaged_and_explained():
+    spec = (SCRIPTS / "aide.spec").read_text(encoding="utf-8")
+    assert "'EventKit'" in spec
+    for key in ("NSRemindersUsageDescription", "NSRemindersFullAccessUsageDescription"):
+        assert re.search(rf"'{key}': '[^']*提醒事项[^']*'", spec)
+    assert "pyobjc-framework-EventKit" in (SCRIPTS.parent / "requirements.txt").read_text()

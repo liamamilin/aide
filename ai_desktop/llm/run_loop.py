@@ -31,6 +31,9 @@ _CONTEXT_REJECTION = re.compile(
     r"^input length \d+ exceeds (?:the )?(?:maximum )?context (?:length|window)(?: of)? \d+[.!]?$",
     re.IGNORECASE,
 )
+# Ollama answers 500 when the model wrote a tool call it cannot parse (a sampling slip, not a server fault).
+# One fresh request usually succeeds; the failed call never ran, so nothing is replayed.
+_TOOL_CALL_PARSE_FAILURE = re.compile(r"pars(?:e|ing) tool call|tool call pars", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -94,6 +97,7 @@ class RunLoop:
         self._seq = 0
         self._budget = None
         self._recovered = False
+        self._parse_retried = False
         self._stream_sequences = {}
 
     @property
@@ -190,6 +194,15 @@ class RunLoop:
             return True
         return False
 
+    @staticmethod
+    def _retryable_server_slip(result) -> bool:
+        """A parse failure reported in the stream, or a bare HTTP 500 before any content (no tool has run)."""
+        if result.status != ResultStatus.FAILED:
+            return False
+        if result.error_code == ErrorCode.SERVER:
+            return bool(_TOOL_CALL_PARSE_FAILURE.search(result.error or ""))
+        return result.error_code == ErrorCode.HTTP and result.error == "HTTP 500" and not result.text
+
     def run(self, payload: dict | Callable[[], dict]) -> ChatResult:
         if self.result is not None:
             return self.result
@@ -247,6 +260,10 @@ class RunLoop:
                         if not self._trim(blocks, schemas, force=True):
                             return self._finish(ResultStatus.LIMITED, text=result.text,
                                                 error="输入过长，必要上下文无法继续缩减。")
+                        self.current_request = replace(self.current_request, request_id=uuid.uuid4().hex)
+                        continue
+                    if schemas and not self._parse_retried and self._retryable_server_slip(result):
+                        self._parse_retried = True
                         self.current_request = replace(self.current_request, request_id=uuid.uuid4().hex)
                         continue
                     break

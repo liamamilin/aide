@@ -428,3 +428,26 @@ def test_initial_blocks_pin_all_system_messages_and_latest_user():
                              {"role": "user", "content": "old"}, {"role": "assistant", "content": "answer"},
                              {"role": "user", "content": "latest"}])
     assert [block.required for block in blocks] == [True, True, False, True]
+
+
+def test_a_model_tool_call_parse_failure_gets_one_fresh_request():
+    failure = {"status": ResultStatus.FAILED, "error_code": ErrorCode.SERVER,
+               "error": "error parsing tool call: raw='<function=x>', err=XML syntax error on line 5"}
+    loop, payload, model, executions, events = setup_run([failure, ModelTurn("answer", "", (), "stop")])
+    result = loop.run(payload)
+    first, second = [request for request, _, _ in model.requests]
+    assert first.step_id == second.step_id and first.request_id != second.request_id
+    assert result.status == ResultStatus.SUCCEEDED and executions == []
+    twice, payload, model, _, events = setup_run([failure, failure, ModelTurn("never used", "", (), "stop")])
+    assert twice.run(payload).status == ResultStatus.FAILED and len(model.requests) == 2
+    plain, payload, model, _, events = setup_run([failure], tools=False)
+    assert plain.run(payload).status == ResultStatus.FAILED and len(model.requests) == 1
+
+
+def test_a_bare_http_500_before_any_content_is_retried_once_for_tool_runs():
+    failure = {"status": ResultStatus.FAILED, "error_code": ErrorCode.HTTP, "error": "HTTP 500"}
+    loop, payload, model, executions, events = setup_run([failure, ModelTurn("answer", "", (), "stop")])
+    assert loop.run(payload).status == ResultStatus.SUCCEEDED and len(model.requests) == 2
+    other = {"status": ResultStatus.FAILED, "error_code": ErrorCode.HTTP, "error": "HTTP 503"}
+    loop, payload, model, _, _ = setup_run([other, ModelTurn("never", "", (), "stop")])
+    assert loop.run(payload).status == ResultStatus.FAILED and len(model.requests) == 1

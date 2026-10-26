@@ -80,6 +80,7 @@ a = Analysis(
         'Foundation',
         'CoreFoundation',
         'Security',
+        'EventKit',  # 提醒事项：毫秒级读取，失败时回退到 AppleScript
         'HIServices',
         'objc',
         'Quartz',
@@ -168,6 +169,8 @@ app = BUNDLE(
         'NSSupportsAutomaticGraphicsSwitching': True,
         # 隐私权限声明（macOS 10.14+ 需要用途说明）
         'NSAppleEventsUsageDescription': '用于读取选中文字、模拟快捷键，以及按你的要求操作备忘录、提醒事项和窗口。',
+        'NSRemindersUsageDescription': '用于按你的要求查看、完成或删除提醒事项。',
+        'NSRemindersFullAccessUsageDescription': '用于按你的要求查看、完成或删除提醒事项。',
         'NSAccessibilityUsageDescription': '全局快捷键 ⌘⌃L 需要辅助功能权限来监听键盘事件。',
     },
 )
