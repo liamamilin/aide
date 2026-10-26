@@ -130,3 +130,13 @@ def test_evaluate_reports_pass_counts_and_a_readable_table():
     report = ev.evaluate("m", chat, repetitions=3, scenarios=[BY_ID["neg_chat"]], options={})
     assert (report["passed"], report["runs"]) == (3, 3)
     assert "3/3" in ev.summary_table(report)
+
+
+def test_project_must_be_opened_in_the_requested_app():
+    find = use(call("find_apps", query="Cursor"), call("find_files", query="视频制作项目"))
+    good = use(call("open_path", path="/Users/me/Projects/视频制作项目", app="/Applications/Cursor.app"))
+    assert run("s2_open_with_app", find, good, say("已用 Cursor 打开"))[0] == ""
+    plain = use(call("open_path", path="/Users/me/Projects/视频制作项目"))
+    assert "app 参数" in run("s2_open_with_app", find, plain, say("好了"))[0]
+    assert "find_apps" in run("s2_open_with_app", use(call("find_files", query="视频制作项目")), good, say("好"))[0]
+    assert run("s2_open_with_app", find, say("找到两个项目：视频制作项目、视频制作项目-旧版，打开哪个？"))[0] == ""

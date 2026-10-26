@@ -24,6 +24,7 @@ APPS = [
     {"kind": "app", "name": "Notes", "path": "/System/Applications/Notes.app", "aka": ["备忘录", "notes"]},
     {"kind": "app", "name": "VoiceMemos", "path": "/System/Applications/VoiceMemos.app",
      "aka": ["语音备忘录", "voicememos"]},
+    {"kind": "app", "name": "Cursor", "path": "/Applications/Cursor.app", "aka": ["cursor"]},
     {"kind": "app", "name": "Safari", "path": "/Applications/Safari.app", "aka": ["safari", "safari浏览器"]},
 ]
 FILES = [
@@ -35,6 +36,7 @@ FILES = [
     {"kind": "file", "name": "合同.pdf", "path": "/Users/me/Downloads/合同.pdf"},
 ]
 KNOWN_PATHS = {item["path"] for item in (*APPS, *FILES)}
+_VALID_APPS = KNOWN_PATHS | {"/"}  # "/" stands for no app argument
 NOTES = [
     {"id": "x-coredata://AAA/ICNote/p41", "title": "明天要录制课程", "age_seconds": 60},
     {"id": "x-coredata://AAA/ICNote/p17", "title": "周末采购清单", "age_seconds": 90000},
@@ -98,7 +100,8 @@ def _no_calls(outcome):
 
 def _real_opens(o):
     """open_path calls the real tool would accept; a made-up path such as "备忘录" is rejected there."""
-    return [c for c in o.named("open_path") if c.args.get("path") in KNOWN_PATHS]
+    return [c for c in o.named("open_path")
+            if c.args.get("path") in KNOWN_PATHS and c.args.get("app", "/") in _VALID_APPS]
 
 
 _CLAIMS_OPENED = re.compile(r"已(为您|经)?(帮您)?(打开|启动)|成功(打开|启动)")
@@ -140,6 +143,19 @@ def _check_project(o):
     if any(not c.args.get("path", "").startswith("/Users/me/Projects/视频制作项目") for c in opened):
         return "打开了错误的路径"
     return "" if opened or "旧版" in o.final else "多个匹配项时既没打开也没有让用户选择"
+
+
+def _check_project_in_app(o):
+    if not o.named("find_apps"):
+        return "没有用 find_apps 查找开发工具"
+    opened = _real_opens(o)
+    if not opened:
+        return "" if "旧版" in o.final else "没有打开项目，也没有让用户选择"
+    if any(c.args.get("app") != "/Applications/Cursor.app" for c in opened):
+        return "没有用 Cursor 打开（缺少 app 参数）"
+    if any(not c.args.get("path", "").startswith("/Users/me/Projects/视频制作项目") for c in opened):
+        return "打开了错误的项目"
+    return ""
 
 
 def _check_note(o):
@@ -201,6 +217,8 @@ SCENARIOS = (
     Scenario("open_ambiguous", "同名应用歧义", "打开备忘录", _check_open_notes),
     Scenario("s1_find_doc", "S1 找文档（带时间词）", "找一下我上周写的产品方案", _check_find_doc),
     Scenario("s2_project", "S2 打开项目", "打开我那个视频制作项目", _check_project),
+    Scenario("s2_open_with_app", "S2 用指定工具打开项目", "用 Cursor 打开我那个视频制作项目",
+             _check_project_in_app),
     Scenario("s3_note", "S3 记想法", "打开备忘录，把这个想法记下来：下周做用户访谈", _check_note),
     Scenario("reminder", "提醒", "提醒我明天下午三点交周报", _check_reminder),
     Scenario("s5_windows", "S5 并排窗口", "帮我把 Safari 和备忘录并排放好", _check_windows),
@@ -235,7 +253,7 @@ class Fixtures:
         if name == "open_path":
             if self.fail_open:
                 return "本机查找或打开失败，请换个说法或向用户说明。"
-            if args.get("path") not in KNOWN_PATHS:
+            if args.get("path") not in KNOWN_PATHS or args.get("app", "/") not in _VALID_APPS:
                 return "路径无效或不存在。"
             return {"action": "open"}
         if name == "list_notes":

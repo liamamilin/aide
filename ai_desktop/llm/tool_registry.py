@@ -123,12 +123,24 @@ def _validate_query(args: dict) -> None:
         raise ValueError("Invalid search query")
 
 
+def _validate_file_query(args: dict) -> None:
+    _validate_query({key: value for key, value in args.items() if key != "modified_within_days"})
+    days = args.get("modified_within_days", 1)
+    if type(days) is not int or not 1 <= days <= 3650:
+        raise ValueError("Invalid day count")
+
+
 def _validate_open_path(args: dict) -> None:
-    if set(args) - {"path"}:
+    if set(args) - {"path", "app"}:
         raise ValueError("Unexpected open argument")
-    path = args.get("path")
-    if not isinstance(path, str) or not path.startswith("/") or len(path) > 4096 or "\x00" in path:
-        raise ValueError("Invalid path")
+    if "path" not in args:
+        raise ValueError("A path is required")
+    for key in ("path", "app"):
+        value = args.get(key, "/")
+        if not isinstance(value, str) or not value.startswith("/") or len(value) > 4096 or "\x00" in value:
+            raise ValueError(f"Invalid {key}")
+    if "app" in args and not args["app"].rstrip("/").lower().endswith(".app"):
+        raise ValueError("Invalid app")
 
 
 FIND_APPS = register(ToolDefinition(
@@ -145,18 +157,22 @@ FIND_FILES = register(ToolDefinition(
     name="find_files",
     group="desktop",
     risk=ToolRisk.READ,
-    description="Find files and folders by name in the user's home folder. Returns names and paths.",
-    properties={"query": {"type": "string", "minLength": 1, "maxLength": 200}},
+    description=("Find files and folders by name in the user's home folder, newest first, with modified date. "
+                 "Code project folders have kind project. Use modified_within_days for 'last week' (7)."),
+    properties={"query": {"type": "string", "minLength": 1, "maxLength": 200},
+                "modified_within_days": {"type": "integer", "minimum": 1, "maximum": 3650}},
     required=("query",),
-    validate=_validate_query,
+    validate=_validate_file_query,
 ))
 
 OPEN_PATH = register(ToolDefinition(
     name="open_path",
     group="desktop",
     risk=ToolRisk.REVERSIBLE,
-    description="Open an app, file or folder (or show it in Finder). Use a path from find_apps or find_files.",
-    properties={"path": {"type": "string", "minLength": 1, "maxLength": 4096}},
+    description=("Open an app, file or folder (or show it in Finder). Use paths from find_apps or find_files. "
+                 "Optional app: the .app path from find_apps (not a name) to open it with, e.g. an editor."),
+    properties={"path": {"type": "string", "minLength": 1, "maxLength": 4096},
+                "app": {"type": "string", "maxLength": 4096}},
     required=("path",),
     validate=_validate_open_path,
 ))
@@ -293,6 +309,27 @@ DELETE_REMINDER = register(ToolDefinition(
     properties={"id": {"type": "string", "minLength": 1, "maxLength": 500}},
     required=("id",),
     validate=_validate_reminder_id,
+))
+
+def _validate_append_note(args: dict) -> None:
+    if set(args) != {"id", "text"}:
+        raise ValueError("A note id and text are required")
+    _validate_note_id({"id": args["id"]})
+    text = args["text"]
+    if not isinstance(text, str) or not text.strip() or len(text) > 8000 or "\x00" in text:
+        raise ValueError("Invalid text")
+
+
+APPEND_NOTE = register(ToolDefinition(
+    name="append_note",
+    group="notes",
+    risk=ToolRisk.DESTRUCTIVE,
+    description=("Add text at the end of an existing note by id from list_notes or create_note. Never "
+                 "replaces content. The user confirms the title and the added text."),
+    properties={"id": {"type": "string", "minLength": 1, "maxLength": 500},
+                "text": {"type": "string", "minLength": 1, "maxLength": 8000}},
+    required=("id", "text"),
+    validate=_validate_append_note,
 ))
 
 DELETE_NOTE = register(ToolDefinition(

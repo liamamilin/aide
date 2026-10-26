@@ -13,7 +13,7 @@ _SENTENCE_MARKS = re.compile(r"[，。！？；：,.!?;:\n]")
 # Words that mark an instruction or question rather than a name.
 _REQUEST_WORDS = re.compile(r"[把帮请让给吗呢么]|怎么|如何|什么|为什么|整理|总结|翻译|解释")
 MAX_SHORT_WORDS = 4
-_KIND_ORDER = {"app": 0, "folder": 1, "file": 2}
+_KIND_ORDER = {"app": 0, "project": 1, "folder": 1, "file": 2}
 
 
 def is_short_query(text: str) -> bool:

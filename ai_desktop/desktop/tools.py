@@ -1,5 +1,6 @@
 """Executors for the desktop tools; they return metadata only and never read file contents."""
 import json
+import time
 from contextlib import nullcontext
 
 from ai_desktop.desktop import opener, windows
@@ -41,27 +42,33 @@ class DesktopToolbox:
             return None
         return ToolOutput(_NOT_CONFIRMED[outcome], error=True)
 
-    def _search(self, finder, args, context):
+    def _search(self, finder, args, context, **options):
         if context.cancelled.is_set():
             return ToolOutput("已取消。", error=True)
         try:
-            found = finder(args["query"], runner=self._runner)
+            found = finder(args["query"], runner=self._runner, **options)
         except (OSError, ValueError):
             return _FAILED
-        return ToolOutput(json.dumps({"results": [{"kind": c.kind, "name": c.name, "path": c.path}
-                                                    for c in found]}, ensure_ascii=False))
+        results = []
+        for item in found:
+            record = {"kind": item.kind, "name": item.name, "path": item.path}
+            if item.modified:
+                record["modified"] = time.strftime("%Y-%m-%d", time.localtime(item.modified))
+            results.append(record)
+        return ToolOutput(json.dumps({"results": results}, ensure_ascii=False))
 
     def find_apps(self, args, context):
         return self._search(find_apps, args, context)
 
     def find_files(self, args, context):
-        return self._search(find_files, args, context)
+        days = args.get("modified_within_days")
+        return self._search(find_files, args, context, **({"modified_within_days": days} if days else {}))
 
     def open_path(self, args, context):
         if context.cancelled.is_set():
             return ToolOutput("已取消。", error=True)
         try:
-            action = opener.open_path(args["path"], runner=self._runner)
+            action = opener.open_path(args["path"], app=args.get("app"), runner=self._runner)
         except (OSError, ValueError) as exc:
             if isinstance(exc, ValueError):
                 return ToolOutput("路径无效或不存在。", error=True)
@@ -145,8 +152,25 @@ class DesktopToolbox:
                                 "提醒事项没有“最近删除”，删除后无法恢复。如只是做完了，请选择拒绝并改为标记完成。")
         if refused is not None:
             return refused
-        return self._act(lambda: apple.delete_reminder(args["id"], runner=self._runner),
-                         context, "已删除这条提醒。", "无法删除提醒。")
+        return self._act(lambda: apple.delete_reminder(args["id"], runner=self._runner), context,
+                         json.dumps({"result": "已删除这条提醒。", "title": title}, ensure_ascii=False),
+                         "无法删除提醒。")
+
+    def append_note(self, args, context):
+        if context.cancelled.is_set():
+            return ToolOutput("已取消。", error=True)
+        try:
+            title = apple.note_title(args["id"], runner=self._runner)
+        except (OSError, ValueError):
+            return ToolOutput("找不到这条笔记，请先用 list_notes 查看。", error=True)
+        preview = f"在备忘录《{title}》末尾追加：\n{args['text']}"
+        refused = self._confirm(context, "append_note", preview,
+                                "只在末尾追加，不删除已有内容；含附件或手写的笔记，请先在备忘录里确认。")
+        if refused is not None:
+            return refused
+        return self._act(lambda: apple.append_to_note(args["id"], args["text"], runner=self._runner), context,
+                         json.dumps({"result": "已追加到笔记末尾。", "title": title}, ensure_ascii=False),
+                         "无法追加到笔记。")
 
     def delete_note(self, args, context):
         if context.cancelled.is_set():
@@ -159,8 +183,9 @@ class DesktopToolbox:
                                 "这条笔记会移到“最近删除”，30 天内可在备忘录中恢复。")
         if refused is not None:
             return refused
-        return self._act(lambda: apple.delete_note(args["id"], runner=self._runner),
-                         context, "已把这条笔记移到备忘录的“最近删除”。", "无法删除笔记。")
+        return self._act(lambda: apple.delete_note(args["id"], runner=self._runner), context,
+                         json.dumps({"result": "已把这条笔记移到备忘录的“最近删除”。", "title": title},
+                                    ensure_ascii=False), "无法删除笔记。")
 
     @staticmethod
     def _created(action, context, title, done, failed):
@@ -188,7 +213,7 @@ class DesktopToolbox:
                  "create_note": self.create_note, "create_reminder": self.create_reminder,
                  "list_notes": self.list_notes, "list_reminders": self.list_reminders,
                  "complete_reminder": self.complete_reminder, "delete_reminder": self.delete_reminder,
-                 "delete_note": self.delete_note}
+                 "append_note": self.append_note, "delete_note": self.delete_note}
         return {name: self._guarded(name, execute) for name, execute in tools.items()}
 
     def _guarded(self, name, execute):

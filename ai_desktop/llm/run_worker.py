@@ -44,7 +44,8 @@ class RunWorker(QThread):
                  exact_options: bool = False,
                  tools_admitted: bool = False, execution: ExecutionSnapshot | None = None,
                  confirmations: ConfirmationBroker | None = None,
-                 search_settings: SearchSettings | None = None, native_tools: bool = False):
+                 search_settings: SearchSettings | None = None, native_tools: bool = False,
+                 session_context: str = ''):
         super().__init__(parent)
         if type(tools_admitted) is not bool:
             raise ValueError('Admission must be explicit')
@@ -77,6 +78,8 @@ class RunWorker(QThread):
                                          execution=execution, search_settings=search_settings)
         if self.context.tools:
             rules = tool_rules(tool.name for tool in self.context.tools)
+            if session_context:
+                rules += '\n\n' + session_context
             self.request = replace(self.request, system_prompt=system_prompt + '\n\n' + rules)
             self.context = replace(self.context, request=self.request)
         self._run_loop = None

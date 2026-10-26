@@ -80,7 +80,9 @@ def test_desktop_tools_are_registered_with_risk_and_group():
         "find_apps": ("desktop", ToolRisk.READ), "find_files": ("desktop", ToolRisk.READ),
         "open_path": ("desktop", ToolRisk.REVERSIBLE)}
     assert validate_tool_arguments(_call("open_path", path="/Applications/Safari.app"))
-    for bad in ({"path": "relative"}, {"path": "/a", "x": 1}, {}):
+    assert validate_tool_arguments(_call("open_path", path="/a/项目", app="/Applications/Cursor.app"))
+    for bad in ({"path": "relative"}, {"path": "/a", "x": 1}, {}, {"path": "/a", "app": "Cursor"},
+                {"path": "/a", "app": "/Applications/Cursor"}):
         with pytest.raises(ValueError):
             validate_tool_arguments(_call("open_path", **bad))
     with pytest.raises(ValueError):

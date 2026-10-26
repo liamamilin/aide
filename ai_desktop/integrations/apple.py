@@ -74,6 +74,13 @@ _DELETE_REMINDER_SCRIPT = """on run argv
     tell application "Reminders" to delete reminder id (item 1 of argv)
 end run"""
 
+_APPEND_NOTE_SCRIPT = """on run argv
+    tell application "Notes"
+        set theNote to note id (item 1 of argv)
+        set body of theNote to (body of theNote) & (item 2 of argv)
+    end tell
+end run"""
+
 _NOTE_TITLE_SCRIPT = """on run argv
     tell application "Notes" to return name of note id (item 1 of argv)
 end run"""
@@ -182,6 +189,16 @@ def delete_reminder(reminder_id: str, *, runner: Runner = run_command) -> None:
 
 def note_title(note_id: str, *, runner: Runner = run_command) -> str:
     return run_script(_NOTE_TITLE_SCRIPT, [check_note_id(note_id)], runner=runner).strip()
+
+
+def append_html(text: str) -> str:
+    return "".join(f"<div>{html.escape(line) or '<br>'}</div>" for line in text.splitlines())
+
+
+def append_to_note(note_id: str, text: str, *, runner: Runner = run_command) -> None:
+    """Add lines at the end of an existing note; nothing already in it is removed or reordered."""
+    text = _text(text, MAX_BODY, "note text", required=True)
+    run_script(_APPEND_NOTE_SCRIPT, [check_note_id(note_id), append_html(text)], runner=runner)
 
 
 def delete_note(note_id: str, *, runner: Runner = run_command) -> None:

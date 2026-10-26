@@ -18,9 +18,10 @@ _app_cache_lock = threading.Lock()
 
 @dataclass(frozen=True)
 class Candidate:
-    kind: str  # "app", "file" or "folder"
+    kind: str  # "app", "file", "folder" or "project" (a folder that looks like a code project)
     name: str
     path: str
+    modified: float = 0.0  # seconds since the epoch; 0 when unknown
 
 
 # Bulk or system data that would only add noise (and private app data) to a name search of the home folder.
@@ -88,15 +89,39 @@ def find_apps(query: str, *, runner: Runner = run_command, roots=None, limit: in
     return found
 
 
-def find_files(query: str, *, runner: Runner = run_command, roots=None, limit: int = 8) -> list[Candidate]:
-    """Match file and folder names under the search roots, excluding app bundles."""
+PROJECT_MARKERS = (".git", "pyproject.toml", "package.json", "Package.swift", "Cargo.toml", "go.mod", "pom.xml",
+                   "build.gradle", "CMakeLists.txt", "Makefile", "requirements.txt")
+MAX_SCANNED = 400
+
+
+def _folder_kind(path: str) -> str:
+    return "project" if any(os.path.exists(os.path.join(path, marker)) for marker in PROJECT_MARKERS) else "folder"
+
+
+def _modified(path: str) -> float:
+    try:
+        return os.stat(path).st_mtime
+    except OSError:
+        return 0.0
+
+
+def find_files(query: str, *, runner: Runner = run_command, roots=None, limit: int = 8,
+               modified_within_days: int | None = None, now: float | None = None) -> list[Candidate]:
+    """Match file and folder names under the search roots, newest first, excluding app bundles."""
     # `mdfind -name` matches Chinese names mid-string; a leading-wildcard attribute predicate does not.
     paths = runner([MDFIND, *_onlyin(roots or default_file_roots()), "-name", _clean(query)]).splitlines()
+    cutoff = ((now if now is not None else time.time()) - modified_within_days * 86400
+              if modified_within_days else None)
     found = []
     for path in paths:
         if not path.startswith("/") or path.endswith(".app") or _is_skipped(path):
             continue
-        found.append(Candidate("folder" if os.path.isdir(path) else "file", os.path.basename(path), path))
-        if len(found) >= limit:
+        modified = _modified(path)
+        if cutoff is not None and modified < cutoff:
+            continue
+        kind = _folder_kind(path) if os.path.isdir(path) else "file"
+        found.append(Candidate(kind, os.path.basename(path), path, modified))
+        if len(found) >= MAX_SCANNED:
             break
-    return found
+    found.sort(key=lambda item: -item.modified)  # "the one I wrote last week" is usually the most recent
+    return found[:limit]

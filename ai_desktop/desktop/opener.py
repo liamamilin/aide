@@ -39,10 +39,20 @@ def reveal_path(path: str, *, runner: Runner = run_command) -> str:
     return "reveal"
 
 
-def open_path(path: str, *, runner: Runner = run_command) -> str:
-    """Open the path, or reveal it when opening could execute code. Returns the action taken."""
+def open_path(path: str, *, app: str | None = None, runner: Runner = run_command) -> str:
+    """Open the path, or reveal it when opening could execute code. Returns the action taken.
+
+    `app` opens the path with that application instead of the default one. It must be an installed
+    application in a standard location; a path that could execute code is still only revealed.
+    """
     path = _validated(path)
     if open_action(path) == "reveal":
         return reveal_path(path, runner=runner)
+    if app is not None:
+        app = _validated(app)
+        if not app.lower().endswith(".app") or open_action(app) != "open":
+            raise ValueError("The application must be an installed app")
+        runner([OPEN, "-a", app, path])
+        return "open"
     runner([OPEN, path])
     return "open"

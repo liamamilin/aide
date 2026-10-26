@@ -263,3 +263,23 @@ def test_reminder_tools_reject_guessed_ids_and_fail_closed_without_confirmation(
     assert toolbox.complete_reminder({"id": NOTE_A}, _context()).error
     assert toolbox.executors()["delete_reminder"]({"id": REMINDER}, _action_context()).error
     assert runner.calls == []
+
+
+def test_append_note_previews_the_added_text_and_only_adds_after_approval():
+    approver, runner = Approver(True), TitleThenAck()
+    out = DesktopToolbox(runner, approver.broker).append_note(
+        {"id": NOTE_A, "text": "第二行 <b>&"}, _action_context())
+    assert not out.error and json.loads(out.text)["title"] == "录制课程"
+    assert approver.shown[0].command == "在备忘录《录制课程》末尾追加：\n第二行 <b>&"
+    osascript, flag, script, note_id, added = runner.calls[-1]
+    assert "set body of theNote to (body of theNote) &" in script and note_id == NOTE_A
+    assert added == "<div>第二行 &lt;b&gt;&amp;</div>"
+
+
+def test_append_note_does_nothing_when_denied_or_given_bad_input():
+    denied, runner = Approver(False), TitleThenAck()
+    toolbox = DesktopToolbox(runner, denied.broker)
+    assert toolbox.append_note({"id": NOTE_A, "text": "x"}, _action_context()).error
+    assert not any("set body" in call[2] for call in runner.calls)
+    assert DesktopToolbox(TitleThenAck(), Approver(True).broker).append_note(
+        {"id": "bad", "text": "x"}, _action_context()).error

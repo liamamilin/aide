@@ -47,7 +47,7 @@ def test_find_files_skips_relative_paths_and_bundles(tmp_path):
     doc.write_text("x")
     runner = FakeRunner(files=[str(folder), str(doc), "relative/path", "/Applications/X.app"])
     found = search.find_files("方案", runner=runner, roots=[str(tmp_path)])
-    assert [(c.kind, c.name) for c in found] == [("folder", "项目"), ("file", "方案.docx")]
+    assert sorted((c.kind, c.name) for c in found) == [("file", "方案.docx"), ("folder", "项目")]
     assert runner.calls[0][1:3] == ["-onlyin", str(tmp_path)]
 
 
@@ -128,3 +128,43 @@ def test_file_search_defaults_to_home_and_skips_library_hidden_and_build_folders
     monkeypatch.setattr(search.os.path, "isdir", lambda path: False)
     found = search.find_files("方案", runner=lambda argv: "\n".join(paths), roots=["/Users/me"])
     assert [c.path for c in found] == ["/Users/me/Documents/方案.docx"]
+
+
+def test_find_files_sorts_newest_first_filters_by_age_and_marks_projects(tmp_path):
+    import os
+    now = 2_000_000_000.0
+    old, new, project = tmp_path / "方案-旧.docx", tmp_path / "方案-新.docx", tmp_path / "方案项目"
+    for path in (old, new):
+        path.write_text("x")
+    project.mkdir()
+    (project / ".git").mkdir()
+    os.utime(old, (now - 30 * 86400, now - 30 * 86400))
+    os.utime(new, (now - 2 * 86400, now - 2 * 86400))
+    os.utime(project, (now - 1 * 86400, now - 1 * 86400))
+    runner = FakeRunner(files=[str(old), str(new), str(project)])
+    found = search.find_files("方案", runner=runner, roots=[str(tmp_path)], now=now)
+    assert [(c.kind, c.name) for c in found] == [("project", "方案项目"), ("file", "方案-新.docx"),
+                                                ("file", "方案-旧.docx")]
+    recent = search.find_files("方案", runner=runner, roots=[str(tmp_path)], modified_within_days=7, now=now)
+    assert [c.name for c in recent] == ["方案项目", "方案-新.docx"]
+
+
+def test_open_with_an_app_uses_open_dash_a_only_for_safe_targets(tmp_path, monkeypatch):
+    project, script, app = tmp_path / "项目", tmp_path / "x.sh", tmp_path / "Code.app"
+    project.mkdir()
+    app.mkdir()
+    script.write_text("x")
+    monkeypatch.setattr(opener, "app_roots", lambda: (str(tmp_path),))
+    runner = FakeRunner()
+    assert opener.open_path(str(project), app=str(app), runner=runner) == "open"
+    assert runner.calls[-1] == [OPEN, "-a", str(app), str(project)]
+    assert opener.open_path(str(script), app=str(app), runner=runner) == "reveal"  # never run through an app
+    assert runner.calls[-1] == [OPEN, "-R", str(script)]
+    for bad in (str(project), str(tmp_path / "missing.app"), "relative.app"):
+        with pytest.raises(ValueError):
+            opener.open_path(str(project), app=bad, runner=runner)
+    outside = tmp_path / "other" / "Evil.app"
+    outside.mkdir(parents=True)
+    monkeypatch.setattr(opener, "app_roots", lambda: ("/Applications",))
+    with pytest.raises(ValueError):
+        opener.open_path(str(project), app=str(outside), runner=runner)

@@ -188,6 +188,7 @@ class ChatController(QObject):
         self._regenerating_user_id: int = 0
         self._stale_workers: list[RunWorker] = []
         self._response_text = ""
+        self._session_objects = {}  # conversation id -> SessionObjects
         self._dialog: Optional[ChatDialog] = None
         self._chat_geometry = get_setting("chat_window_geometry")
 
@@ -2012,7 +2013,7 @@ class ChatController(QObject):
                 context, system_prompt, parent=self,
                 conversation_id=self._convo_id, agent_id=request_agent.id,
                 origin=origin, action_id=snapshot.get("action_id") if origin == "action" else None,
-                **worker_options,
+                session_context=self._session_context(), **worker_options,
             )
             worker._task_admission = task_admission if task_kwargs else None
         except Exception:
@@ -2424,7 +2425,7 @@ class ChatController(QObject):
                 recent, system_prompt or request_agent.system_prompt, parent=self,
                 conversation_id=self._convo_id, agent_id=request_agent.id,
                 origin="action" if retry_action_id else "chat", action_id=retry_action_id,
-                **worker_options,
+                session_context=self._session_context(), **worker_options,
             )
             worker._task_admission = task_admission if task_kwargs else None
             worker.thinking_event.connect(self._on_thinking_event)
@@ -2496,6 +2497,13 @@ class ChatController(QObject):
         if self._dialog:
             self._dialog.append_thinking_chunk(event.text)
 
+    def _session_objects_for(self, conversation_id):
+        from ai_desktop.services.session_objects import SessionObjects
+        return self._session_objects.setdefault(conversation_id, SessionObjects())
+
+    def _session_context(self) -> str:
+        return self._session_objects_for(self._convo_id).render()
+
     def _connect_tool_feedback(self, worker):
         if self._dialog:
             self._dialog.purge_expired_audit()
@@ -2533,6 +2541,9 @@ class ChatController(QObject):
             self.float_btn.set_task_activity(activity)
         elif event.kind == RunEventKind.TOOL_FINISHED:
             self.float_btn.set_task_activity("working")
+            if event.output is not None:
+                self._session_objects_for(worker.request.conversation_id).observe(
+                    event.tool_name, event.arguments_json, event.output.text, event.output.error)
         if self._dialog and event.kind in {RunEventKind.TOOL_STARTED, RunEventKind.TOOL_UPDATED,
                                           RunEventKind.TOOL_FINISHED}:
             workspace = worker.context.execution.workspace if worker.context.execution else ''

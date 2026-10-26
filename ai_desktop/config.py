@@ -32,6 +32,7 @@ CHAT_TOOL_NAMES = frozenset({
     "bash", "web_search", "find_apps", "find_files", "open_path",
     "list_windows", "arrange_window", "create_note", "create_reminder", "list_notes", "delete_note",
     "list_reminders", "complete_reminder", "delete_reminder",
+    "append_note",
 })
 FILE_SEARCH_ROOTS: tuple = ()  # 本机文件查找范围；为空时搜索整个用户目录（跳过 Library、隐藏目录、node_modules 等）
 DESKTOP_TOOLS_ENABLED: bool = True  # 已通过准入的工具任务同时提供本机应用/文件查找与打开

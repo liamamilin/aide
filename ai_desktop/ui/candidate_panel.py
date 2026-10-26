@@ -11,7 +11,7 @@ from ai_desktop.ui.fluent import CaptionLabel, SimpleCardWidget
 
 logger = logging.getLogger(__name__)
 
-_KIND_LABEL = {"app": "应用", "folder": "文件夹", "file": "文件"}
+_KIND_LABEL = {"app": "应用", "project": "项目", "folder": "文件夹", "file": "文件"}
 ROW_HEIGHT = 28
 MAX_VISIBLE_ROWS = 6
 
