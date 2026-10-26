@@ -28,7 +28,10 @@ SEARCH_PARALLEL_MODE: str = "basic"
 
 # All conversation roles share the same registry. Actual access requires
 # explicit authorization for the current Agent/conversation and fresh admission.
-CHAT_TOOL_NAMES = frozenset({"bash", "web_search", "find_apps", "find_files", "open_path"})
+CHAT_TOOL_NAMES = frozenset({
+    "bash", "web_search", "find_apps", "find_files", "open_path",
+    "list_windows", "arrange_window", "create_note", "create_reminder",
+})
 DESKTOP_TOOLS_ENABLED: bool = True  # 已通过准入的工具任务同时提供本机应用/文件查找与打开
 CHAT_TOOLS_ENABLED: bool = True  # 仅允许用户主动授权；每个会话默认关闭工具
 TASK_MAX_MODEL_ROUNDS: int = 8

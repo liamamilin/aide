@@ -32,9 +32,11 @@ _ERRORS = {
 }
 
 _TITLES = {'bash': '命令执行', 'web_search': '联网搜索', 'find_apps': '查找应用',
-           'find_files': '查找文件', 'open_path': '打开项目'}
+           'find_files': '查找文件', 'open_path': '打开项目', 'list_windows': '查看窗口',
+           'arrange_window': '调整窗口', 'create_note': '新建笔记', 'create_reminder': '新建提醒'}
 _START_STATUS = {'bash': '检查命令', 'web_search': '正在搜索', 'find_apps': '正在查找',
-                 'find_files': '正在查找', 'open_path': '正在打开'}
+                 'find_files': '正在查找', 'open_path': '正在打开', 'list_windows': '正在查看',
+                 'arrange_window': '正在调整', 'create_note': '正在创建', 'create_reminder': '正在创建'}
 _SEARCH_ERRORS = {
     'cancelled': '已停止', 'timeout': '搜索超时', 'active_limit': '任务超时',
     'authentication': '密钥或权限无效', 'quota': '账户额度不足', 'rate_limit': '请求过多',
@@ -99,7 +101,8 @@ class ToolCard(SimpleCardWidget):
         layout.addWidget(self.directory)
         self.command_view = PlainTextEdit(self)
         self.command_view.setReadOnly(True)
-        self.command_view.setPlainText(self.command or str(args.get('query', '') or args.get('path', '')))
+        self.command_view.setPlainText(self.command or str(args.get('query', '') or args.get('path', '')
+                                                 or args.get('title', '') or args.get('app', '')))
         self.command_view.setAccessibleName('完整命令或搜索参数')
         self.command_view.setMinimumWidth(0)
         self.command_view.setFixedHeight(88)

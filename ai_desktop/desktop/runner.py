@@ -4,6 +4,7 @@ from collections.abc import Callable, Sequence
 
 MDFIND = "/usr/bin/mdfind"
 OPEN = "/usr/bin/open"
+OSASCRIPT = "/usr/bin/osascript"
 
 Runner = Callable[[Sequence[str]], str]
 
@@ -17,3 +18,10 @@ def run_command(argv: Sequence[str], timeout: float = 5.0) -> str:
     if result.returncode != 0:
         raise OSError(f"command failed with status {result.returncode}")
     return result.stdout
+
+
+def run_script(script: str, args: Sequence[str] = (), *, runner: Runner = run_command, timeout: float = 15.0) -> str:
+    """Run AppleScript with user text passed as arguments, never spliced into the script source."""
+    if runner is run_command:
+        return run_command([OSASCRIPT, "-e", script, *args], timeout=timeout)
+    return runner([OSASCRIPT, "-e", script, *args])

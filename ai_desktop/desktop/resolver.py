@@ -19,6 +19,10 @@ _FIND_VERBS = re.compile(r"^(请|帮我|麻烦)?\s*(找一下|找到|找出|找|
                          re.IGNORECASE)
 _LOCAL_OBJECTS = re.compile(r"文件|文档|应用|软件|目录|项目|表格|笔记|照片|图片|pdf|docx|xlsx|pptx|\bapp\b",
                             re.IGNORECASE)
+_CAPTURE_VERBS = re.compile(r"^(请|帮我|麻烦)?\s*(记一下|记下|记录|新建|创建|提醒我|建一条)", re.IGNORECASE)
+_CAPTURE_OBJECTS = re.compile(r"笔记|备忘|提醒|待办|想法|\bnote\b|\breminder\b|remind me", re.IGNORECASE)
+_WINDOW_WORDS = re.compile(r"窗口|\bwindow", re.IGNORECASE)
+_LAYOUT_WORDS = re.compile(r"并排|摆放|排列|最大化|左半|右半|居中|side by side|maximi[sz]e", re.IGNORECASE)
 _WEB_WORDS = re.compile(r"网上|网页|网络|联网|在线|搜索引擎|百度|google|bing|online|web", re.IGNORECASE)
 
 
@@ -60,5 +64,9 @@ def wants_desktop_action(text: str) -> bool:
     if not text or len(text) > MAX_ACTION_REQUEST or "\n" in text or _WEB_WORDS.search(text):
         return False
     if _OPEN_VERBS.search(text):
+        return True
+    if _CAPTURE_VERBS.search(text) and _CAPTURE_OBJECTS.search(text):
+        return True
+    if _WINDOW_WORDS.search(text) and _LAYOUT_WORDS.search(text):
         return True
     return bool(_FIND_VERBS.search(text) and _LOCAL_OBJECTS.search(text))

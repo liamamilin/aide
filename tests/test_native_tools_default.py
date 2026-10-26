@@ -9,7 +9,8 @@ from tests.test_task_entry import answer, bounded_task_fixture, controller, disc
 
 __all__ = ["bounded_task_fixture", "controller"]  # fixtures re-exported for pytest
 
-NATIVE = ["find_apps", "find_files", "open_path"]
+NATIVE = ["find_apps", "find_files", "open_path", "list_windows", "arrange_window", "create_note",
+          "create_reminder"]
 
 
 @pytest.fixture(autouse=True)
@@ -27,7 +28,8 @@ def use_agent(controller, agent_id):
 
 
 @pytest.mark.parametrize("text", ["打开备忘录", "帮我打开微信", "启动 Safari", "open Notes", "找一下我的产品方案文档",
-                                  "查找下载文件夹里的 PDF", "Find the report app"])
+                                  "查找下载文件夹里的 PDF", "Find the report app", "帮我记一下刚才的想法到笔记",
+                                  "提醒我明天交周报，创建提醒", "把两个窗口并排放好", "Put the windows side by side"])
 def test_requests_that_open_or_locate_things_are_recognised(text):
     assert wants_desktop_action(text)
 

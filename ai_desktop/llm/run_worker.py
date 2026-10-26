@@ -81,7 +81,9 @@ class RunWorker(QThread):
                      '未获得结果时不要声称已执行命令或已联网验证；工具错误或限制需如实说明。')
             if any(tool.name == 'find_files' for tool in self.context.tools):
                 rules += ('查找或打开本机应用和文件时使用 find_apps、find_files 和 open_path；'
-                          '只打开用户要求的项目，多个匹配项时先让用户选择。')
+                          '只打开用户要求的项目，多个匹配项时先让用户选择。'
+                          '记录想法用 create_note，待办用 create_reminder，摆放窗口用 list_windows 和 '
+                          'arrange_window；只新建内容，不修改已有笔记。')
             if any(tool.counts_as_search for tool in self.context.tools):
                 rules += '引用搜索来源时使用返回的来源编号 [S1]、[S2]，不要编造编号或来源。'
             self.request = replace(self.request, system_prompt=system_prompt + '\n\n' + rules)
