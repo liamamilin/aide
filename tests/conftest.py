@@ -137,3 +137,17 @@ def ollama_server(monkeypatch):
     monkeypatch.setattr(config, "OLLAMA_BASE_URL", server.url)
     yield server
     server.close()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_local_lookup(monkeypatch):
+    """Dialog tests must never run a real Spotlight query; candidate tests opt in."""
+    from ai_desktop import config
+    monkeypatch.setattr(config, "LOCAL_CANDIDATES_ENABLED", False)
+
+
+@pytest.fixture(autouse=True)
+def _desktop_tools_off_by_default(monkeypatch):
+    """Existing tool-run tests assert exact tool lists; desktop tool tests opt in."""
+    from ai_desktop import config
+    monkeypatch.setattr(config, "DESKTOP_TOOLS_ENABLED", False)

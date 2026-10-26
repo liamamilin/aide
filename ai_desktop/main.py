@@ -2473,7 +2473,8 @@ class ChatController(QObject):
             self.float_btn.set_task_activity("working")
         elif event.kind in {RunEventKind.TOOL_STARTED, RunEventKind.TOOL_UPDATED}:
             activity = ("waiting" if event.status == "waiting_confirmation" else
-                        "searching" if event.tool_name == "web_search" else "executing")
+                        "searching" if event.tool_name in {"web_search", "find_apps", "find_files"}
+                        else "executing")
             self.float_btn.set_task_activity(activity)
         elif event.kind == RunEventKind.TOOL_FINISHED:
             self.float_btn.set_task_activity("working")

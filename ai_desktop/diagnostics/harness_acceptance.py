@@ -273,7 +273,8 @@ def acceptance(output, only=None, model='qwen3.5:9b-mlx', *, allow_paid_search=F
         assert not tool_result['error_type'], f'Search failed: {tool_result["error_type"]}'
         assert trace.attempts == 1 and len(trace.results) == 1 and trace.results[0]['http_status'] == 200
         assert run['status'] == 'succeeded' and run['agent_id'] == search_agent
-        assert run['config']['model'] == model and run['config']['allowed_tools'] == ['web_search']
+        granted = [n for n in run['config']['allowed_tools'] if n in {'bash', 'web_search'}]
+        assert run['config']['model'] == model and granted == ['web_search']
         assert run['config']['search']['provider'] == provider
         model_steps = [s for s in run['steps'] if s['kind'] == 'model']
         assert len(model_steps) == 2

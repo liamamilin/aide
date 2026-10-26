@@ -28,7 +28,8 @@ SEARCH_PARALLEL_MODE: str = "basic"
 
 # All conversation roles share the same registry. Actual access requires
 # explicit authorization for the current Agent/conversation and fresh admission.
-CHAT_TOOL_NAMES = frozenset({"bash", "web_search"})
+CHAT_TOOL_NAMES = frozenset({"bash", "web_search", "find_apps", "find_files", "open_path"})
+DESKTOP_TOOLS_ENABLED: bool = True  # 已通过准入的工具任务同时提供本机应用/文件查找与打开
 CHAT_TOOLS_ENABLED: bool = True  # 仅允许用户主动授权；每个会话默认关闭工具
 TASK_MAX_MODEL_ROUNDS: int = 8
 TASK_MAX_TOOL_CALLS: int = 16
@@ -38,6 +39,7 @@ TASK_MAX_SEARCH_CALLS: int = 6  # 搜索也计入工具调用总数
 
 HOTKEY: str = "<cmd>+<ctrl>+l"          # 读取选中文字 → 提问
 SCREENSHOT_HOTKEY: str = "<cmd>+<ctrl>+s"  # 截图并发送到对话
+LOCAL_CANDIDATES_ENABLED: bool = True    # 输入应用/文件名时显示本地候选，不调用模型
 QUICK_ACTIONS_ENABLED: bool = True       # 选区捕获后显示快捷动作
 DESKTOP_PET_ENABLED: bool = True         # 使用有状态的桌面宠物悬浮入口
 DESKTOP_PET_REDUCE_MOTION: bool = False  # 停止宠物周期动画，保留必要状态

@@ -23,8 +23,8 @@ def _call(name, **args):
 
 def test_registered_tools_match_chat_grantable_names():
     # Registering a tool makes it nameable; chat grants stay an explicit allow-list.
-    assert registered_names() >= config.CHAT_TOOL_NAMES
-    assert {BASH.name, WEB_SEARCH.name} == set(config.CHAT_TOOL_NAMES)
+    assert registered_names() == config.CHAT_TOOL_NAMES
+    assert {BASH.name, WEB_SEARCH.name} <= set(config.CHAT_TOOL_NAMES)
 
 
 def test_wire_schema_is_built_from_the_definition():
@@ -73,3 +73,15 @@ def test_duplicate_registration_is_rejected():
     duplicate = ToolDefinition("bash", "terminal", ToolRisk.READ, "x", {}, (), lambda args: None)
     with pytest.raises(ValueError):
         register(duplicate)
+
+
+def test_desktop_tools_are_registered_with_risk_and_group():
+    assert {n: (get_definition(n).group, get_definition(n).risk) for n in ("find_apps", "find_files", "open_path")} == {
+        "find_apps": ("desktop", ToolRisk.READ), "find_files": ("desktop", ToolRisk.READ),
+        "open_path": ("desktop", ToolRisk.REVERSIBLE)}
+    assert validate_tool_arguments(_call("open_path", path="/Applications/Safari.app"))
+    for bad in ({"path": "relative"}, {"path": "/a", "x": 1}, {}):
+        with pytest.raises(ValueError):
+            validate_tool_arguments(_call("open_path", **bad))
+    with pytest.raises(ValueError):
+        validate_tool_arguments(_call("find_files", query="x" * 201))

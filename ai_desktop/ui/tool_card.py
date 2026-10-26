@@ -31,6 +31,10 @@ _ERRORS = {
     'invalid_command': '命令无效，未执行', 'start_failed': '启动失败', 'io_failed': '读取输出失败',
 }
 
+_TITLES = {'bash': '命令执行', 'web_search': '联网搜索', 'find_apps': '查找应用',
+           'find_files': '查找文件', 'open_path': '打开项目'}
+_START_STATUS = {'bash': '检查命令', 'web_search': '正在搜索', 'find_apps': '正在查找',
+                 'find_files': '正在查找', 'open_path': '正在打开'}
 _SEARCH_ERRORS = {
     'cancelled': '已停止', 'timeout': '搜索超时', 'active_limit': '任务超时',
     'authentication': '密钥或权限无效', 'quota': '账户额度不足', 'rate_limit': '请求过多',
@@ -82,9 +86,9 @@ class ToolCard(SimpleCardWidget):
         self.command = args.get('command', '')
         layout = QVBoxLayout(self)
         header = QHBoxLayout()
-        header.addWidget(StrongBodyLabel('命令执行' if event.tool_name == 'bash' else '联网搜索', self))
+        header.addWidget(StrongBodyLabel(_TITLES.get(event.tool_name, '联网搜索'), self))
         header.addStretch()
-        self.status = plain_label(CaptionLabel, '检查命令' if event.tool_name == 'bash' else '正在搜索', self)
+        self.status = plain_label(CaptionLabel, _START_STATUS.get(event.tool_name, '正在搜索'), self)
         self.status.setWordWrap(False)
         self.status.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.status.setAlignment(Qt.AlignRight)
@@ -95,7 +99,7 @@ class ToolCard(SimpleCardWidget):
         layout.addWidget(self.directory)
         self.command_view = PlainTextEdit(self)
         self.command_view.setReadOnly(True)
-        self.command_view.setPlainText(self.command or str(args.get('query', '')))
+        self.command_view.setPlainText(self.command or str(args.get('query', '') or args.get('path', '')))
         self.command_view.setAccessibleName('完整命令或搜索参数')
         self.command_view.setMinimumWidth(0)
         self.command_view.setFixedHeight(88)

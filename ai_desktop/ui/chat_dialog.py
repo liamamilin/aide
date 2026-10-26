@@ -24,12 +24,14 @@ from PyQt5.QtWidgets import (
 from ai_desktop import config
 from ai_desktop.capture.text_normalizer import normalize
 from ai_desktop.config import Agent
+from ai_desktop.desktop import opener
 from ai_desktop.llm.run_types import RunEventKind
 from ai_desktop.llm.service_checks import ImageCapability, ServiceState
 from ai_desktop.services.action_service import Action
 from ai_desktop.services.audit_store import RETENTION_SECONDS
 from ai_desktop.ui import markdown, theme
 from ai_desktop.ui.action_panel import ActionPanel
+from ai_desktop.ui.candidate_panel import CandidateLookup, CandidatePanel
 from ai_desktop.ui.float_button import pin_to_all_spaces
 from ai_desktop.ui.fluent import BodyLabel as QLabel
 from ai_desktop.ui.fluent import (
@@ -715,6 +717,12 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self._size_grip = grip
         input_row.addWidget(grip, alignment=Qt.AlignBottom | Qt.AlignRight)
 
+        self._candidate_panel = CandidatePanel()
+        self._candidate_panel.activated.connect(self._open_candidate)
+        self._candidate_lookup = CandidateLookup(parent=self)
+        self._candidate_lookup.resolved.connect(self._on_candidates_resolved)
+        self._open_path = opener.open_path
+        root.addWidget(self._candidate_panel)
         root.addLayout(input_row)
 
         # Keep keyboard navigation predictable when controls are hidden or
@@ -1035,6 +1043,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         if not text and not images:
             return
         self._action_panel.hide()
+        self._hide_candidates()
         # Clear before the synchronous signal. A rejected submission restored
         # by the controller must remain after this method returns.
         self._input.clear()
@@ -2155,6 +2164,18 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
             self._queue_user_scroll_update()
         # ── 输入框快捷键 ──
         if obj is getattr(self, "_input", None) and event.type() == QEvent.KeyPress:
+            if self._candidate_panel.isVisible():
+                if event.key() == Qt.Key_Escape:
+                    self._hide_candidates()
+                    return True
+                plain = (event.modifiers() & ~Qt.KeypadModifier) == Qt.NoModifier
+                if plain and event.key() in (Qt.Key_Up, Qt.Key_Down):
+                    self._candidate_panel.move_selection(1 if event.key() == Qt.Key_Down else -1)
+                    return True
+                # Enter opens only an explicitly picked candidate; otherwise it sends as before.
+                if event.key() == Qt.Key_Return and event.modifiers() == Qt.NoModifier \
+                        and self._candidate_panel.activate_current():
+                    return True
             if event.key() == Qt.Key_Escape:
                 if self._input.toPlainText().strip():
                     self._input.clear()
@@ -2226,9 +2247,34 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         cursor.movePosition(QTextCursor.End)
         self._input.setTextCursor(cursor)
 
+    def _request_candidates(self) -> None:
+        if not config.LOCAL_CANDIDATES_ENABLED or self._hist_index >= 0 or not self._input.isEnabled():
+            self._hide_candidates()
+            return
+        self._candidate_lookup.request(self._input.toPlainText())
+
+    def _hide_candidates(self) -> None:
+        self._candidate_lookup.request("")
+        self._candidate_panel.set_candidates([])
+
+    def _on_candidates_resolved(self, _seq: int, text: str, candidates) -> None:
+        # The answer is for the text that was typed; drop it if the input has moved on.
+        if text == self._input.toPlainText().strip():
+            self._candidate_panel.set_candidates(candidates)
+
+    def _open_candidate(self, path: str) -> None:
+        try:
+            self._open_path(path)
+        except (OSError, ValueError):
+            logger.warning("opening a local candidate failed", exc_info=True)
+            self._candidate_panel.show_error("无法打开所选项目")
+            return
+        self._input.clear()
+
     def _on_input_text_changed(self) -> None:
         """编辑不退出浏览模式；仅自适应高度。"""
         self._adjust_input_height()
+        self._request_candidates()
         if self._action_panel.isVisible():
             self._action_panel.set_material(self._input.toPlainText())
 
