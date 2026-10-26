@@ -43,7 +43,7 @@ class RunWorker(QThread):
                  exact_options: bool = False,
                  tools_admitted: bool = False, execution: ExecutionSnapshot | None = None,
                  confirmations: ConfirmationBroker | None = None,
-                 search_settings: SearchSettings | None = None):
+                 search_settings: SearchSettings | None = None, native_tools: bool = False):
         super().__init__(parent)
         if type(tools_admitted) is not bool:
             raise ValueError('Admission must be explicit')
@@ -67,7 +67,7 @@ class RunWorker(QThread):
         if allowed and search_settings is not None:
             self.search_executor = SearchExecutor(search_settings)
             tools += (ToolSpec.create('web_search', self.search_executor),)
-        if allowed and tools and config.DESKTOP_TOOLS_ENABLED:
+        if allowed and (tools or native_tools) and config.DESKTOP_TOOLS_ENABLED:
             tools += tuple(ToolSpec.create(name, execute)
                            for name, execute in DesktopToolbox().executors().items())
         self.context = RunContext.create(self.request, tools=tools, tools_admitted=tools_admitted,

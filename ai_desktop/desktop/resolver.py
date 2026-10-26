@@ -13,6 +13,13 @@ _SENTENCE_MARKS = re.compile(r"[，。！？；：,.!?;:\n]")
 _REQUEST_WORDS = re.compile(r"[把帮请让给吗呢么]|怎么|如何|什么|为什么|整理|总结|翻译|解释")
 MAX_SHORT_WORDS = 4
 _KIND_ORDER = {"app": 0, "folder": 1, "file": 2}
+MAX_ACTION_REQUEST = 60
+_OPEN_VERBS = re.compile(r"^(请|帮我|麻烦)?\s*(打开|启动)|^(please\s+)?(open|launch)\b", re.IGNORECASE)
+_FIND_VERBS = re.compile(r"^(请|帮我|麻烦)?\s*(找一下|找到|找出|找|查找|定位)|^(please\s+)?(find|locate|reveal)\b",
+                         re.IGNORECASE)
+_LOCAL_OBJECTS = re.compile(r"文件|文档|应用|软件|目录|项目|表格|笔记|照片|图片|pdf|docx|xlsx|pptx|\bapp\b",
+                            re.IGNORECASE)
+_WEB_WORDS = re.compile(r"网上|网页|网络|联网|在线|搜索引擎|百度|google|bing|online|web", re.IGNORECASE)
 
 
 def is_short_query(text: str) -> bool:
@@ -45,3 +52,13 @@ def resolve(query: str, *, runner: Runner = run_command, limit: int = 8) -> list
             seen.add(candidate.path)
             unique.append(candidate)
     return unique[:limit]
+
+
+def wants_desktop_action(text: str) -> bool:
+    """Whether a message asks to open or locate something on this Mac (not a web or general question)."""
+    text = (text or "").strip()
+    if not text or len(text) > MAX_ACTION_REQUEST or "\n" in text or _WEB_WORDS.search(text):
+        return False
+    if _OPEN_VERBS.search(text):
+        return True
+    return bool(_FIND_VERBS.search(text) and _LOCAL_OBJECTS.search(text))

@@ -128,11 +128,13 @@ class TaskAuthorization:
     execution: ExecutionSnapshot | None = None
     search: SearchSettings | None = None
     agent_id: str = 'general_assistant'
+    # Native desktop tools only, granted for one message by the app, never saved as a preference.
+    native: bool = False
 
     def __post_init__(self):
         if not chat_tools_eligible(self.agent_id, 'chat'):
             raise ValueError('工具授权需要有效的对话 Agent。')
-        if self.execution is None and self.search is None:
+        if self.execution is None and self.search is None and not self.native:
             raise ValueError('请至少选择一个工具。')
         if self.execution is not None and not isinstance(self.execution, ExecutionSnapshot):
             raise ValueError('工作区配置无效。')
@@ -158,8 +160,8 @@ class TaskAuthorization:
                 'think_source': admission.settings.think_source,
                 'options': dict(admission.settings.options), 'exact_options': True,
                 'tools_admitted': True,
-                'execution': self.execution, 'search_settings': self.search}
+                'execution': self.execution, 'search_settings': self.search, 'native_tools': self.native}
 
     def record(self):
         return {'agent_id': self.agent_id, 'execution': self.execution.record() if self.execution else None,
-                'search': self.search.record() if self.search else None}
+                'search': self.search.record() if self.search else None, 'native': self.native}

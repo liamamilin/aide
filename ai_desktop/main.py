@@ -1616,9 +1616,19 @@ class ChatController(QObject):
             return
         self._save_tool_settings(dialog.authorization)
 
-    def _begin_task_check(self, text, images, *, regenerate=False):
+    def _wants_native_tools(self, text, agent) -> bool:
+        """Open/locate requests to the general assistant get the desktop tools without any setup.
+
+        Text-transform roles (translator, polisher, ...) never get them implicitly: their input is
+        arbitrary text that may merely start with "open".
+        """
+        from ai_desktop.desktop.resolver import wants_desktop_action
+        return (config.DESKTOP_TOOLS_ENABLED and config.CHAT_TOOLS_ENABLED
+                and agent.id == 'general_assistant' and wants_desktop_action(text))
+
+    def _begin_task_check(self, text, images, *, regenerate=False, implicit=False):
         from ai_desktop.utils import storage
-        pending = {'text': text, 'images': tuple(images), 'regenerate': regenerate,
+        pending = {'text': text, 'images': tuple(images), 'regenerate': regenerate, 'implicit': implicit,
                    'conversation_id': self._convo_id, 'authorization': self._task_authorization,
                    'agent_id': self._active_agent.id,
                    'base_url': config.OLLAMA_BASE_URL, 'model': self._model,
@@ -1649,6 +1659,15 @@ class ChatController(QObject):
             if self._dialog:
                 self._dialog.set_thinking(False)
                 self._dialog.set_task_authorization(self._task_authorization, model=self._model)
+            if pending['implicit']:
+                # The app, not the user, chose tools for this message: if they cannot run
+                # (model without tool support, service check failed), send it as plain chat.
+                if error:
+                    logger.info("Native tools unavailable, sending as plain chat: %s", error)
+                self._on_user_message(pending['text'], list(pending['images']),
+                                      task_admission=None if error else admission,
+                                      implicit_native=not error)
+                return
             if error:
                 if self._dialog and not pending['regenerate']:
                     self._dialog.restore_draft(pending['text'], list(pending['images']))
@@ -2239,6 +2258,7 @@ class ChatController(QObject):
         request_agent: Agent | None = None,
         task_admission=None,
         prepared_config=None,
+        implicit_native: bool | None = None,
     ) -> None:
         images = images or []
         if self._stopping or self._stopped:
@@ -2256,13 +2276,17 @@ class ChatController(QObject):
             self._show_notice(QMessageBox.Warning, '上一任务正在停止', '请等待执行进程退出后再发送。')
             return
         task = self._task_authorization if not retry_action_id else None
+        if task is None and implicit_native is None and not retry_action_id and not images:
+            implicit_native = self._wants_native_tools(text, request_agent)
+        if task is None and implicit_native:
+            task = TaskAuthorization(agent_id=request_agent.id, native=True)
         if task is not None and task.agent_id != request_agent.id:
             if self._dialog:
                 self._dialog.restore_draft(text, images)
             self._show_notice(QMessageBox.Warning, '工具授权已失效', '请为当前角色重新启用工具后发送。')
             return
         if task is not None and task_admission is None:
-            self._begin_task_check(text, images)
+            self._begin_task_check(text, images, implicit=bool(implicit_native and task.native))
             return
         task_kwargs = {}
         resolved = prepared_config or self._resolve_model_config(action_profile_id, request_agent)
