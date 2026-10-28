@@ -90,10 +90,14 @@ public struct WorkspaceView: View {
                 Text("请确认 Ollama 已运行并装有模型，或在设置里检查服务地址。")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
                 HStack {
-                    Button("重新检测") { Task { await model.refreshModels() } }
+                    Button(model.isCheckingModels ? "检测中…" : "重新检测") { Task { await model.refreshModels(manual: true) } }
+                        .disabled(model.isCheckingModels)
                     Button("打开设置") { model.onOpenSettings() }
                 }
                 .padding(.top, 4)
+                if model.recheckFailed {
+                    Text("仍然没有检测到可用的模型。").font(.system(size: 12)).foregroundStyle(.orange)
+                }
             } else {
                 Text("有什么可以帮你？").font(.system(size: 20, weight: .medium))
                 Text(model.currentModel).font(.system(size: 12)).foregroundStyle(.secondary)

@@ -336,8 +336,12 @@ final class WorkspaceRecoveryTests: XCTestCase {
         let model = WorkspaceModel(provider: stub)
         await model.start()
         XCTAssertTrue(model.modelServiceUnavailable)
+        await model.refreshModels(manual: true)
+        XCTAssertTrue(model.recheckFailed)
+        XCTAssertFalse(model.isCheckingModels)
         stub.modelNames = ["m1"]
-        await model.refreshModels()
+        await model.refreshModels(manual: true)
+        XCTAssertFalse(model.recheckFailed)
         XCTAssertFalse(model.modelServiceUnavailable)
     }
 }

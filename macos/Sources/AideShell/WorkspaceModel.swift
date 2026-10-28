@@ -94,6 +94,9 @@ public final class WorkspaceModel {
     public private(set) var pendingConfirmation: ConfirmRequest?
     /// True when no model could be listed: Ollama is not running or has nothing installed.
     public private(set) var modelServiceUnavailable = false
+    public private(set) var isCheckingModels = false
+    /// Set after a manual re-check that still found nothing, so the click visibly did something.
+    public private(set) var recheckFailed = false
     /// The current error can be fixed in Settings (wrong address, service down).
     public private(set) var errorOffersSettings = false
     public var onOpenSettings: () -> Void = {}
@@ -132,11 +135,15 @@ public final class WorkspaceModel {
     }
 
     /// Re-check the model service, e.g. after the person started Ollama or fixed the address in Settings.
-    public func refreshModels() async {
-        guard let list = try? await provider.models() else { return }
+    public func refreshModels(manual: Bool = false) async {
+        if manual { isCheckingModels = true; recheckFailed = false }
+        defer { isCheckingModels = false }
+        guard let list = try? await provider.models() else { recheckFailed = manual; return }
         models = list.models
         currentModel = list.current
         modelServiceUnavailable = list.models.isEmpty
+        recheckFailed = manual && list.models.isEmpty
+        if manual { try? await Task.sleep(nanoseconds: 300_000_000) }   // long enough to see the check happen
     }
 
     public func reloadList() async {
