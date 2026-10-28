@@ -82,11 +82,15 @@ public actor CoreClient {
         }
     }
 
-    /// Ask the core to stop, then close its stdin so it exits.
+    /// Ask the core to stop, then close its stdin so it exits. Waits up to ~2 s, then terminates it.
+    /// (`waitUntilExit` is avoided: it can block indefinitely even after the child has gone.)
     public func stop() async {
         _ = try? await call("shutdown")
         try? input?.close()
-        process?.waitUntilExit()
+        let proc = process
+        // `process` is cleared by the termination handler, which is the reliable exit signal.
+        for _ in 0..<40 where process != nil { try? await Task.sleep(nanoseconds: 50_000_000) }
+        if process != nil { proc?.terminate() }
     }
 
     func registerRun(_ runID: String) -> AsyncStream<RunUpdate> { router.register(runID: runID) }

@@ -82,13 +82,25 @@ class RunService:
             origin="action", action_id=plan.action.id, options=resolved.options,
         )
         self._actions.record_use(plan.action.id)
+        self.launch(request)
+        return {"run_id": request.run_id, "model": resolved.model, "agent": plan.agent.name,
+                "warnings": list(plan.warnings) + list(resolved.warnings)}
+
+    def launch(self, request, on_finished: Callable[[ChatResult], None] | None = None) -> None:
+        """Run one tool-free request on its own thread; ``on_finished`` runs before ``run.finished``."""
         run = _ActiveRun()
         with self._lock:
             self._runs[request.run_id] = run
-        threading.Thread(target=self._execute, args=(RunContext.create(request), run),
+        threading.Thread(target=self._execute, args=(RunContext.create(request), run, on_finished),
                          name=f"aide-run-{request.run_id[:6]}", daemon=True).start()
-        return {"run_id": request.run_id, "model": resolved.model, "agent": plan.agent.name,
-                "warnings": list(plan.warnings) + list(resolved.warnings)}
+
+    @property
+    def agents(self):
+        return self._agents.all_agents
+
+    @property
+    def profiles(self) -> ModelProfileManager:
+        return self._profiles
 
     def cancel(self, params: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
@@ -97,7 +109,8 @@ class RunService:
             run.cancel()
         return {"cancelled": run is not None}
 
-    def _execute(self, context: RunContext, active: _ActiveRun) -> None:
+    def _execute(self, context: RunContext, active: _ActiveRun,
+                 on_finished: Callable[[ChatResult], None] | None = None) -> None:
         run_id = context.request.run_id
         started = time.monotonic()
 
@@ -131,8 +144,14 @@ class RunService:
         finally:
             with self._lock:
                 self._runs.pop(run_id, None)
+        if on_finished is not None:
+            try:
+                on_finished(result)
+            except Exception:
+                logger.exception("persisting run %s failed", run_id)
         self._emit("run.finished", {
-            "run_id": run_id, "status": result.status.value, "text": result.text, "error": result.error,
+            "run_id": run_id, "conversation_id": context.request.conversation_id,
+            "status": result.status.value, "text": result.text, "error": result.error,
             "error_code": result.error_code.value if result.error_code else "",
             "seconds": round(time.monotonic() - started, 2),
         })

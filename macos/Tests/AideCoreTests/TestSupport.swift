@@ -20,9 +20,11 @@ final class FakeOllamaProcess {
         url = line.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Terminate rather than wait for stdin EOF (and never use waitUntilExit, which can hang even after the child is gone): another child can inherit the pipe's write end,
+    /// so EOF is not guaranteed and a wait here could hang the whole test run.
     func stop() {
-        try? stdin.fileHandleForWriting.close()
-        process.waitUntilExit()
+        process.terminate()
+        for _ in 0..<100 where process.isRunning { Thread.sleep(forTimeInterval: 0.03) }
     }
 }
 

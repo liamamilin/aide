@@ -32,6 +32,8 @@ public final class QuickPanelModel {
 
     /// Called when the panel should close; `restoreFocus` is false when the user is still reading.
     public var onClose: (_ copied: String?) -> Void = { _ in }
+    /// ⌘↩ on a finished result: hand selection + answer to the Workspace as a new conversation.
+    public var onContinue: (_ selection: String, _ action: QuickAction, _ answer: String) -> Void = { _, _, _ in }
 
     public init(provider: RunProviding) { self.provider = provider }
 
@@ -116,6 +118,12 @@ public final class QuickPanelModel {
     /// Esc: stop a running request first; otherwise close the panel.
     public func escape() {
         if phase == .running { cancelRun(); phase = .cancelled } else { onClose(nil) }
+    }
+
+    public func continueInWorkspace() {
+        guard phase == .done, let action = activeAction else { return }
+        onContinue(selection, action, output)
+        onClose(nil)
     }
 
     /// Return: once there is a result, copy it and close.

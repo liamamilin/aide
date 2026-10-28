@@ -3,7 +3,8 @@ import Foundation
 public struct QuickAction: Sendable, Equatable, Identifiable {
     public let id: String
     public let name: String
-    public init(id: String, name: String) { self.id = id; self.name = name }
+    public let agentID: String?
+    public init(id: String, name: String, agentID: String? = nil) { self.id = id; self.name = name; self.agentID = agentID }
 }
 
 public enum RunUpdate: Sendable, Equatable {
@@ -86,14 +87,18 @@ extension CoreClient: RunProviding {
         guard case .array(let items)? = result["actions"] else { return [] }
         return items.compactMap { item in
             guard let id = item["id"]?.stringValue, let name = item["name"]?.stringValue else { return nil }
-            return QuickAction(id: id, name: name)
+            return QuickAction(id: id, name: name, agentID: item["agent_id"]?.stringValue)
         }
     }
 
     public func start(actionID: String, material: String) async throws -> RunHandle {
         let result = try await call("run.start", params: ["action_id": .string(actionID), "material": .string(material)])
         guard let runID = result["run_id"]?.stringValue else { throw CoreError.remote(code: "protocol", message: "missing run_id") }
-        let stream = registerRun(runID)
-        return RunHandle(updates: stream, cancel: { [self] in _ = try? await call("run.cancel", params: ["run_id": .string(runID)]) })
+        return handle(for: runID)
+    }
+
+    func handle(for runID: String) -> RunHandle {
+        RunHandle(updates: registerRun(runID),
+                  cancel: { [self] in _ = try? await call("run.cancel", params: ["run_id": .string(runID)]) })
     }
 }

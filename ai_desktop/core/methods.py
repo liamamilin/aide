@@ -27,8 +27,15 @@ def health(_params: dict[str, Any]) -> dict[str, Any]:
 
 def build_handlers(emit) -> dict:
     """Wire every method. Imported lazily so ``ping``/``health`` stay cheap to test."""
+    from ai_desktop.core.conversations import ConversationService
     from ai_desktop.core.runs import RunService
 
     runs = RunService(emit)
-    return {"ping": ping, "health": health, "actions.list": runs.list_actions,
-            "run.start": runs.start, "run.cancel": runs.cancel}
+    chats = ConversationService(runs)
+    return {
+        "ping": ping, "health": health,
+        "actions.list": runs.list_actions, "run.start": runs.start, "run.cancel": runs.cancel,
+        "conversations.list": chats.list, "conversations.get": chats.get, "conversations.create": chats.create,
+        "conversations.delete": chats.delete, "conversations.rename": chats.rename, "chat.send": chats.send,
+        "agents.list": chats.agents, "models.list": chats.models, "models.select": chats.select_model,
+    }

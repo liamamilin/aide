@@ -21,7 +21,10 @@ public struct QuickPanelView: View {
         .focusable()
         .focusEffectDisabled()
         .onKeyPress(.escape) { model.escape(); return .handled }
-        .onKeyPress(.return) { model.confirm(); return .handled }
+        .onKeyPress(.return, phases: .down) { press in
+            if press.modifiers.contains(.command) { model.continueInWorkspace() } else { model.confirm() }
+            return .handled
+        }
         .onKeyPress(.upArrow) { model.moveHighlight(-1); return .handled }
         .onKeyPress(.downArrow) { model.moveHighlight(1); return .handled }
         .onKeyPress(characters: .decimalDigits) { press in
@@ -114,7 +117,9 @@ public struct QuickPanelView: View {
             Spacer()
             switch model.phase {
             case .ready: hint("↩", "运行")
-            case .done: hint("↩", "复制并返回")
+            case .done:
+                hint("⌘↩", "继续追问")
+                hint("↩", "复制并返回")
             case .failed, .cancelled: hint("↩", "重试")
             default: EmptyView()
             }

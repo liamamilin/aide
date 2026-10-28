@@ -69,3 +69,31 @@ final class RunTests: XCTestCase {
         XCTAssertEqual(code, "core")
     }
 }
+
+final class WorkspaceCoreTests: XCTestCase {
+    func testConversationRoundTripAgainstRealCore() async throws {
+        let fake = try FakeOllamaProcess(mode: "stream")
+        defer { fake.stop() }
+        let (core, dataDir) = try makeCore(ollamaURL: fake.url)
+        defer { try? FileManager.default.removeItem(at: dataDir) }
+        try await core.start()
+
+        let agents = try await core.agents()
+        XCTAssertTrue(agents.contains { $0.id == "general_assistant" })
+
+        let id = try await core.createConversation(agentID: "general_assistant", seed: [])
+        let updates = await collect(try await core.send(conversationID: id, text: "你好"))
+        guard case .finished(let status, _, _, _)? = updates.last else { return XCTFail("no finish") }
+        XCTAssertEqual(status, "succeeded")
+
+        let detail = try await core.conversation(id: id)
+        XCTAssertEqual(detail.messages.map(\.content), ["你好", "Hello"])
+        XCTAssertEqual(detail.title, "你好")
+        let listed = try await core.conversations(query: "")
+        XCTAssertEqual(listed.first?.id, id)
+        try await core.deleteConversation(id: id)
+        let after = try await core.conversations(query: "")
+        XCTAssertTrue(after.isEmpty)
+        await core.stop()
+    }
+}
