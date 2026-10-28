@@ -171,6 +171,7 @@ private struct StepRow: View {
                 .foregroundStyle(step.state == .failed ? Color.orange : Color.secondary)
         }
         .font(.system(size: 12))
+        if let result = step.result { ToolResultView(result: result) }
     }
 }
 

@@ -8,6 +8,8 @@ public struct ToolStep: Identifiable, Equatable {
     public let id: String
     public let name: String
     public var state: State
+    /// What the tool really returned (files, apps, notes, reminders), when it is something to show.
+    public var result: ToolResult?
 }
 
 public enum ToolLabels {
@@ -336,13 +338,15 @@ public final class WorkspaceModel {
         switch update {
         case .delta(let kind, let text):
             if kind == "content" { turns[index].content += text }
-        case .tool(let callID, let name, let state, let status):
+        case .tool(let callID, let name, let state, let status, let toolOutput):
             activity = state == "tool_finished" ? nil : ToolLabels.running(name)
             let outcome: ToolStep.State = state != "tool_finished" ? .running : (status == "succeeded" ? .succeeded : .failed)
             if let step = turns[index].steps.firstIndex(where: { $0.id == callID }) {
                 turns[index].steps[step].state = outcome
+                if outcome == .succeeded { turns[index].steps[step].result = ToolResults.parse(tool: name, output: toolOutput) }
             } else {
-                turns[index].steps.append(ToolStep(id: callID, name: name, state: outcome))
+                turns[index].steps.append(ToolStep(id: callID, name: name, state: outcome,
+                                                   result: outcome == .succeeded ? ToolResults.parse(tool: name, output: toolOutput) : nil))
             }
         case .confirm(let request):
             pendingConfirmation = request

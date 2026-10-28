@@ -103,4 +103,31 @@ final class QuickPanelAskTests: XCTestCase {
         XCTAssertEqual(model.notice, "本次未启用工具：模型不支持")
         XCTAssertFalse(QuickPanelModel(provider: Actions()).canAsk)
     }
+
+    func testLookupResultsComeFromTheToolsOwnJSON() {
+        let files = #"{"results":[{"kind":"file","name":"报告.pdf","path":"/Users/x/报告.pdf","modified":"2026-10-27"},{"kind":"folder","name":"项目","path":"/Users/x/项目"}]}"#
+        guard case .files(let items)? = ToolResults.parse(tool: "find_files", output: files) else { return XCTFail() }
+        XCTAssertEqual(items.map(\.name), ["报告.pdf", "项目"])
+        XCTAssertEqual(items[0].modified, "2026-10-27")
+        XCTAssertEqual(ToolResults.parse(tool: "list_notes", output: #"{"total_notes":42,"matching":42,"notes":[{"id":"x","title":"周报","age_seconds":5}]}"#),
+                       .notes(total: 42, matching: 42, titles: ["周报"]))
+        XCTAssertNil(ToolResults.parse(tool: "find_files", output: #"{"results":[]}"#))     // nothing found: no empty card
+        XCTAssertNil(ToolResults.parse(tool: "open_path", output: #"{"action":"opened"}"#))
+        XCTAssertNil(ToolResults.parse(tool: "find_apps", output: "not json"))
+    }
+
+    func testFinishedLookupStepCarriesItsResultIntoThePanel() async {
+        let stub = AskStub()
+        let model = QuickPanelModel(provider: Actions(), ask: stub)
+        await model.present(.empty)
+        model.askText = "找 PDF"
+        model.submitAsk()
+        await settle()
+        stub.continuation?.yield(.tool(callID: "c1", name: "find_files", state: "tool_started", status: ""))
+        stub.continuation?.yield(.tool(callID: "c1", name: "find_files", state: "tool_finished", status: "succeeded",
+                                       output: #"{"results":[{"kind":"file","name":"a.pdf","path":"/tmp/a.pdf"}]}"#))
+        await settle()
+        guard case .files(let items)? = model.steps.first?.result else { return XCTFail("no result card") }
+        XCTAssertEqual(items.first?.path, "/tmp/a.pdf")
+    }
 }

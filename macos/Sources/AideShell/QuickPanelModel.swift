@@ -192,12 +192,14 @@ public final class QuickPanelModel {
         switch update {
         case .delta(let kind, let text):
             if kind == "content" { output += text; isThinking = false } else { isThinking = true }
-        case .tool(let callID, let name, let state, let status):
+        case .tool(let callID, let name, let state, let status, let toolOutput):
             let outcome: ToolStep.State = state != "tool_finished" ? .running : (status == "succeeded" ? .succeeded : .failed)
             if let index = steps.firstIndex(where: { $0.id == callID }) {
                 steps[index].state = outcome
+                if outcome == .succeeded { steps[index].result = ToolResults.parse(tool: name, output: toolOutput) }
             } else {
-                steps.append(ToolStep(id: callID, name: name, state: outcome))
+                steps.append(ToolStep(id: callID, name: name, state: outcome,
+                                      result: outcome == .succeeded ? ToolResults.parse(tool: name, output: toolOutput) : nil))
             }
         case .confirm(let request):
             pendingConfirmation = request
@@ -228,6 +230,9 @@ public final class QuickPanelModel {
         } else { return }
         onClose(nil)
     }
+
+    /// An item opened from a result card: the panel gets out of the way and the opened app keeps the focus.
+    public var onDismissKeepingFocus: () -> Void = {}
 
     /// Return: once there is a result, copy it and close.
     public func confirm() {

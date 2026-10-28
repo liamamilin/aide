@@ -154,6 +154,7 @@ public struct QuickPanelView: View {
                             .foregroundStyle(step.state == .failed ? Color.orange : Color.secondary)
                     }
                     .font(.system(size: 12))
+                    if let result = step.result { ToolResultView(result: result) { model.onDismissKeepingFocus() } }
                 }
                 if let notice = model.notice { Text(notice).font(.system(size: 12)).foregroundStyle(.secondary) }
                 if let request = model.pendingConfirmation { confirmation(request) }

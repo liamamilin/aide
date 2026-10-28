@@ -34,6 +34,7 @@ public final class QuickPanelController {
         host.view.layer?.masksToBounds = true
         panel.contentViewController = host
         model.onClose = { [weak self] copied in self?.close(copying: copied) }
+        model.onDismissKeepingFocus = { [weak self] in self?.close(copying: nil, restoreFocus: false) }
     }
 
     public var isVisible: Bool { panel.isVisible }
@@ -76,13 +77,13 @@ public final class QuickPanelController {
         panel.makeKeyAndOrderFront(nil)
     }
 
-    private func close(copying text: String?) {
+    private func close(copying text: String?, restoreFocus: Bool = true) {
         if let text {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
         }
         panel.orderOut(nil)
-        previousApp?.activate()
+        if restoreFocus { previousApp?.activate() }
         previousApp = nil
     }
 }

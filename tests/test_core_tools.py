@@ -173,3 +173,20 @@ def test_core_process_imports_no_qt():
             "print(any(m == 'PyQt5' or m.startswith('PyQt5.') for m in sys.modules))")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
     assert out.stdout.strip() == "False", out.stderr
+
+
+def test_lookup_tools_forward_their_real_output_but_actions_do_not(env):
+    chats, runs, fake, events, _runner = env
+    convo = chats.create({"agent_id": "general_assistant"})["id"]
+    fake.enqueue(_tool_turn("find_apps", {"query": "Safari"}))
+    fake.enqueue(*_final("找到了。"))
+    chats.send({"conversation_id": convo, "text": "找 Safari"})
+    finished = []
+    while True:
+        name, data = events.get(timeout=10)
+        if name == "run.tool" and data["state"] == "tool_finished":
+            finished.append(data)
+        if name == "run.finished":
+            break
+    assert finished and finished[0]["tool"] == "find_apps"
+    assert "results" in finished[0]["output"]            # the tool's own JSON, not model prose
