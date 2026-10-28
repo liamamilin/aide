@@ -7,6 +7,7 @@ import pytest
 from ai_desktop import config
 from ai_desktop.core.runs import RunService
 from ai_desktop.llm.sync_stream import SyncChatTransport  # noqa: F401  (import must not need Qt)
+from ai_desktop.llm.thinking import ThinkingCapability
 from tests.fake_ollama import FakeOllama
 
 
@@ -18,6 +19,7 @@ def _frame(content="", done=False, **extra):
 def service(tmp_db, monkeypatch):
     fake = FakeOllama()
     monkeypatch.setattr(config, "OLLAMA_BASE_URL", fake.url)
+    monkeypatch.setattr("ai_desktop.core.runs.thinking_capability", lambda model: ThinkingCapability())
     events: queue.Queue = queue.Queue()
     svc = RunService(lambda name, data: events.put((name, data)))
     yield svc, fake, events

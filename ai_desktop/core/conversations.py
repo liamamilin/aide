@@ -137,9 +137,8 @@ class ConversationService:
         user_message = storage.save_message(conversation.id, "user", text)
         if not conversation.messages and not conversation.title:
             self._auto_title(conversation.id, text)
-        resolved = self._runs.profiles.resolve(
-            global_model=model_override if isinstance(model_override, str) and model_override
-            else self._current_model(),
+        resolved = self._runs.resolve_model(
+            model_override if isinstance(model_override, str) and model_override else self._current_model(),
             agent_profile_id=agent.profile_id,
         )
         messages = [_Message(m["role"], m["content"]) for m in history] + [_Message("user", text, user_message.id)]

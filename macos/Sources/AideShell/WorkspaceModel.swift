@@ -46,6 +46,8 @@ public final class WorkspaceModel {
     public private(set) var currentModel = ""
     public private(set) var isSending = false
     public private(set) var errorMessage: String?
+    /// Bumped whenever the composer should take keyboard focus (new chat, opened conversation).
+    public private(set) var focusRequest = 0
     public var draft = ""
     public var search = "" { didSet { if search != oldValue { Task { await reloadList() } } } }
     public var selectedAgentID: String?
@@ -85,6 +87,7 @@ public final class WorkspaceModel {
         selectedID = nil
         turns = []
         errorMessage = nil
+        focusRequest += 1
     }
 
     public func select(_ id: Int) async {
@@ -99,6 +102,7 @@ public final class WorkspaceModel {
             selectedAgentID = detail.agentID
             turns = detail.messages.map { Turn(id: "m\($0.id)", role: $0.role, content: $0.content) }
             errorMessage = nil
+            focusRequest += 1
         } catch {
             errorMessage = "无法打开这个对话"
         }

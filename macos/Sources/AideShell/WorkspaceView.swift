@@ -144,10 +144,19 @@ private struct Composer: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            TextField("输入消息，↩ 发送，⇧↩ 换行", text: $model.draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1...8)
+            // TextEditor (an NSTextView) gives native ⇧↩ newline; ↩ is intercepted to send.
+            TextEditor(text: $model.draft)
+                .font(.system(size: 14))
+                .scrollContentBackground(.hidden)
                 .focused($focused)
+                .frame(height: editorHeight)
+                .overlay(alignment: .topLeading) {
+                    if model.draft.isEmpty {
+                        Text("输入消息，↩ 发送，⇧↩ 换行")
+                            .font(.system(size: 14)).foregroundStyle(.tertiary)
+                            .padding(.leading, 5).allowsHitTesting(false)
+                    }
+                }
                 .onKeyPress(.return, phases: .down) { press in
                     if press.modifiers.contains(.shift) { return .ignored }
                     model.send()
@@ -159,18 +168,24 @@ private struct Composer: View {
                 Image(systemName: model.isSending ? "stop.circle.fill" : "arrow.up.circle.fill").font(.system(size: 22))
             }
             .buttonStyle(.plain)
-            .foregroundStyle(canSend ? Color.accentColor : .secondary)
+            .foregroundStyle(canSend || model.isSending ? Color.accentColor : .secondary)
             .disabled(!model.isSending && !canSend)
             .help(model.isSending ? "停止" : "发送")
         }
-        .font(.system(size: 14))
-        .padding(.horizontal, 14).padding(.vertical, 10)
+        .padding(.horizontal, 12).padding(.vertical, 8)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary))
         .frame(maxWidth: 720)
         .padding(.horizontal, 24).padding(.bottom, 16).padding(.top, 4)
         .frame(maxWidth: .infinity)
         .onAppear { focused = true }
+        .onChange(of: model.focusRequest) { _, _ in focused = true }
+    }
+
+    /// Grows with explicit lines (1…8); long wrapped lines scroll inside the editor.
+    private var editorHeight: CGFloat {
+        let lines = max(1, min(8, model.draft.components(separatedBy: "\n").count))
+        return CGFloat(lines) * 19 + 8
     }
 
     private var canSend: Bool { !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }

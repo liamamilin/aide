@@ -19,6 +19,10 @@ def _frame(content="", done=False, **extra):
 def main() -> None:
     mode = sys.argv[1] if len(sys.argv) > 1 else "stream"
     fake = FakeOllama()
+    fake.static_responses = {
+        "/api/tags": json.dumps({"models": [{"name": "m:1", "digest": "d"}]}).encode(),
+        "/api/show": json.dumps({"thinking": {"values": [False, True], "default": True}}).encode(),
+    }
     for _ in range(50):
         if mode == "stream":
             fake.enqueue(_frame("Hel"), _frame("lo"), _frame("", done=True, done_reason="stop"))

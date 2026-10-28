@@ -34,11 +34,28 @@ class FakeOllama:
     def __init__(self):
         self.scenarios = Queue()
         self.requests = []
+        # path -> JSON body answered immediately without consuming a scenario (e.g. /api/tags, /api/show).
+        self.static_responses: dict[str, bytes] = {}
         self.stopping = threading.Event()
         service = self
 
         class Handler(BaseHTTPRequestHandler):
+            def answer_static(self):
+                body = service.static_responses.get(self.path)
+                if body is None:
+                    return False
+                if self.command == "POST":
+                    self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return True
+
             def do_POST(self):
+                if self.answer_static():
+                    return
                 scenario = service.scenarios.get(timeout=2)
                 try:
                     body = self.rfile.read(int(self.headers["Content-Length"]))
@@ -51,6 +68,8 @@ class FakeOllama:
                     scenario.closed.set()
 
             def do_GET(self):
+                if self.answer_static():
+                    return
                 scenario = service.scenarios.get(timeout=2)
                 try:
                     service.requests.append({"method": "GET", "path": self.path})

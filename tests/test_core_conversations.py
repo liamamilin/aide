@@ -4,9 +4,11 @@ import queue
 import pytest
 
 from ai_desktop import config
+from ai_desktop.core import runs as core_runs
 from ai_desktop.core.conversations import ConversationService, collapse_versions
 from ai_desktop.core.protocol import ProtocolError
 from ai_desktop.core.runs import RunService
+from ai_desktop.llm.thinking import ThinkingCapability
 from ai_desktop.utils import storage
 from tests.fake_ollama import FakeOllama
 
@@ -19,6 +21,8 @@ def _frame(content="", done=False, **extra):
 def env(tmp_db, monkeypatch):
     fake = FakeOllama()
     monkeypatch.setattr(config, "OLLAMA_BASE_URL", fake.url)
+    # Capability probing makes extra requests that would consume scripted replies; opt in per test.
+    monkeypatch.setattr(core_runs, "thinking_capability", lambda model: ThinkingCapability())
     events: queue.Queue = queue.Queue()
     runs = RunService(lambda name, data: events.put((name, data)))
     yield ConversationService(runs), fake, events
@@ -99,3 +103,33 @@ def test_create_seed_list_rename_delete(env):
     with pytest.raises(ProtocolError):
         chats.get({"id": created["id"]})
     assert {a["id"] for a in chats.agents({})["agents"]} >= {"general_assistant", "translator"}
+
+
+def test_think_off_setting_is_sent_once_capability_is_probed_and_cached(env, monkeypatch):
+    import json
+
+    from ai_desktop.core.capabilities import thinking_capability as real_thinking_capability
+    from ai_desktop.llm.thinking import ThinkMode, ThinkSetting
+
+    chats, fake, events = env
+    monkeypatch.setattr(core_runs, "thinking_capability", real_thinking_capability)
+    monkeypatch.setattr(config, "OLLAMA_THINK", ThinkSetting(ThinkMode.OFF))
+    monkeypatch.setattr(config, "OLLAMA_MODEL", "m:1")
+    convo_id = chats.create({"agent_id": "general_assistant"})["id"]
+    tags = json.dumps({"models": [{"name": "m:1", "digest": "abc"}]}).encode()
+    show = json.dumps({"thinking": {"values": [False, True], "default": True}}).encode()
+    done = (_frame("ok"), _frame("", done=True, done_reason="stop"))
+
+    fake.enqueue(chunks=[tags])        # GET /api/tags
+    fake.enqueue(chunks=[show])        # POST /api/show
+    fake.enqueue(*done)                # POST /api/chat
+    chats.send({"conversation_id": convo_id, "text": "one"})
+    assert _finished(events)["status"] == "succeeded"
+    assert fake.requests[-1]["payload"]["think"] is False
+
+    fake.enqueue(chunks=[tags])        # capability now cached: tags only, no /api/show
+    fake.enqueue(*done)
+    chats.send({"conversation_id": convo_id, "text": "two"})
+    assert _finished(events)["status"] == "succeeded"
+    assert fake.requests[-1]["payload"]["think"] is False
+    assert [r.get("path") for r in fake.requests].count("/api/show") == 1

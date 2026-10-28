@@ -16,6 +16,7 @@ from typing import Any
 from ai_desktop import config
 from ai_desktop.agent_manager import AgentManager
 from ai_desktop.core import protocol
+from ai_desktop.core.capabilities import thinking_capability
 from ai_desktop.llm.chat_client import ChatClient, _payload
 from ai_desktop.llm.events import ChatResult, EventKind, ResultStatus
 from ai_desktop.llm.run_loop import RunLoop
@@ -71,10 +72,9 @@ class RunService:
             plan = self._actions.build_request_plan(action_id, material, self._agents.all_agents)
         except (LookupError, ValueError) as exc:
             raise protocol.ProtocolError(protocol.ERR_INVALID, str(exc)) from exc
-        resolved = self._profiles.resolve(
-            global_model=storage.get_setting("last_model") or config.OLLAMA_MODEL,
-            agent_profile_id=plan.agent.profile_id,
-            action_profile_id=plan.action_profile_id,
+        resolved = self.resolve_model(
+            storage.get_setting("last_model") or config.OLLAMA_MODEL,
+            agent_profile_id=plan.agent.profile_id, action_profile_id=plan.action_profile_id,
         )
         request = ChatClient(model=resolved.model).create_request(
             [_Message("user", plan.material)], plan.system_prompt, agent_id=plan.agent.id,
@@ -93,6 +93,13 @@ class RunService:
             self._runs[request.run_id] = run
         threading.Thread(target=self._execute, args=(RunContext.create(request), run, on_finished),
                          name=f"aide-run-{request.run_id[:6]}", daemon=True).start()
+
+    def resolve_model(self, global_model: str, *, agent_profile_id=None, action_profile_id=None):
+        """Profile + think resolution with the model's real thinking capability (cached /api/show)."""
+        return self._profiles.resolve(
+            global_model=global_model, agent_profile_id=agent_profile_id, action_profile_id=action_profile_id,
+            thinking_capability=thinking_capability,
+        )
 
     @property
     def agents(self):

@@ -145,3 +145,32 @@ final class WorkspaceModelTests: XCTestCase {
                                 .prose("结尾"), .code(language: "", body: "open")])
     }
 }
+
+@MainActor
+final class WorkspaceFocusTests: XCTestCase {
+    func testNewChatAndOpeningAConversationRequestComposerFocus() async {
+        let model = WorkspaceModel(provider: FocusStub())
+        await model.start()
+        let initial = model.focusRequest
+        model.newChat()
+        XCTAssertEqual(model.focusRequest, initial + 1)
+        await model.select(1)
+        XCTAssertEqual(model.focusRequest, initial + 2)
+    }
+}
+
+private struct FocusStub: WorkspaceProviding {
+    func conversations(query: String) async throws -> [ConversationSummary] { [] }
+    func conversation(id: Int) async throws -> ConversationDetail {
+        ConversationDetail(id: id, title: "", agentID: "a", messages: [])
+    }
+    func createConversation(agentID: String?, seed: [(role: ChatMessage.Role, content: String)]) async throws -> Int { 1 }
+    func deleteConversation(id: Int) async throws {}
+    func renameConversation(id: Int, title: String) async throws {}
+    func agents() async throws -> [AgentInfo] { [] }
+    func models() async throws -> ModelList { ModelList(models: [], current: "") }
+    func selectModel(_ model: String) async throws {}
+    func send(conversationID: Int, text: String) async throws -> RunHandle {
+        RunHandle(updates: AsyncStream { $0.finish() }, cancel: {})
+    }
+}
