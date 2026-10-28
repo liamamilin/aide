@@ -2,6 +2,20 @@ import AideCore
 import Foundation
 import Observation
 
+public enum ToolLabels {
+    public static func running(_ name: String) -> String {
+        switch name {
+        case "find_apps": "正在查找应用…"
+        case "find_files": "正在查找文件…"
+        case "open_path": "正在打开…"
+        case "list_windows", "arrange_window": "正在处理窗口…"
+        case "create_note", "list_notes", "append_note", "delete_note": "正在操作备忘录…"
+        case "create_reminder", "list_reminders", "complete_reminder", "delete_reminder": "正在操作提醒事项…"
+        default: "正在使用工具…"
+        }
+    }
+}
+
 public struct Turn: Identifiable, Equatable {
     public let id: String
     public let role: ChatMessage.Role
@@ -46,6 +60,9 @@ public final class WorkspaceModel {
     public private(set) var currentModel = ""
     public private(set) var isSending = false
     public private(set) var errorMessage: String?
+    /// Subtle one-line status while a tool runs ("正在查找应用…"), or why this message ran without tools.
+    public private(set) var activity: String?
+    public private(set) var pendingConfirmation: ConfirmRequest?
     /// Bumped whenever the composer should take keyboard focus (new chat, opened conversation).
     public private(set) var focusRequest = 0
     public var draft = ""
@@ -90,6 +107,7 @@ public final class WorkspaceModel {
         selectedID = nil
         turns = []
         errorMessage = nil
+        activity = nil
         focusRequest += 1
         Task { await reloadAgents() }
     }
@@ -149,6 +167,8 @@ public final class WorkspaceModel {
         guard !text.isEmpty, !isSending else { return }
         draft = ""
         errorMessage = nil
+        activity = nil
+        pendingConfirmation = nil
         isSending = true
         generation += 1
         let mine = generation
@@ -161,20 +181,29 @@ public final class WorkspaceModel {
                 let handle = try await provider.send(conversationID: conversationID, text: text)
                 guard generation == mine else { await handle.cancel(); return }
                 self.handle = handle
+                if !handle.note.isEmpty { activity = handle.note }
                 for await update in handle.updates where generation == mine { apply(update, to: reply.id) }
             } catch {
                 guard generation == mine else { return }
                 fail("发送失败：\(error)", removing: reply.id)
             }
-            if generation == mine { isSending = false; self.handle = nil }
+            if generation == mine { isSending = false; self.handle = nil; pendingConfirmation = nil }
             await reloadList()
         }
+    }
+
+    /// Answers the pending confirmation; the core runs the action only on an explicit approval.
+    public func respond(approved: Bool) {
+        guard let request = pendingConfirmation, let handle else { return }
+        pendingConfirmation = nil
+        Task { await handle.respond(request.id, approved) }
     }
 
     public func stop() {
         guard isSending else { return }
         let handle = self.handle
         self.handle = nil
+        pendingConfirmation = nil
         if let handle { Task { await handle.cancel() } }
     }
 
@@ -197,7 +226,13 @@ public final class WorkspaceModel {
         switch update {
         case .delta(let kind, let text):
             if kind == "content" { turns[index].content += text }
+        case .tool(_, let name, let state, _):
+            activity = state == "tool_finished" ? nil : ToolLabels.running(name)
+        case .confirm(let request):
+            pendingConfirmation = request
         case .finished(let status, let text, let error, _):
+            activity = nil
+            pendingConfirmation = nil
             turns[index].streaming = false
             switch status {
             case "succeeded": turns[index].content = text

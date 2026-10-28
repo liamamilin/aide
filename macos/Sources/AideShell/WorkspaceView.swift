@@ -67,6 +67,13 @@ public struct WorkspaceView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24).padding(.bottom, 6)
             }
+            if let request = model.pendingConfirmation { ConfirmationCard(request: request) { model.respond(approved: $0) } }
+            else if let activity = model.activity {
+                Text(activity)
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24).padding(.bottom, 6)
+            }
             Composer(model: model)
         }
     }
@@ -198,6 +205,36 @@ struct HiddenScroller: NSViewRepresentable {
         if let scroll = view as? NSScrollView { return scroll }
         for child in view.subviews { if let found = firstScrollView(in: child) { return found } }
         return nil
+    }
+}
+
+/// Asks before a tool changes anything. The text shown is the exact action; Esc denies, and nothing
+/// is approved by Return, so a stray keypress cannot allow it.
+struct ConfirmationCard: View {
+    let request: ConfirmRequest
+    let answer: (Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("需要你确认", systemImage: "exclamationmark.shield").font(.system(size: 13, weight: .semibold))
+            Text(request.preview)
+                .font(.system(size: 13, design: .monospaced))
+                .textSelection(.enabled)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+            if !request.reason.isEmpty { Text(request.reason).font(.system(size: 12)).foregroundStyle(.secondary) }
+            HStack {
+                Spacer()
+                Button("拒绝") { answer(false) }.keyboardShortcut(.cancelAction)
+                Button("允许一次") { answer(true) }
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12).strokeBorder(.orange.opacity(0.6)))
+        .frame(maxWidth: 720)
+        .padding(.horizontal, 24).padding(.bottom, 6)
+        .frame(maxWidth: .infinity)
     }
 }
 

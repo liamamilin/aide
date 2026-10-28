@@ -14,6 +14,8 @@ private final class StubWorkspace: WorkspaceProviding, @unchecked Sendable {
     private(set) var created: [(String?, Int)] = []
     private(set) var sent: [(Int, String)] = []
     private(set) var cancelled = 0
+    private(set) var responses: [(String, Bool)] = []
+    var sendNote = ""
     private(set) var deleted: [Int] = []
 
     func conversations(query: String) async throws -> [ConversationSummary] {
@@ -39,7 +41,8 @@ private final class StubWorkspace: WorkspaceProviding, @unchecked Sendable {
         var c: AsyncStream<RunUpdate>.Continuation!
         let stream = AsyncStream<RunUpdate> { c = $0 }
         continuation = c
-        return RunHandle(updates: stream, cancel: { [weak self] in self?.cancelled += 1 })
+        return RunHandle(updates: stream, cancel: { [weak self] in self?.cancelled += 1 },
+                         respond: { [weak self] id, approved in self?.responses.append((id, approved)) }, note: sendNote)
     }
 }
 
@@ -110,6 +113,7 @@ final class WorkspaceModelTests: XCTestCase {
         let stub = StubWorkspace()
         let model = WorkspaceModel(provider: stub)
         await model.start()
+        model.newChat()   // start() resumes the latest conversation; this test is about a fresh one
         model.draft = "x"
         model.send()
         await settle()
@@ -218,5 +222,65 @@ final class WorkspaceResumeTests: XCTestCase {
         await model.chooseAgent("code_expert")
         XCTAssertEqual(model.selectedAgentID, "translator")
         XCTAssertEqual(model.errorMessage, "无法切换助手")
+    }
+}
+
+@MainActor
+final class WorkspaceToolTests: XCTestCase {
+    private func settle() async { for _ in 0..<6 { await Task.yield(); try? await Task.sleep(nanoseconds: 5_000_000) } }
+
+    func testConfirmationIsShownAnsweredOnceAndClearedWhenTheRunEnds() async {
+        let stub = StubWorkspace()
+        let model = WorkspaceModel(provider: stub)
+        await model.start()
+        model.draft = "删掉那条笔记"
+        model.send()
+        await settle()
+        stub.continuation?.yield(.tool(callID: "c1", name: "delete_note", state: "tool_started", status: ""))
+        await settle()
+        XCTAssertEqual(model.activity, "正在操作备忘录…")
+        stub.continuation?.yield(.confirm(ConfirmRequest(id: "k1", callID: "c1", preview: "删除备忘录：周报", reason: "可恢复")))
+        await settle()
+        XCTAssertEqual(model.pendingConfirmation?.preview, "删除备忘录：周报")
+
+        model.respond(approved: true)
+        XCTAssertNil(model.pendingConfirmation)
+        model.respond(approved: true)   // a second answer is ignored
+        await settle()
+        XCTAssertEqual(stub.responses.count, 1)
+        XCTAssertEqual(stub.responses.first?.0, "k1")
+        XCTAssertEqual(stub.responses.first?.1, true)
+
+        stub.continuation?.yield(.finished(status: "succeeded", text: "已删除", error: "", errorCode: ""))
+        await settle()
+        XCTAssertNil(model.activity)
+        XCTAssertFalse(model.isSending)
+    }
+
+    func testStoppingWhilePendingDropsTheCardAndNeverApproves() async {
+        let stub = StubWorkspace()
+        let model = WorkspaceModel(provider: stub)
+        await model.start()
+        model.draft = "删掉"
+        model.send()
+        await settle()
+        stub.continuation?.yield(.confirm(ConfirmRequest(id: "k2", callID: "c", preview: "p", reason: "")))
+        await settle()
+        model.stop()
+        await settle()
+        XCTAssertNil(model.pendingConfirmation)
+        XCTAssertTrue(stub.responses.isEmpty)
+        XCTAssertEqual(stub.cancelled, 1)
+    }
+
+    func testWhyToolsAreOffIsShownForThatMessage() async {
+        let stub = StubWorkspace()
+        stub.sendNote = "本次未启用工具：所选模型未声明工具调用能力"
+        let model = WorkspaceModel(provider: stub)
+        await model.start()
+        model.draft = "hi"
+        model.send()
+        await settle()
+        XCTAssertEqual(model.activity, "本次未启用工具：所选模型未声明工具调用能力")
     }
 }

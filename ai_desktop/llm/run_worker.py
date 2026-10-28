@@ -7,19 +7,14 @@ from dataclasses import replace
 
 from PyQt5.QtCore import QCoreApplication, QEvent, QEventLoop, QObject, Qt, QThread, QTimer, pyqtSignal
 
-from ai_desktop import config
-from ai_desktop.desktop.tools import DesktopToolbox
 from ai_desktop.llm.chat_client import _USE_GLOBAL, ChatClient, _exception_error, _payload
 from ai_desktop.llm.events import ChatResult, EventKind, ResultStatus
 from ai_desktop.llm.qt_stream import QtChatTransport
 from ai_desktop.llm.run_loop import RunLoop
-from ai_desktop.llm.run_types import RunContext, RunLimits, ToolSpec, chat_tools_eligible
 from ai_desktop.llm.thinking import ThinkSetting
-from ai_desktop.llm.tool_prompt import fit_tools, tool_rules
-from ai_desktop.services.bash_executor import BashExecutor
+from ai_desktop.llm.tool_run import assemble_tool_run
 from ai_desktop.services.command_confirmation import ConfirmationBroker
 from ai_desktop.services.execution_context import ExecutionSnapshot
-from ai_desktop.services.search_executor import SearchExecutor
 from ai_desktop.services.web_search import SearchSettings
 from ai_desktop.utils import storage
 from ai_desktop.utils.storage import Message
@@ -58,30 +53,12 @@ class RunWorker(QThread):
             if not tools_admitted or not options:
                 raise ValueError('Exact options require an admitted tool task')
             self.request = replace(self.request, options=tuple(options.items()))
-        tools = ()
-        allowed = tools_admitted and chat_tools_eligible(self.request.agent_id, self.request.origin)
-        self.confirmations = confirmations
-        if allowed and confirmations is None and (execution is not None or native_tools):
-            self.confirmations = ConfirmationBroker(self.confirmation_requested.emit)
-        if allowed and execution is not None and self.confirmations is not None:
-            tools = (ToolSpec.create('bash', BashExecutor(self.confirmations)),)
-        self.search_executor = None
-        if allowed and search_settings is not None:
-            self.search_executor = SearchExecutor(search_settings)
-            tools += (ToolSpec.create('web_search', self.search_executor),)
-        if allowed and (tools or native_tools) and config.DESKTOP_TOOLS_ENABLED:
-            tools += tuple(ToolSpec.create(name, execute)
-                           for name, execute in DesktopToolbox(confirmations=self.confirmations).executors().items())
-            tools = fit_tools(tools, dict(self.request.options))
-        self.context = RunContext.create(self.request, tools=tools, tools_admitted=tools_admitted,
-                                         limits=RunLimits.from_config() if tools_admitted else None,
-                                         execution=execution, search_settings=search_settings)
-        if self.context.tools:
-            rules = tool_rules(tool.name for tool in self.context.tools)
-            if session_context:
-                rules += '\n\n' + session_context
-            self.request = replace(self.request, system_prompt=system_prompt + '\n\n' + rules)
-            self.context = replace(self.context, request=self.request)
+        assembly = assemble_tool_run(
+            self.request, system_prompt, tools_admitted=tools_admitted, execution=execution,
+            search_settings=search_settings, native_tools=native_tools, confirmations=confirmations,
+            make_broker=lambda: ConfirmationBroker(self.confirmation_requested.emit), session_context=session_context)
+        self.request, self.context = assembly.request, assembly.context
+        self.confirmations, self.search_executor = assembly.confirmations, assembly.search_executor
         self._run_loop = None
         # Unlike QThread interruption, this also remembers cancellation before start().
         self._cancelled = threading.Event()

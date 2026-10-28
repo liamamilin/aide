@@ -37,6 +37,7 @@ def build_handlers(emit) -> dict:
     return {
         "ping": ping, "health": health,
         "actions.list": runs.list_actions, "run.start": runs.start, "run.cancel": runs.cancel,
+        "run.confirm": runs.confirm,
         "conversations.list": chats.list, "conversations.get": chats.get, "conversations.create": chats.create,
         "conversations.delete": chats.delete, "conversations.rename": chats.rename,
         "conversations.set_agent": chats.set_agent, "chat.send": chats.send,

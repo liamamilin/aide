@@ -17,12 +17,14 @@ from ai_desktop import config
 from ai_desktop.agent_manager import AgentManager
 from ai_desktop.core import protocol
 from ai_desktop.core.capabilities import thinking_capability
+from ai_desktop.desktop.runner import run_command
 from ai_desktop.llm.chat_client import ChatClient, _payload
 from ai_desktop.llm.events import ChatResult, EventKind, ResultStatus
 from ai_desktop.llm.run_loop import RunLoop
-from ai_desktop.llm.run_types import RunContext
+from ai_desktop.llm.run_types import RunContext, RunEvent, RunEventKind
 from ai_desktop.llm.sync_stream import SyncChatTransport
 from ai_desktop.services.action_service import ActionService
+from ai_desktop.services.command_confirmation import CommandConfirmation, ConfirmationBroker
 from ai_desktop.services.model_profiles import ModelProfileManager
 from ai_desktop.utils import storage
 
@@ -40,9 +42,10 @@ class _Message:
 
 
 class _ActiveRun:
-    def __init__(self) -> None:
+    def __init__(self, broker: ConfirmationBroker | None = None) -> None:
         self.cancelled = threading.Event()
         self.transport: SyncChatTransport | None = None
+        self.broker = broker
 
     def cancel(self) -> None:
         self.cancelled.set()
@@ -57,6 +60,8 @@ class RunService:
         self._actions = ActionService()
         self._agents = AgentManager()
         self._profiles = ModelProfileManager()
+        # Injected in tests so no real mdfind / osascript ever runs.
+        self.desktop_runner = run_command
         self._runs: dict[str, _ActiveRun] = {}
         self._lock = threading.Lock()
 
@@ -86,13 +91,41 @@ class RunService:
         return {"run_id": request.run_id, "model": resolved.model, "agent": plan.agent.name,
                 "warnings": list(plan.warnings) + list(resolved.warnings)}
 
-    def launch(self, request, on_finished: Callable[[ChatResult], None] | None = None) -> None:
-        """Run one tool-free request on its own thread; ``on_finished`` runs before ``run.finished``."""
-        run = _ActiveRun()
+    def launch(self, request, on_finished: Callable[[ChatResult], None] | None = None, *,
+               context: RunContext | None = None, broker: ConfirmationBroker | None = None,
+               on_tool: Callable[[RunEvent], None] | None = None) -> None:
+        """Run one request on its own thread; tool-free unless an admitted ``context`` is passed.
+
+        ``on_finished`` runs before ``run.finished``; ``broker`` is the confirmation broker the context's
+        tools ask through, so ``run.confirm`` can answer it.
+        """
+        run = _ActiveRun(broker)
         with self._lock:
             self._runs[request.run_id] = run
-        threading.Thread(target=self._execute, args=(RunContext.create(request), run, on_finished),
+        threading.Thread(target=self._execute, args=(context or RunContext.create(request), run, on_finished, on_tool),
                          name=f"aide-run-{request.run_id[:6]}", daemon=True).start()
+
+    def new_broker(self) -> ConfirmationBroker:
+        return ConfirmationBroker(self._emit_confirmation)
+
+    def _emit_confirmation(self, request: CommandConfirmation) -> None:
+        # The preview is the exact action text built by trusted code, never model-written prose.
+        self._emit("run.confirm_request", {
+            "run_id": request.run_id, "confirmation_id": request.id, "call_id": request.tool_call_id,
+            "preview": request.command, "reason": request.reason, "expires_in": 600,
+        })
+
+    def confirm(self, params: dict[str, Any]) -> dict[str, Any]:
+        run_id, confirmation_id, approved = params.get("run_id"), params.get("confirmation_id"), params.get("approved")
+        if not isinstance(run_id, str) or not isinstance(confirmation_id, str) or type(approved) is not bool:
+            raise protocol.ProtocolError(protocol.ERR_INVALID, "run_id, confirmation_id and approved are required")
+        with self._lock:
+            run = self._runs.get(run_id)
+        broker = run.broker if run is not None else None
+        pending = next((item for item in broker.pending if item.id == confirmation_id), None) if broker else None
+        if pending is None or not broker.respond(pending, approved):
+            raise protocol.ProtocolError(protocol.ERR_INVALID, "这个确认已过期或已处理。")
+        return {}
 
     def resolve_model(self, global_model: str, *, agent_profile_id=None, action_profile_id=None):
         """Profile + think resolution with the model's real thinking capability (cached /api/show)."""
@@ -121,7 +154,8 @@ class RunService:
         return {"cancelled": run is not None}
 
     def _execute(self, context: RunContext, active: _ActiveRun,
-                 on_finished: Callable[[ChatResult], None] | None = None) -> None:
+                 on_finished: Callable[[ChatResult], None] | None = None,
+                 on_tool: Callable[[RunEvent], None] | None = None) -> None:
         run_id = context.request.run_id
         started = time.monotonic()
 
@@ -130,7 +164,8 @@ class RunService:
             self._emit("run.delta", {"run_id": run_id, "kind": kind, "text": event.text})
 
         def model_step(request, payload, deadline):
-            transport = SyncChatTransport(request, on_stream=lambda ev: loop.forward_stream(ev, deliver))
+            transport = SyncChatTransport(request, on_stream=lambda ev: loop.forward_stream(ev, deliver),
+                                          allow_tools=bool(context.tools))
             active.transport = transport
             timer = None
             if deadline is not None:
@@ -146,7 +181,18 @@ class RunService:
                 if timer is not None:
                     timer.cancel()
 
-        loop = RunLoop(context, active.cancelled, model_step)
+        def on_event(event: RunEvent) -> None:
+            if event.kind not in {RunEventKind.TOOL_STARTED, RunEventKind.TOOL_UPDATED, RunEventKind.TOOL_FINISHED}:
+                return
+            self._emit("run.tool", {"run_id": run_id, "call_id": event.local_call_id, "tool": event.tool_name,
+                                    "state": event.kind.value, "status": event.status})
+            if on_tool is not None:
+                try:
+                    on_tool(event)
+                except Exception:
+                    logger.exception("tool observer failed")
+
+        loop = RunLoop(context, active.cancelled, model_step, on_event=on_event)
         try:
             result = loop.run(lambda: _payload(context.request, stream=True))
         except Exception as exc:

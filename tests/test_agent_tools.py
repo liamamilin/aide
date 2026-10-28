@@ -238,7 +238,7 @@ def test_other_role_cannot_reexecute_old_tool_answer(qtbot, controller, tmp_path
 
 @pytest.mark.parametrize('admitted', ['false', 1, object()])
 def test_truthy_admission_cannot_construct_executors(tmp_db, tmp_path, admitted):
-    with patch('ai_desktop.llm.run_worker.SearchExecutor') as search:
+    with patch('ai_desktop.services.search_executor.SearchExecutor') as search:
         with pytest.raises(ValueError):
             RunWorker([], 'ROLE', agent_id='translator', tools_admitted=admitted,
                       search_settings=SearchSettings(), execution=ExecutionSnapshot.create(tmp_path))

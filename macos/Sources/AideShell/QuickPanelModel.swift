@@ -104,6 +104,8 @@ public final class QuickPanelModel {
         switch update {
         case .delta(let kind, let text):
             if kind == "content" { output += text; isThinking = false } else { isThinking = true }
+        case .tool, .confirm:
+            break   // quick actions never run tools
         case .finished(let status, let text, let error, _):
             isThinking = false
             switch status {

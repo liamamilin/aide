@@ -6,13 +6,19 @@ stays interchangeable between the two shells during the migration. Sends are too
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 from typing import Any
 
 from ai_desktop import config
 from ai_desktop.core import protocol
+from ai_desktop.core.admission import check_admission
 from ai_desktop.core.runs import RunService, _Message
 from ai_desktop.llm.chat_client import ChatClient, list_models
 from ai_desktop.llm.events import ChatResult
+from ai_desktop.llm.run_types import RunEvent, RunEventKind
+from ai_desktop.llm.tool_run import assemble_tool_run
+from ai_desktop.services.session_objects import SessionObjects
+from ai_desktop.services.task_admission import TaskAuthorization, TaskModelSettings
 from ai_desktop.utils import storage
 
 _TITLE_CHARS = 30
@@ -52,6 +58,7 @@ class ConversationService:
         self._runs = runs
         self._busy: set[int] = set()
         self._lock = threading.Lock()
+        self._session_objects: dict[int, SessionObjects] = {}
 
     # ── reading ────────────────────────────────────────────
     def list(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -155,11 +162,31 @@ class ConversationService:
             agent_profile_id=agent.profile_id,
         )
         messages = [_Message(m["role"], m["content"]) for m in history] + [_Message("user", text, user_message.id)]
-        request = ChatClient(model=resolved.model).create_request(
-            messages, agent.system_prompt, conversation_id=conversation.id, agent_id=agent.id,
-            think=resolved.think, think_setting=resolved.think_setting, think_source=resolved.think_source,
-            options=resolved.options,
-        )
+        admission, tools_note = self._admit_tools(agent, resolved)
+        if admission is None:
+            request = ChatClient(model=resolved.model).create_request(
+                messages, agent.system_prompt, conversation_id=conversation.id, agent_id=agent.id,
+                think=resolved.think, think_setting=resolved.think_setting, think_source=resolved.think_source,
+                options=resolved.options,
+            )
+            context, broker, tool_names = None, None, []
+        else:
+            granted = admission[1]
+            request = ChatClient(model=granted["model"]).create_request(
+                messages, agent.system_prompt, conversation_id=conversation.id, agent_id=agent.id,
+                think=granted["think"], think_setting=granted["think_setting"],
+                think_source=granted["think_source"], options=granted["options"],
+            )
+            request = replace(request, options=tuple(granted["options"].items()))
+            session = self._session_objects.setdefault(conversation.id, SessionObjects())
+            assembly = assemble_tool_run(
+                request, agent.system_prompt, tools_admitted=True, native_tools=True,
+                make_broker=self._runs.new_broker, session_context=session.render(),
+                desktop_runner=self._runs.desktop_runner)
+            request, context, broker = assembly.request, assembly.context, assembly.confirmations
+            tool_names = [tool.name for tool in context.tools]
+            if not tool_names:
+                context, broker = None, None
 
         def persist(result: ChatResult) -> None:
             try:
@@ -168,14 +195,42 @@ class ConversationService:
                     storage.save_generation(
                         user_message.id, request.request_id, status="succeeded", answer=result.text,
                         assistant_message_id=assistant.id, active=True,
-                        config_snapshot={"model": resolved.model, "run_id": request.run_id})
+                        config_snapshot={"model": request.model, "run_id": request.run_id,
+                                         "allowed_tools": tool_names,
+                                         "admission": admission[0].record() if admission else None})
             finally:
                 with self._lock:
                     self._busy.discard(conversation.id)
 
-        self._runs.launch(request, on_finished=persist)
+        self._runs.launch(request, on_finished=persist, context=context, broker=broker,
+                          on_tool=self._observer(conversation.id))
         return {"run_id": request.run_id, "conversation_id": conversation.id, "user_message_id": user_message.id,
-                "model": resolved.model}
+                "model": request.model, "tools": tool_names, "tools_note": tools_note}
+
+    def _admit_tools(self, agent, resolved):
+        """(admission, worker kwargs) when this message may use the native desktop tools, else (None, why).
+
+        Without tools the message still runs; the reason is returned so the shell can say so.
+        """
+        if not (config.DESKTOP_TOOLS_ENABLED and config.CHAT_TOOLS_ENABLED):
+            return None, ""
+        try:
+            settings = TaskModelSettings.from_config(resolved)
+            admission = check_admission(config.OLLAMA_BASE_URL, resolved.model, settings)
+            kwargs = TaskAuthorization(agent_id=agent.id, native=True).worker_kwargs(
+                admission, config.OLLAMA_BASE_URL, agent_id=agent.id, origin="chat", model=resolved.model,
+                settings=settings)
+        except ValueError as exc:
+            return None, f"本次未启用工具：{exc}"
+        return (admission, kwargs), ""
+
+    def _observer(self, conversation_id: int):
+        session = self._session_objects.setdefault(conversation_id, SessionObjects())
+
+        def observe(event: RunEvent) -> None:
+            if event.kind == RunEventKind.TOOL_FINISHED and event.output is not None:
+                session.observe(event.tool_name, event.arguments_json, event.output.text, event.output.error)
+        return observe
 
     # ── helpers ────────────────────────────────────────────
     def _require(self, params: dict[str, Any]) -> storage.Conversation:

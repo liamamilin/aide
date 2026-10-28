@@ -7,8 +7,23 @@ public struct QuickAction: Sendable, Equatable, Identifiable {
     public init(id: String, name: String, agentID: String? = nil) { self.id = id; self.name = name; self.agentID = agentID }
 }
 
+/// A tool wants to do something the person must approve. `preview` is the exact action text built by
+/// trusted code in the core, never model-written prose.
+public struct ConfirmRequest: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let callID: String
+    public let preview: String
+    public let reason: String
+    public init(id: String, callID: String, preview: String, reason: String) {
+        self.id = id; self.callID = callID; self.preview = preview; self.reason = reason
+    }
+}
+
 public enum RunUpdate: Sendable, Equatable {
     case delta(kind: String, text: String)
+    /// `state` is tool_started / tool_updated / tool_finished; `status` carries the tool's own phase or result.
+    case tool(callID: String, name: String, state: String, status: String)
+    case confirm(ConfirmRequest)
     case finished(status: String, text: String, error: String, errorCode: String)
 }
 
@@ -16,9 +31,16 @@ public enum RunUpdate: Sendable, Equatable {
 public struct RunHandle: Sendable {
     public let updates: AsyncStream<RunUpdate>
     public let cancel: @Sendable () async -> Void
-    public init(updates: AsyncStream<RunUpdate>, cancel: @escaping @Sendable () async -> Void) {
+    /// Answers a pending confirmation by id.
+    public let respond: @Sendable (_ confirmationID: String, _ approved: Bool) async -> Void
+    /// Why this run has no tools (shown to the person), empty when tools are on or not applicable.
+    public let note: String
+    public init(updates: AsyncStream<RunUpdate>, cancel: @escaping @Sendable () async -> Void,
+                respond: @escaping @Sendable (String, Bool) async -> Void = { _, _ in }, note: String = "") {
         self.updates = updates
         self.cancel = cancel
+        self.respond = respond
+        self.note = note
     }
 }
 
@@ -70,6 +92,14 @@ struct RunRouter {
         switch event.name {
         case "run.delta":
             return .delta(kind: event.data["kind"]?.stringValue ?? "content", text: event.data["text"]?.stringValue ?? "")
+        case "run.tool":
+            return .tool(callID: event.data["call_id"]?.stringValue ?? "", name: event.data["tool"]?.stringValue ?? "",
+                         state: event.data["state"]?.stringValue ?? "", status: event.data["status"]?.stringValue ?? "")
+        case "run.confirm_request":
+            guard let id = event.data["confirmation_id"]?.stringValue else { return nil }
+            return .confirm(ConfirmRequest(id: id, callID: event.data["call_id"]?.stringValue ?? "",
+                                           preview: event.data["preview"]?.stringValue ?? "",
+                                           reason: event.data["reason"]?.stringValue ?? ""))
         case "run.finished":
             return .finished(status: event.data["status"]?.stringValue ?? "failed",
                              text: event.data["text"]?.stringValue ?? "",
@@ -97,8 +127,13 @@ extension CoreClient: RunProviding {
         return handle(for: runID)
     }
 
-    func handle(for runID: String) -> RunHandle {
+    func handle(for runID: String, note: String = "") -> RunHandle {
         RunHandle(updates: registerRun(runID),
-                  cancel: { [self] in _ = try? await call("run.cancel", params: ["run_id": .string(runID)]) })
+                  cancel: { [self] in _ = try? await call("run.cancel", params: ["run_id": .string(runID)]) },
+                  respond: { [self] confirmationID, approved in
+                      _ = try? await call("run.confirm", params: [
+                          "run_id": .string(runID), "confirmation_id": .string(confirmationID), "approved": .bool(approved)])
+                  },
+                  note: note)
     }
 }

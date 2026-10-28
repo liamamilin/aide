@@ -131,3 +131,23 @@ final class WorkspaceCoreTests: XCTestCase {
         await core.stop()
     }
 }
+
+final class RunRouterToolEventTests: XCTestCase {
+    func testToolAndConfirmationEventsReachTheRunsStreamInOrder() async {
+        var router = RunRouter()
+        let stream = router.register(runID: "r1")
+        router.route(CoreEvent(name: "run.tool", data: .object([
+            "run_id": .string("r1"), "call_id": .string("c1"), "tool": .string("find_apps"),
+            "state": .string("tool_started"), "status": .string("")])))
+        router.route(CoreEvent(name: "run.confirm_request", data: .object([
+            "run_id": .string("r1"), "confirmation_id": .string("k1"), "call_id": .string("c1"),
+            "preview": .string("删除备忘录：周报"), "reason": .string("可恢复")])))
+        router.route(CoreEvent(name: "run.future_thing", data: .object(["run_id": .string("r1")])))   // unknown: ignored
+        router.route(CoreEvent(name: "run.finished", data: .object(["run_id": .string("r1"), "status": .string("succeeded")])))
+        var got: [RunUpdate] = []
+        for await update in stream { got.append(update) }
+        XCTAssertEqual(got.count, 3)
+        XCTAssertEqual(got[0], .tool(callID: "c1", name: "find_apps", state: "tool_started", status: ""))
+        XCTAssertEqual(got[1], .confirm(ConfirmRequest(id: "k1", callID: "c1", preview: "删除备忘录：周报", reason: "可恢复")))
+    }
+}

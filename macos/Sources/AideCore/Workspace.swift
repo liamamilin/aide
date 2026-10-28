@@ -128,6 +128,6 @@ extension CoreClient: WorkspaceProviding {
     public func send(conversationID: Int, text: String) async throws -> RunHandle {
         let result = try await call("chat.send", params: ["conversation_id": .number(Double(conversationID)), "text": .string(text)])
         guard let runID = result["run_id"]?.stringValue else { throw CoreError.remote(code: "protocol", message: "missing run_id") }
-        return handle(for: runID)
+        return handle(for: runID, note: result["tools_note"]?.stringValue ?? "")
     }
 }
