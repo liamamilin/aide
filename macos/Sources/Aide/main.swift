@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = QuickPanelModel(provider: client)
         let controller = QuickPanelController(model: model, reader: SelectionReader())
         self.controller = controller
+        controller.onNoSelection = { [weak self] in self?.workspace?.show() }
         let workspace = WorkspaceWindowController(model: WorkspaceModel(provider: client))
         self.workspace = workspace
         settings = SettingsWindowController(model: SettingsModel(provider: client))
