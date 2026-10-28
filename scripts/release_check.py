@@ -141,12 +141,35 @@ def validate_bundle(bundle: Path, version: str) -> list[str]:
     return errors
 
 
+def validate_native_bundle(app: Path, version: str) -> list[str]:
+    """The native Aide.app: shell executable, frozen Qt-free core, version in Info.plist."""
+    errors: list[str] = []
+    contents = app / "Contents"
+    try:
+        info = plistlib.loads((contents / "Info.plist").read_bytes())
+    except (OSError, plistlib.InvalidFileException):
+        return [f"missing or unreadable Info.plist in {app}"]
+    for key in ("CFBundleShortVersionString", "CFBundleVersion"):
+        if info.get(key) != version:
+            errors.append(f"{key} is {info.get(key)!r}, expected {version!r}")
+    if info.get("CFBundleExecutable") != "Aide" or not (contents / "MacOS" / "Aide").is_file():
+        errors.append("missing native shell executable Contents/MacOS/Aide")
+    core = contents / "Resources" / "aide-core"
+    if not (core / "aide-core").is_file():
+        errors.append("missing frozen core Contents/Resources/aide-core/aide-core")
+    internal = core / "_internal"
+    if internal.is_dir() and (internal / "PyQt5").exists():
+        errors.append("the core must not bundle PyQt5 (GPL boundary)")
+    return errors
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Validate source/bundle release metadata without modifying Git.",
     )
     parser.add_argument("--version", help="Expected version, with or without a leading v")
     parser.add_argument("--bundle", type=Path, help="Validate a built .app bundle")
+    parser.add_argument("--native-bundle", type=Path, help="Validate a built native Aide.app")
     parser.add_argument("--require-clean", action="store_true")
     tag_group = parser.add_mutually_exclusive_group()
     tag_group.add_argument("--require-tag", action="store_true")
@@ -164,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.bundle:
         errors.extend(validate_bundle(args.bundle.resolve(), version))
+    if args.native_bundle:
+        errors.extend(validate_native_bundle(args.native_bundle.resolve(), version))
     if errors:
         print("Release preflight failed:", file=sys.stderr)
         for error in errors:

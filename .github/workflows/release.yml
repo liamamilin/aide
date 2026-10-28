@@ -43,11 +43,16 @@ jobs:
       - name: Test
         run: QT_QPA_PLATFORM=offscreen pytest tests/ -q
 
-      - name: Build, validate, smoke test, and package
-        run: bash scripts/build.sh --smoke --dmg
+      - name: Swift shell tests
+        run: cd macos && swift test
+
+      - name: Build, validate, smoke test, and package the native app
+        run: bash scripts/build_native.sh --smoke
 
       - name: Upload DMG to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/AI桌面助手-*.dmg
+          files: |
+            dist/Aide-*.dmg
+            dist/Aide-*.dmg.sha256
           generate_release_notes: true

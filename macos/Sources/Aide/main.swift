@@ -2,7 +2,7 @@ import AideCore
 import AideShell
 import AppKit
 
-/// Dev launcher: spawns the Python core from the source tree. Packaged builds embed the core (P2).
+/// Spawns the Python core: the frozen helper inside the .app when packaged, else from the source tree (dev).
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var core: CoreClient?
@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let client = CoreClient(launch: Self.devLaunch())
+        let client = CoreClient(launch: Self.coreLaunch())
         core = client
         Task { @MainActor in
             do { try await client.start() } catch { NSLog("Aide core failed to start: \(error)") }
@@ -61,6 +61,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showSettings() { settings?.show() }
 
     @objc private func showPanel() { controller?.toggle() }
+
+    private static func coreLaunch() -> CoreClient.Launch {
+        let env = ProcessInfo.processInfo.environment
+        let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/aide-core/aide-core")
+        guard FileManager.default.isExecutableFile(atPath: helper.path) else { return devLaunch() }
+        var childEnv: [String: String] = [:]
+        for key in ["AIDE_DATA_DIR", "AIDE_OLLAMA_URL", "AIDE_LOG_DIR"] { if let v = env[key] { childEnv[key] = v } }
+        return .init(executable: helper, arguments: [], environment: childEnv)
+    }
 
     private static func devLaunch() -> CoreClient.Launch {
         let env = ProcessInfo.processInfo.environment
