@@ -23,3 +23,12 @@ def health(_params: dict[str, Any]) -> dict[str, Any]:
         "qt_loaded": any(name == "PyQt5" or name.startswith("PyQt5.") for name in sys.modules),
         "data_dir": os.environ.get("AIDE_DATA_DIR", ""),
     }
+
+
+def build_handlers(emit) -> dict:
+    """Wire every method. Imported lazily so ``ping``/``health`` stay cheap to test."""
+    from ai_desktop.core.runs import RunService
+
+    runs = RunService(emit)
+    return {"ping": ping, "health": health, "actions.list": runs.list_actions,
+            "run.start": runs.start, "run.cancel": runs.cancel}

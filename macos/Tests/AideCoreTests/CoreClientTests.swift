@@ -3,22 +3,7 @@ import XCTest
 @testable import AideCore
 
 final class CoreClientTests: XCTestCase {
-    /// Repo root: macos/Tests/AideCoreTests/<this file> -> up four levels.
-    private var repoRoot: URL {
-        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-    }
-
-    private func makeClient() throws -> (CoreClient, URL) {
-        let dataDir = FileManager.default.temporaryDirectory.appendingPathComponent("aide-test-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
-        let python = ProcessInfo.processInfo.environment["AIDE_PYTHON"] ?? "python3"
-        let client = CoreClient(launch: .init(
-            executable: URL(fileURLWithPath: "/usr/bin/env"),
-            arguments: [python, "-m", "ai_desktop.core"],
-            environment: ["AIDE_DATA_DIR": dataDir.path, "PYTHONPATH": repoRoot.path]))
-        return (client, dataDir)
-    }
+    private func makeClient() throws -> (CoreClient, URL) { try makeCore() }
 
     func testReadyPingAndHealth() async throws {
         let (client, dataDir) = try makeClient()

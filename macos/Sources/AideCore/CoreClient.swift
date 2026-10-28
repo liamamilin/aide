@@ -19,6 +19,7 @@ public actor CoreClient {
     private var input: FileHandle?
     private var pending: [String: CheckedContinuation<JSONValue, Error>] = [:]
     private var nextID = 0
+    private var router = RunRouter()
     private var eventContinuation: AsyncStream<CoreEvent>.Continuation?
 
     /// Core-originated notifications (`core.ready`, run events, ...).
@@ -88,10 +89,14 @@ public actor CoreClient {
         process?.waitUntilExit()
     }
 
+    func registerRun(_ runID: String) -> AsyncStream<RunUpdate> { router.register(runID: runID) }
+
     private func receive(_ line: Data) {
         guard let message = try? JSONDecoder().decode(WireMessage.self, from: line) else { return }
         if let name = message.event {
-            eventContinuation?.yield(CoreEvent(name: name, data: message.data ?? .null))
+            let event = CoreEvent(name: name, data: message.data ?? .null)
+            router.route(event)
+            eventContinuation?.yield(event)
         } else if let id = message.id, let continuation = pending.removeValue(forKey: id) {
             if let failure = message.error {
                 continuation.resume(throwing: CoreError.remote(code: failure.code, message: failure.message))
@@ -104,6 +109,7 @@ public actor CoreClient {
     private func handleTermination() {
         for continuation in pending.values { continuation.resume(throwing: CoreError.terminated) }
         pending.removeAll()
+        router.failAll(message: "Aide 核心已退出")
         eventContinuation?.finish()
         process = nil
         input = nil
