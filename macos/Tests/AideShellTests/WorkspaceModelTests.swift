@@ -257,6 +257,23 @@ final class WorkspaceToolTests: XCTestCase {
         XCTAssertFalse(model.isSending)
     }
 
+    func testToolStepsRecordRunningThenOutcomePerCall() async {
+        let stub = StubWorkspace()
+        let model = WorkspaceModel(provider: stub)
+        await model.start()
+        model.newChat()
+        model.draft = "新建备忘录"
+        model.send()
+        await settle()
+        stub.continuation?.yield(.tool(callID: "a", name: "create_note", state: "tool_started", status: ""))
+        await settle()
+        XCTAssertEqual(model.turns.last?.steps, [ToolStep(id: "a", name: "create_note", state: .running)])
+        stub.continuation?.yield(.tool(callID: "a", name: "create_note", state: "tool_finished", status: "failed"))
+        stub.continuation?.yield(.tool(callID: "b", name: "find_apps", state: "tool_finished", status: "succeeded"))
+        await settle()
+        XCTAssertEqual(model.turns.last?.steps.map(\.state), [.failed, .succeeded])
+    }
+
     func testStoppingWhilePendingDropsTheCardAndNeverApproves() async {
         let stub = StubWorkspace()
         let model = WorkspaceModel(provider: stub)

@@ -137,6 +137,23 @@ public struct WorkspaceView: View {
     }
 }
 
+private struct StepRow: View {
+    let step: ToolStep
+
+    var body: some View {
+        HStack(spacing: 6) {
+            switch step.state {
+            case .running: ProgressView().controlSize(.mini)
+            case .succeeded: Image(systemName: "checkmark.circle").foregroundStyle(.secondary)
+            case .failed: Image(systemName: "xmark.circle").foregroundStyle(.orange)
+            }
+            Text(step.state == .failed ? "\(ToolLabels.title(step.name)) 未成功" : ToolLabels.title(step.name))
+                .foregroundStyle(step.state == .failed ? Color.orange : Color.secondary)
+        }
+        .font(.system(size: 12))
+    }
+}
+
 private struct TurnView: View {
     let turn: Turn
 
@@ -152,7 +169,8 @@ private struct TurnView: View {
             }
         case .assistant:
             VStack(alignment: .leading, spacing: 6) {
-                if turn.content.isEmpty && turn.streaming {
+                ForEach(turn.steps) { StepRow(step: $0) }
+                if turn.content.isEmpty && turn.streaming && turn.steps.isEmpty {
                     ProgressView().controlSize(.small)
                 } else {
                     MessageText(turn.content)

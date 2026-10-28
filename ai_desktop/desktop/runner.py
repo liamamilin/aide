@@ -54,7 +54,7 @@ def run_command(argv: Sequence[str], timeout: float = QUERY_TIMEOUT) -> str:
     return stdout
 
 
-def run_script(script: str, args: Sequence[str] = (), *, runner: Runner = run_command, timeout: float = 15.0) -> str:
+def run_script(script: str, args: Sequence[str] = (), *, runner: Runner = run_command, timeout: float = 40.0) -> str:
     """Run AppleScript with user text passed as arguments, never spliced into the script source."""
     if runner is run_command:
         return run_command([OSASCRIPT, "-e", script, *args], timeout=timeout)

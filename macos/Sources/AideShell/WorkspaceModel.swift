@@ -2,7 +2,35 @@ import AideCore
 import Foundation
 import Observation
 
+/// One tool call shown under the reply, so a step that failed or is still running is never invisible.
+public struct ToolStep: Identifiable, Equatable {
+    public enum State: Equatable { case running, succeeded, failed }
+    public let id: String
+    public let name: String
+    public var state: State
+}
+
 public enum ToolLabels {
+    /// Short noun phrase for a finished-or-running step line.
+    public static func title(_ name: String) -> String {
+        switch name {
+        case "find_apps": "查找应用"
+        case "find_files": "查找文件"
+        case "open_path": "打开"
+        case "list_windows": "查看窗口"
+        case "arrange_window": "调整窗口"
+        case "create_note": "新建备忘录"
+        case "list_notes": "查看备忘录"
+        case "append_note": "追加备忘录"
+        case "delete_note": "删除备忘录"
+        case "create_reminder": "新建提醒"
+        case "list_reminders": "查看提醒"
+        case "complete_reminder": "完成提醒"
+        case "delete_reminder": "删除提醒"
+        default: "使用工具"
+        }
+    }
+
     public static func running(_ name: String) -> String {
         switch name {
         case "find_apps": "正在查找应用…"
@@ -22,6 +50,7 @@ public struct Turn: Identifiable, Equatable {
     public var content: String
     public var streaming = false
     public var stopped = false
+    public var steps: [ToolStep] = []
 }
 
 public struct ConversationGroup: Equatable {
@@ -226,8 +255,14 @@ public final class WorkspaceModel {
         switch update {
         case .delta(let kind, let text):
             if kind == "content" { turns[index].content += text }
-        case .tool(_, let name, let state, _):
+        case .tool(let callID, let name, let state, let status):
             activity = state == "tool_finished" ? nil : ToolLabels.running(name)
+            let outcome: ToolStep.State = state != "tool_finished" ? .running : (status == "succeeded" ? .succeeded : .failed)
+            if let step = turns[index].steps.firstIndex(where: { $0.id == callID }) {
+                turns[index].steps[step].state = outcome
+            } else {
+                turns[index].steps.append(ToolStep(id: callID, name: name, state: outcome))
+            }
         case .confirm(let request):
             pendingConfirmation = request
         case .finished(let status, let text, let error, _):

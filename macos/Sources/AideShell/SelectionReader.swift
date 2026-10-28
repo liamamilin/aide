@@ -62,7 +62,7 @@ public struct SelectionReader: SelectionReading {
         let before = board.changeCount
         Self.postCopy()
         var after = before
-        for _ in 0..<20 {   // up to ~400 ms for the app to answer
+        for _ in 0..<12 {   // up to ~240 ms for the app to answer (most answer in <100 ms)
             try? await Task.sleep(nanoseconds: 20_000_000)
             after = board.changeCount
             if after != before { break }
