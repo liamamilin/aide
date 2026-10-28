@@ -11,6 +11,7 @@ from ai_desktop.services.audit_store import RETENTION_SECONDS
 from ai_desktop.services.command_confirmation import CommandConfirmation
 from ai_desktop.services.web_search import normalized_sources as search_sources
 from ai_desktop.services.web_search import safe_source_url
+from ai_desktop.ui import native_tool_view
 from ai_desktop.ui.fluent import (
     BodyLabel,
     CaptionLabel,
@@ -31,6 +32,17 @@ _ERRORS = {
     'invalid_command': '命令无效，未执行', 'start_failed': '启动失败', 'io_failed': '读取输出失败',
 }
 
+_TITLES = {'bash': '命令执行', 'web_search': '联网搜索', 'find_apps': '查找应用',
+           'find_files': '查找文件', 'open_path': '打开项目', 'list_windows': '查看窗口',
+           'arrange_window': '调整窗口', 'create_note': '新建笔记', 'create_reminder': '新建提醒',
+           'list_notes': '查看备忘录', 'list_reminders': '查看提醒事项', 'complete_reminder': '完成提醒',
+           'delete_reminder': '删除提醒', 'append_note': '追加笔记', 'delete_note': '删除笔记'}
+_START_STATUS = {'bash': '检查命令', 'web_search': '正在搜索', 'find_apps': '正在查找',
+                 'find_files': '正在查找', 'open_path': '正在打开', 'list_windows': '正在查看',
+                 'arrange_window': '正在调整', 'create_note': '正在创建', 'create_reminder': '正在创建',
+                 'list_notes': '正在查看', 'list_reminders': '正在读取',
+                 'complete_reminder': '正在完成',
+                 'delete_reminder': '正在核对', 'append_note': '正在核对', 'delete_note': '正在核对'}
 _SEARCH_ERRORS = {
     'cancelled': '已停止', 'timeout': '搜索超时', 'active_limit': '任务超时',
     'authentication': '密钥或权限无效', 'quota': '账户额度不足', 'rate_limit': '请求过多',
@@ -82,9 +94,9 @@ class ToolCard(SimpleCardWidget):
         self.command = args.get('command', '')
         layout = QVBoxLayout(self)
         header = QHBoxLayout()
-        header.addWidget(StrongBodyLabel('命令执行' if event.tool_name == 'bash' else '联网搜索', self))
+        header.addWidget(StrongBodyLabel(_TITLES.get(event.tool_name, '联网搜索'), self))
         header.addStretch()
-        self.status = plain_label(CaptionLabel, '检查命令' if event.tool_name == 'bash' else '正在搜索', self)
+        self.status = plain_label(CaptionLabel, _START_STATUS.get(event.tool_name, '正在搜索'), self)
         self.status.setWordWrap(False)
         self.status.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.status.setAlignment(Qt.AlignRight)
@@ -95,10 +107,14 @@ class ToolCard(SimpleCardWidget):
         layout.addWidget(self.directory)
         self.command_view = PlainTextEdit(self)
         self.command_view.setReadOnly(True)
-        self.command_view.setPlainText(self.command or str(args.get('query', '')))
-        self.command_view.setAccessibleName('完整命令或搜索参数')
+        self.native = event.tool_name in native_tool_view.NATIVE_TOOLS
+        self.command_view.setPlainText(
+            native_tool_view.describe_call(event.tool_name, args) if self.native else
+            self.command or str(args.get('query', '') or args.get('path', '') or args.get('title', '')
+                                or args.get('app', '')))
+        self.command_view.setAccessibleName('本机操作说明' if self.native else '完整命令或搜索参数')
         self.command_view.setMinimumWidth(0)
-        self.command_view.setFixedHeight(88)
+        self.command_view.setFixedHeight(52 if self.native else 88)
         layout.addWidget(self.command_view)
         self.reason = plain_label(BodyLabel, '', self)
         self.reason.hide()
@@ -106,6 +122,12 @@ class ToolCard(SimpleCardWidget):
         self.countdown = plain_label(CaptionLabel, '', self)
         self.countdown.hide()
         layout.addWidget(self.countdown)
+        self.permission_button = TransparentPushButton('打开系统设置授权', self)
+        self.permission_button.setAccessibleName('打开系统设置中的对应权限页面')
+        self.permission_button.hide()
+        self._permission_pane = None
+        self.permission_button.clicked.connect(self._open_permission_pane)
+        layout.addWidget(self.permission_button, alignment=Qt.AlignLeft)
         self.details_button = TransparentPushButton('查看输出', self)
         self.details_button.setAccessibleName('展开或收起工具输出')
         self.details_button.hide()
@@ -153,12 +175,17 @@ class ToolCard(SimpleCardWidget):
         if (not isinstance(request, CommandConfirmation) or self.terminal or self.confirmation is not None
                 or self.identity != (request.run_id, request.conversation_id, request.step_id,
                                      request.request_id, request.tool_call_id)
-                or self.command != request.command or self.workspace != request.workspace):
+                or self.workspace != request.workspace
+                or (self.tool_name == 'bash' and self.command != request.command)):
             return False
         self.confirmation = request
         self.pending = True
         self.status.setText('等待确认')
-        self.reason.setText(f'{request.reason}\n命令超时：{request.timeout} 秒')
+        if self.tool_name == 'bash':
+            self.reason.setText(f'{request.reason}\n命令超时：{request.timeout} 秒')
+        else:
+            self.command_view.setPlainText(request.command)  # exactly what will happen, not model arguments
+            self.reason.setText(request.reason)
         self.reason.show()
         self.countdown.show()
         self.approve.show()
@@ -279,7 +306,19 @@ class ToolCard(SimpleCardWidget):
         else:
             self.summary.setText('工具结果摘录')
             self.output_view.setPlainText(event.output.text)
+            if self.native:
+                self.status.setText(native_tool_view.describe_result(
+                    self.tool_name, event.output.text, event.output.error))
+                if event.output.error:
+                    self.reason.setText(event.output.text)
+                    self.reason.show()
+                    self._permission_pane = native_tool_view.permission_pane(event.output.text)
+                    self.permission_button.setVisible(self._permission_pane is not None)
         self.details_button.show()
+
+    def _open_permission_pane(self):
+        if self._permission_pane:
+            QDesktopServices.openUrl(QUrl(self._permission_pane))
 
     def _open_source(self, url):
         if not self.purge_expired_payload():

@@ -43,6 +43,17 @@ class CommandConfirmation:
                    request.conversation_id, context.call.local_call_id, command, snapshot.workspace,
                    snapshot.policy.value, timeout, reason, fingerprint, clock() + 600)
 
+    @classmethod
+    def for_action(cls, context, tool_name, preview, reason, *, clock=time.monotonic):
+        """Confirmation for a native tool: the preview is exactly what will happen, bound to this call."""
+        request = context.request
+        identity = [request.run_id, request.step_id, request.request_id, request.conversation_id,
+                    context.call.local_call_id, tool_name, preview]
+        fingerprint = hashlib.sha256(json.dumps(identity, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+        return cls(uuid.uuid4().hex, request.run_id, request.step_id, request.request_id,
+                   request.conversation_id, context.call.local_call_id, preview, '', 'native', 0, reason,
+                   fingerprint, clock() + 600)
+
 
 class ConfirmationBroker:
     def __init__(self, on_request=None, *, clock=time.monotonic):

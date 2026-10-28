@@ -24,12 +24,14 @@ from PyQt5.QtWidgets import (
 from ai_desktop import config
 from ai_desktop.capture.text_normalizer import normalize
 from ai_desktop.config import Agent
+from ai_desktop.desktop import opener
 from ai_desktop.llm.run_types import RunEventKind
 from ai_desktop.llm.service_checks import ImageCapability, ServiceState
 from ai_desktop.services.action_service import Action
 from ai_desktop.services.audit_store import RETENTION_SECONDS
 from ai_desktop.ui import markdown, theme
 from ai_desktop.ui.action_panel import ActionPanel
+from ai_desktop.ui.candidate_panel import CandidateLookup, CandidatePanel
 from ai_desktop.ui.float_button import pin_to_all_spaces
 from ai_desktop.ui.fluent import BodyLabel as QLabel
 from ai_desktop.ui.fluent import (
@@ -69,6 +71,9 @@ from ai_desktop.utils.window_state import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+EXAMPLE_PROMPTS = ("打开备忘录", "找一下我上周写的文档", "提醒事项目前有哪些", "记一下：")
 
 
 class _UserMessageBubble(QWidget):
@@ -563,6 +568,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self._run_history_action = more_menu.addAction("运行记录…")
         more_menu.addSeparator()
         self._manage_agents_action = more_menu.addAction("管理 Agent…")
+        self._tools_action = more_menu.addAction("命令与搜索设置…")
         more_menu.addSeparator()
         window_menu = more_menu.addMenu("窗口大小")
         self._expand_window_action = window_menu.addAction("放大到当前屏幕")
@@ -574,6 +580,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self._export_action.triggered.connect(self.export_requested.emit)
         self._run_history_action.triggered.connect(self.run_history_requested.emit)
         self._manage_agents_action.triggered.connect(self.manage_agents_requested.emit)
+        self._tools_action.triggered.connect(self.task_settings_requested.emit)
         self._expand_window_action.triggered.connect(self.toggle_expanded_window)
         self._grow_window_action.triggered.connect(lambda: self.scale_window(1.15))
         self._shrink_window_action.triggered.connect(lambda: self.scale_window(1 / 1.15))
@@ -641,7 +648,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         task_layout = QVBoxLayout(self._task_row)
         task_layout.setContentsMargins(16, 0, 16, 0)
         task_layout.setSpacing(4)
-        self._task_btn = TransparentPushButton('工具：关闭')
+        self._task_btn = TransparentPushButton('命令与搜索：关闭')
         self._task_btn.setEnabled(config.CHAT_TOOLS_ENABLED)
         self._task_btn.setAccessibleName('工具设置')
         self._task_btn.clicked.connect(self.task_settings_requested.emit)
@@ -650,7 +657,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self._task_status.setWordWrap(True)
         task_layout.addWidget(self._task_status)
         self._task_status.hide()
-        self._task_row.setVisible(True)
+        self._task_row.setVisible(False)
         root.addWidget(self._task_row)
 
         # ── 输入区域 ──
@@ -715,6 +722,12 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         self._size_grip = grip
         input_row.addWidget(grip, alignment=Qt.AlignBottom | Qt.AlignRight)
 
+        self._candidate_panel = CandidatePanel()
+        self._candidate_panel.activated.connect(self._open_candidate)
+        self._candidate_lookup = CandidateLookup(parent=self)
+        self._candidate_lookup.resolved.connect(self._on_candidates_resolved)
+        self._open_path = opener.open_path
+        root.addWidget(self._candidate_panel)
         root.addLayout(input_row)
 
         # Keep keyboard navigation predictable when controls are hidden or
@@ -759,7 +772,29 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         shortcuts.setAlignment(Qt.AlignCenter)
         shortcuts.setWordWrap(True)
         layout.addWidget(shortcuts)
+
+        if config.DESKTOP_TOOLS_ENABLED and config.CHAT_TOOLS_ENABLED:
+            layout.addSpacing(14)
+            hint = CaptionLabel("试试对它说（点一下填入输入框，不会自动发送）")
+            hint.setAlignment(Qt.AlignCenter)
+            hint.setWordWrap(True)
+            layout.addWidget(hint)
+            self._example_buttons = []
+            for example in EXAMPLE_PROMPTS:
+                button = TransparentPushButton(example)
+                button.setAccessibleName(f"示例：{example}")
+                button.setAutoDefault(False)
+                button.clicked.connect(lambda checked=False, text=example: self._use_example(text))
+                layout.addWidget(button, alignment=Qt.AlignCenter)
+                self._example_buttons.append(button)
         return panel
+
+    def _use_example(self, text: str) -> None:
+        self.set_input_text(text)
+        self._input.setFocus()
+        cursor = self._input.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        self._input.setTextCursor(cursor)
 
     def _update_responsive_layout(self) -> None:
         """Keep wide windows readable while preserving the compact 400px layout."""
@@ -1035,6 +1070,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         if not text and not images:
             return
         self._action_panel.hide()
+        self._hide_candidates()
         # Clear before the synchronous signal. A rejected submission restored
         # by the controller must remain after this method returns.
         self._input.clear()
@@ -1766,6 +1802,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
 
     def set_thinking(self, thinking: bool) -> None:
         self._task_btn.setEnabled(not thinking and config.CHAT_TOOLS_ENABLED)
+        self._tools_action.setEnabled(not thinking and config.CHAT_TOOLS_ENABLED)
         self._send_btn.setEnabled(True)
         try:
             self._send_btn.clicked.disconnect()
@@ -1786,27 +1823,30 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
     def set_task_authorization(self, authorization, *, model=None, checking=False):
         if authorization is not None and authorization.agent_id != self._active_agent.id:
             authorization = None
-        self._task_row.setVisible(True)
-        self._task_btn.setText('工具：已启用' if authorization else '工具：关闭')
-        self._task_btn.setToolTip('工具设置自动沿用到新建、切换对话及其他 Agent，重启后保留。'
-                                 '关闭工具后后续对话保持关闭。命令确认逐条生效；'
+        self._task_btn.setText('命令与搜索：已启用' if authorization else '命令与搜索：关闭')
+        self._task_btn.setToolTip('点击打开设置（也可在右上角“…”菜单中打开）。这里只管命令执行（Bash）和联网搜索；'
+                                 '应用、文件、备忘录、提醒事项、窗口等本机操作自动可用。设置自动沿用到新建、'
+                                 '切换对话及其他 Agent，重启后保留。命令确认逐条生效；'
                                  '工具模型跟随顶栏，每次发送前检查工具能力。')
         if not config.CHAT_TOOLS_ENABLED:
-            self._task_btn.setText('工具：设置中已禁用')
+            self._task_btn.setText('命令与搜索：设置中已禁用')
         self._task_btn.setEnabled(config.CHAT_TOOLS_ENABLED and self._input.isEnabled())
         if authorization:
             parts = ['工具模型：' + (model or self._active_model)]
             if authorization.execution:
                 from ai_desktop.services.execution_context import BashPolicy
-                mode = '全部确认' if authorization.execution.policy == BashPolicy.CONFIRM_ALL else '只读允许列表自动'
-                parts += [Path(authorization.execution.workspace).name or '/', mode]
+                mode = ('每条命令都需确认' if authorization.execution.policy == BashPolicy.CONFIRM_ALL
+                        else '只读命令自动执行，其余需确认')
+                parts += ['工作区 ' + (Path(authorization.execution.workspace).name or '/'), mode]
             if authorization.search:
                 parts.append({'parallel': 'Parallel', 'exa': 'Exa'}[authorization.search.provider])
             if checking:
                 parts.append('检查模型中…')
             self._task_status.setText(' · '.join(parts))
             self._task_status.setToolTip(authorization.execution.workspace if authorization.execution else '仅联网搜索')
+        # Off means nothing to show: the settings live in the "…" menu, and native tools need no setup.
         self._task_status.setVisible(authorization is not None)
+        self._task_row.setVisible(authorization is not None)
 
     def clear_messages(self) -> None:
         self._run_sources = {}
@@ -1858,6 +1898,7 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
             if identity in self._task_model_cards:
                 return
             card = TaskStepCard(event, self._msg_container, label_factory=_SelectableMessageLabel)
+            card.set_chrome(any(key[0] == event.run_id for key in self._tool_cards))
             self._task_model_cards[identity] = card
             self._stream_container = card
             self._stream_bubble = card.body
@@ -1906,6 +1947,9 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
             if key in self._tool_cards:
                 return
             card = ToolCard(event, workspace, self._msg_container)
+            for model_card in self._task_model_cards.values():
+                if model_card.identity[0] == event.run_id:
+                    model_card.set_chrome(True)
             card.confirmation_decided.connect(self.command_decided.emit)
             card.stop_requested.connect(self.tool_stop_requested.emit)
             self._tool_cards[key] = card
@@ -2155,6 +2199,18 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
             self._queue_user_scroll_update()
         # ── 输入框快捷键 ──
         if obj is getattr(self, "_input", None) and event.type() == QEvent.KeyPress:
+            if self._candidate_panel.isVisible():
+                if event.key() == Qt.Key_Escape:
+                    self._hide_candidates()
+                    return True
+                plain = (event.modifiers() & ~Qt.KeypadModifier) == Qt.NoModifier
+                if plain and event.key() in (Qt.Key_Up, Qt.Key_Down):
+                    self._candidate_panel.move_selection(1 if event.key() == Qt.Key_Down else -1)
+                    return True
+                # Enter opens only an explicitly picked candidate; otherwise it sends as before.
+                if event.key() == Qt.Key_Return and event.modifiers() == Qt.NoModifier \
+                        and self._candidate_panel.activate_current():
+                    return True
             if event.key() == Qt.Key_Escape:
                 if self._input.toPlainText().strip():
                     self._input.clear()
@@ -2226,9 +2282,34 @@ class ChatDialog(FramelessDragMixin, FluentWindow):
         cursor.movePosition(QTextCursor.End)
         self._input.setTextCursor(cursor)
 
+    def _request_candidates(self) -> None:
+        if not config.LOCAL_CANDIDATES_ENABLED or self._hist_index >= 0 or not self._input.isEnabled():
+            self._hide_candidates()
+            return
+        self._candidate_lookup.request(self._input.toPlainText())
+
+    def _hide_candidates(self) -> None:
+        self._candidate_lookup.request("")
+        self._candidate_panel.set_candidates([])
+
+    def _on_candidates_resolved(self, _seq: int, text: str, candidates) -> None:
+        # The answer is for the text that was typed; drop it if the input has moved on.
+        if text == self._input.toPlainText().strip():
+            self._candidate_panel.set_candidates(candidates)
+
+    def _open_candidate(self, path: str) -> None:
+        try:
+            self._open_path(path)
+        except (OSError, ValueError):
+            logger.warning("opening a local candidate failed", exc_info=True)
+            self._candidate_panel.show_error("无法打开所选项目")
+            return
+        self._input.clear()
+
     def _on_input_text_changed(self) -> None:
         """编辑不退出浏览模式；仅自适应高度。"""
         self._adjust_input_height()
+        self._request_candidates()
         if self._action_panel.isVisible():
             self._action_panel.set_material(self._input.toPlainText())
 

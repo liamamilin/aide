@@ -79,7 +79,7 @@ class SettingsDialog(FramelessDragMixin, QDialog):
         ("base_url", "Ollama 服务地址", str, "http://localhost:11434"),
         ("think", "模型思考推理", ThinkSetting, ThinkSetting(ThinkMode.ON)),
         ("timeout", "响应超时（秒）", int, 120),
-        ("num_ctx", "上下文窗口（token）", int, 8192),
+        ("num_ctx", "上下文窗口（token）", int, 16384),
         ("max_rounds", "保留对话轮次", int, 10),
         ("num_predict", "最大输出（含思考 token）", int, 20480),
         ("temperature", "Temperature", float, 0.7),

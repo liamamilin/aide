@@ -2,6 +2,7 @@
 import json
 import time
 from dataclasses import replace
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -295,3 +296,34 @@ def test_empty_answer_hidden_until_content_or_error(controller):
     assert container.isHidden()
     dialog.finalize_assistant_stream('', False, error='test failure')
     assert not container.isHidden()
+
+
+def test_desktop_tool_cards_are_not_labelled_as_web_search(qtbot):
+    from ai_desktop.ui.tool_card import StrongBodyLabel
+    for name, args, title, text in (
+            ('find_apps', {'query': '备忘录'}, '查找应用', '查找应用：备忘录'),
+            ('find_files', {'query': '方案'}, '查找文件', '查找文件：方案'),
+            ('open_path', {'path': '/Applications/Safari.app'}, '打开项目', '打开：Safari.app')):
+        event = RunEvent('run', 1, 'step', 'request', 3, RunEventKind.TOOL_STARTED, 'call',
+                         tool_name=name, arguments_json=json.dumps(args))
+        card = ToolCard(event, '/tmp/workspace')
+        qtbot.addWidget(card)
+        assert [label.text() for label in card.findChildren(StrongBodyLabel)][0] == title
+        assert card.command_view.toPlainText() == text
+        assert card.workspace == ''
+
+
+def test_native_tool_confirmation_shows_exactly_what_will_happen(qtbot):
+    event = RunEvent('run', 1, 'step', 'request', 3, RunEventKind.TOOL_STARTED, 'call', tool_name='delete_note',
+                     arguments_json=json.dumps({'id': 'x-coredata://AAA/ICNote/p1'}))
+    card = ToolCard(event)
+    qtbot.addWidget(card)
+    request = CommandConfirmation.for_action(
+        SimpleNamespace(request=SimpleNamespace(run_id='run', step_id='step', request_id='request',
+                                                conversation_id=1),
+                        call=SimpleNamespace(local_call_id='call')),
+        'delete_note', '删除备忘录：录制课程', '会移到最近删除')
+    assert card.bind_confirmation(request)
+    assert card.command_view.toPlainText() == '删除备忘录：录制课程'
+    assert '30 秒' not in card.reason.text() and '最近删除' in card.reason.text()
+    assert not card.bind_confirmation(request)

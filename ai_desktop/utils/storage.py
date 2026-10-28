@@ -589,6 +589,15 @@ def search_conversations(query: str, limit: int = 50) -> list[dict]:
     return page_conversations(limit=limit, query=query)[0]
 
 
+def update_conversation_agent(convo_id: int, agent_id: str) -> None:
+    """Point an existing conversation at another agent; later turns use its prompt and model profile."""
+    db = _conn()
+    cur = db.execute("UPDATE conversations SET agent_id=? WHERE id=?", (agent_id, convo_id))
+    if cur.rowcount == 0:
+        raise ValueError("对话不存在。")
+    db.commit()
+
+
 def update_conversation_title(convo_id: int, title: str) -> str:
     """Validate and persist a user-edited history title."""
     normalized = str(title).strip()

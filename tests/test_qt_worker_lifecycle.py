@@ -59,7 +59,7 @@ def test_worker_cleanup_does_not_block_widget_updates():
                         search.enqueue({'results': []}, status=401 if mode else 200)
                         model.enqueue({'message': {'content': 'finished'}, 'done': True})
                     worker = RunWorker([], '', agent_id='general_assistant',
-                                       think=False, options={'num_ctx': 8192, 'num_predict': 1024},
+                                       think=False, options={'num_ctx': 16384, 'num_predict': 1024},
                                        tools_admitted=True, search_settings=SearchSettings('exa', 1))
                     results = []
                     worker.done.connect(results.append)

@@ -152,8 +152,12 @@ def test_ci_and_local_build_use_one_definition():
     smoke_script = (ROOT / "scripts" / "smoke_test.sh").read_text(encoding="utf-8")
     upgrade_smoke_script = (ROOT / "scripts" / "upgrade_smoke_test.sh").read_text(encoding="utf-8")
 
-    assert "bash scripts/build.sh --smoke --dmg" in workflow
+    native_script = (ROOT / "scripts" / "build_native.sh").read_text(encoding="utf-8")
+
+    # Releases ship the native app; the Qt bundle script stays buildable locally until the Qt UI is retired.
+    assert "bash scripts/build_native.sh --smoke" in workflow
     assert "pyinstaller --windowed" not in workflow.lower()
+    assert "scripts/aide_core.spec" in native_script
     assert "scripts/aide.spec" in build_script
     assert "Contents/MacOS/AI桌面助手" in smoke_script
     assert "--speech-runtime" in smoke_script
@@ -174,3 +178,26 @@ def test_ui_dependency_import_does_not_pollute_diagnostic_stdout(tmp_path):
     code = "from ai_desktop.ui import fluent; import json; print(json.dumps({'status': 'ready'}))"
     result = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True)
     assert json.loads(result.stdout) == {"status": "ready"}
+
+
+def test_native_bundle_validation(tmp_path):
+    import importlib.util
+    import plistlib
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "release_check", Path(__file__).resolve().parents[1] / "scripts" / "release_check.py")
+    release_check = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(release_check)
+
+    app = tmp_path / "Aide.app"
+    (app / "Contents" / "MacOS").mkdir(parents=True)
+    (app / "Contents" / "Resources" / "aide-core" / "_internal").mkdir(parents=True)
+    (app / "Contents" / "MacOS" / "Aide").write_text("x")
+    (app / "Contents" / "Resources" / "aide-core" / "aide-core").write_text("x")
+    (app / "Contents" / "Info.plist").write_bytes(plistlib.dumps({
+        "CFBundleExecutable": "Aide", "CFBundleShortVersionString": "1.5.0", "CFBundleVersion": "1.5.0"}))
+    assert release_check.validate_native_bundle(app, "1.5.0") == []
+    assert release_check.validate_native_bundle(app, "1.6.0")          # version mismatch
+    (app / "Contents" / "Resources" / "aide-core" / "_internal" / "PyQt5").mkdir()
+    assert any("PyQt5" in e for e in release_check.validate_native_bundle(app, "1.5.0"))

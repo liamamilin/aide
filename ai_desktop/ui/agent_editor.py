@@ -1,11 +1,10 @@
 """
 Agent 管理窗口 —— 新增 / 编辑 / 删除自定义 Agent
 """
-from dataclasses import dataclass
-
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 
+from ai_desktop.agent_def import AgentDef
 from ai_desktop.services.action_service import Action
 from ai_desktop.services.model_profiles import ModelProfile
 from ai_desktop.ui.action_settings_dialog import ActionSettingsDialog
@@ -25,16 +24,6 @@ from ai_desktop.ui.fluent import PushButton as QPushButton
 from ai_desktop.ui.fluent import ScrollArea as QScrollArea
 from ai_desktop.ui.frameless_mixin import FramelessDragMixin
 from ai_desktop.ui.model_profile_dialog import ModelProfileDialog
-
-
-@dataclass
-class AgentDef:
-    id: str
-    name: str
-    icon: str
-    system_prompt: str
-    builtin: bool = False
-    profile_id: str | None = None
 
 
 class AgentEditor(FramelessDragMixin, QDialog):

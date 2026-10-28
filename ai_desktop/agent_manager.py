@@ -10,8 +10,8 @@ Agent 管理器 —— 管理 Agent 列表、切换、保存
 import logging
 from dataclasses import replace
 
+from ai_desktop.agent_def import AgentDef
 from ai_desktop.config import AGENTS, DEFAULT_AGENT_INDEX, Agent
-from ai_desktop.ui.agent_editor import AgentDef
 from ai_desktop.utils.storage import (
     get_setting,
     load_agent_profile_assignments,

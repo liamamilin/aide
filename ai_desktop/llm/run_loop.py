@@ -21,6 +21,7 @@ from ai_desktop.llm.run_types import (
     RunEventKind,
     ToolExecutionContext,
     ToolOutput,
+    counts_as_search,
     validate_tool_arguments,
 )
 
@@ -30,6 +31,9 @@ _CONTEXT_REJECTION = re.compile(
     r"^input length \d+ exceeds (?:the )?(?:maximum )?context (?:length|window)(?: of)? \d+[.!]?$",
     re.IGNORECASE,
 )
+# Ollama answers 500 when the model wrote a tool call it cannot parse (a sampling slip, not a server fault).
+# One fresh request usually succeeds; the failed call never ran, so nothing is replayed.
+_TOOL_CALL_PARSE_FAILURE = re.compile(r"pars(?:e|ing) tool call|tool call pars", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -93,6 +97,7 @@ class RunLoop:
         self._seq = 0
         self._budget = None
         self._recovered = False
+        self._parse_retried = False
         self._stream_sequences = {}
 
     @property
@@ -189,6 +194,15 @@ class RunLoop:
             return True
         return False
 
+    @staticmethod
+    def _retryable_server_slip(result) -> bool:
+        """A parse failure reported in the stream, or a bare HTTP 500 before any content (no tool has run)."""
+        if result.status != ResultStatus.FAILED:
+            return False
+        if result.error_code == ErrorCode.SERVER:
+            return bool(_TOOL_CALL_PARSE_FAILURE.search(result.error or ""))
+        return result.error_code == ErrorCode.HTTP and result.error == "HTTP 500" and not result.text
+
     def run(self, payload: dict | Callable[[], dict]) -> ChatResult:
         if self.result is not None:
             return self.result
@@ -248,6 +262,10 @@ class RunLoop:
                                                 error="输入过长，必要上下文无法继续缩减。")
                         self.current_request = replace(self.current_request, request_id=uuid.uuid4().hex)
                         continue
+                    if schemas and not self._parse_retried and self._retryable_server_slip(result):
+                        self._parse_retried = True
+                        self.current_request = replace(self.current_request, request_id=uuid.uuid4().hex)
+                        continue
                     break
                 if not result.ok:
                     return self._finish(result.status, text=result.text, error=result.error,
@@ -285,7 +303,7 @@ class RunLoop:
             return self._finish(ResultStatus.LIMITED, text=turn.content, turn=turn,
                                 error="达到模型轮次上限，未执行后续工具。")
         # Never execute only a prefix when the returned batch exceeds a budget.
-        searches = sum(call.name == "web_search" for call in turn.tool_calls)
+        searches = sum(counts_as_search(call.name) for call in turn.tool_calls)
         if self.tool_calls + len(turn.tool_calls) > self.context.limits.max_tool_calls:
             return self._finish(ResultStatus.LIMITED, text=turn.content, turn=turn, error="达到工具调用上限。")
         if self.search_calls + searches > self.context.limits.max_search_calls:
@@ -295,7 +313,7 @@ class RunLoop:
             if interrupted is not None:
                 return interrupted
             self.tool_calls += 1
-            self.search_calls += call.name == "web_search"
+            self.search_calls += counts_as_search(call.name)
             self._emit(RunEventKind.TOOL_STARTED, call=call)
             spec = registry.get(call.name)
             try:

@@ -6,6 +6,15 @@ GitHub Release.
 
 ## Unreleased — M3 development
 
+- Added the personal-computer entry point: native tools (app/file discovery and open, window layout, Notes,
+  Reminders) are offered to every role on every message, with the model deciding when to use them. Destructive
+  tools (delete/append note, delete reminder) always ask for exact confirmation and fail closed without it.
+- Reminders are read through EventKit (about 0.2 s instead of about 30 s); AppleScript remains the fallback.
+- File search covers the home folder and matches Chinese names mid-string (`mdfind -name`); results are newest first.
+- The tool button now reads "命令与搜索" (Bash and web search only); native tools need no setup.
+- Tool runs retry once after a malformed model tool call (HTTP 500), and Stop now kills a running osascript/mdfind.
+- Default context window raised to 16384 so the larger tool set leaves room for history.
+
 - Added reusable task model profiles for model, thinking mode, temperature, and
   output limit, with per-field inheritance and Agent assignment.
 - Added deterministic request-option resolution and immutable submission
@@ -22,6 +31,12 @@ GitHub Release.
 
 ## 1.5.0 — Candidate
 
+- New native macOS shell (SwiftUI/AppKit, `macos/`) on a headless, Qt-free Python
+  core: Quick Panel, Workspace, Settings and menu bar; the Qt UI remains until retired.
+  Adds desktop tools with confirmation, custom agents and quick actions, a
+  configurable Quick Panel hotkey, copy/regenerate/edit of answers, and
+  screenshot Q&A (⌘⌃S, vision models). Releases ship an unsigned-by-Apple
+  (not notarized) `Aide-<version>-arm64.dmg`.
 - Added managed attachment validation, reference tracking, inference copies, and
   safe garbage collection while preserving legacy image history.
 - Added asynchronous Ollama image-capability checks with supported,

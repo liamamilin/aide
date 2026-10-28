@@ -64,6 +64,10 @@ class TaskDialog(FluentDialog):
                           '工具模型跟随顶栏；每条需确认的命令仍单独确认。')
         intro.setWordWrap(True)
         layout.addWidget(intro)
+        native = CaptionLabel('本机应用、文件、窗口、备忘录和提醒事项工具无需在此设置：'
+                              '通用助手在你要求打开、查找、记录或摆放窗口时自动使用；这里只管理 Bash 与联网搜索。')
+        native.setWordWrap(True)
+        layout.addWidget(native)
         layout.addWidget(StrongBodyLabel('本地命令'))
         self._bash = CheckBox('允许 Bash 工具')
         self._bash.setChecked(bool(current and current.execution))

@@ -76,7 +76,7 @@ def test_new_conversations_keep_saved_choices_with_fresh_role_binding(controller
         grant = controller._task_authorization
         assert grant is not original and grant.agent_id == controller._active_agent.id
         assert grant.execution == original.execution and grant.search == original.search
-        assert controller._dialog._task_btn.text() == '工具：已启用'
+        assert controller._dialog._task_btn.text() == '命令与搜索：已启用'
         assert controller._messages == [] and controller._pending_task is None
         original = grant
 
@@ -99,7 +99,7 @@ def test_agent_switch_rebinds_saved_choices(controller, tmp_path, via):
     grant = controller._task_authorization
     assert grant is not original and grant.agent_id == controller._active_agent.id
     assert grant.execution == original.execution and grant.search == original.search
-    assert controller._dialog._task_btn.text() == '工具：已启用'
+    assert controller._dialog._task_btn.text() == '命令与搜索：已启用'
 
 
 def test_history_uses_current_choices_not_historical_tool_configuration(controller, tmp_path):
@@ -135,7 +135,7 @@ def test_turning_off_from_panel_disables_future_scopes_and_saved_defaults(contro
     controller._new_conversation()
     select(controller, 'translator')
     assert controller._task_authorization is None and ToolPreferences.load() is None
-    assert controller._dialog._task_btn.text() == '工具：关闭'
+    assert controller._dialog._task_btn.text() == '命令与搜索：关闭'
 
 
 def test_settings_changes_keep_enabled_choices_and_apply_new_values(controller, tmp_path, monkeypatch):
@@ -239,3 +239,32 @@ def test_workspace_settings_change_updates_future_choices(controller, tmp_path):
     grant = controller._task_authorization
     assert grant.execution.workspace == str(second) and grant.execution.policy == BashPolicy.CONFIRM_ALL
     assert ToolPreferences.load().execution == grant.execution
+
+
+def test_before_any_choice_bash_defaults_on_in_the_approved_workspace_and_search_stays_off(tmp_path):
+    from ai_desktop.services.execution_context import save_execution_preferences
+    from ai_desktop.services.tool_preferences import SETTING_KEY, ToolPreferences
+    from ai_desktop.utils.storage import save_setting
+    save_setting(SETTING_KEY, "")
+    save_setting("execution_workspace", "")
+    assert ToolPreferences.initial() is None  # no approved workspace: nothing to turn on
+    save_execution_preferences({"execution_workspace": str(tmp_path)})
+    default = ToolPreferences.initial()
+    assert default.execution.workspace == str(tmp_path.resolve()) and default.search_provider is None
+    assert default.for_agent("general_assistant").search is None
+
+
+def test_an_explicit_off_stays_off_and_a_vanished_workspace_is_not_trusted(tmp_path):
+    import shutil
+
+    from ai_desktop.services.execution_context import save_execution_preferences
+    from ai_desktop.services.tool_preferences import SETTING_KEY, ToolPreferences
+    from ai_desktop.utils.storage import save_setting
+    folder = tmp_path / "work"
+    folder.mkdir()
+    save_execution_preferences({"execution_workspace": str(folder)})
+    ToolPreferences.save(None)  # the user turned tools off
+    assert ToolPreferences.initial() is None
+    save_setting(SETTING_KEY, "")
+    shutil.rmtree(folder)
+    assert ToolPreferences.initial() is None

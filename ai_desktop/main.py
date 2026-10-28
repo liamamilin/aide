@@ -81,6 +81,7 @@ from ai_desktop.utils.storage import (
 )
 
 logger = logging.getLogger(__name__)
+_SEARCH_ACTIVITY_TOOLS = frozenset({"web_search", "find_apps", "find_files", "list_notes", "list_reminders"})
 
 
 def _safe_slot(fn):
@@ -174,7 +175,7 @@ class ChatController(QObject):
         self._messages: list[Message] = []
         self._restore_last: bool = True  # 首次打开自动恢复上次对话
         self._worker: Optional[RunWorker] = None
-        self._tool_preferences = ToolPreferences.load()
+        self._tool_preferences = ToolPreferences.initial()
         self._task_authorization: TaskAuthorization | None = None
         self._inherit_tool_settings()
         self._task_epoch = 0
@@ -187,6 +188,7 @@ class ChatController(QObject):
         self._regenerating_user_id: int = 0
         self._stale_workers: list[RunWorker] = []
         self._response_text = ""
+        self._session_objects = {}  # conversation id -> SessionObjects
         self._dialog: Optional[ChatDialog] = None
         self._chat_geometry = get_setting("chat_window_geometry")
 
@@ -1616,9 +1618,17 @@ class ChatController(QObject):
             return
         self._save_tool_settings(dialog.authorization)
 
-    def _begin_task_check(self, text, images, *, regenerate=False):
+    @staticmethod
+    def _native_tools_for(agent) -> bool:
+        """Every role shares the native desktop tools; the model decides when to use them.
+
+        The role's own prompt still governs behaviour, and destructive tools always ask the user.
+        """
+        return bool(config.DESKTOP_TOOLS_ENABLED and config.CHAT_TOOLS_ENABLED and agent is not None)
+
+    def _begin_task_check(self, text, images, *, regenerate=False, implicit=False):
         from ai_desktop.utils import storage
-        pending = {'text': text, 'images': tuple(images), 'regenerate': regenerate,
+        pending = {'text': text, 'images': tuple(images), 'regenerate': regenerate, 'implicit': implicit,
                    'conversation_id': self._convo_id, 'authorization': self._task_authorization,
                    'agent_id': self._active_agent.id,
                    'base_url': config.OLLAMA_BASE_URL, 'model': self._model,
@@ -1649,6 +1659,21 @@ class ChatController(QObject):
             if self._dialog:
                 self._dialog.set_thinking(False)
                 self._dialog.set_task_authorization(self._task_authorization, model=self._model)
+            if pending['implicit']:
+                # The app, not the user, chose tools for this message: if they cannot run
+                # (model without tool support, service check failed), send it as plain chat.
+                if error:
+                    logger.info("Native tools unavailable, sending as plain chat: %s", error)
+                if pending['regenerate']:
+                    user = next((message for message in self._messages if message.id == pending['regenerate']), None)
+                    if user:
+                        self._start_regeneration(user, task_admission=None if error else admission,
+                                                 implicit_native=not error)
+                    return
+                self._on_user_message(pending['text'], list(pending['images']),
+                                      task_admission=None if error else admission,
+                                      implicit_native=not error)
+                return
             if error:
                 if self._dialog and not pending['regenerate']:
                     self._dialog.restore_draft(pending['text'], list(pending['images']))
@@ -1817,7 +1842,7 @@ class ChatController(QObject):
     def _version_snapshots(self, user_message_id: int) -> list[dict]:
         return [
             {"id": version.id, "answer": version.answer, "active": version.active,
-             "task": bool(version.config_snapshot.get('allowed_tools'))}
+             "task": self._runs_user_tools(version.config_snapshot)}
             for version in list_generations(user_message_id)
             if version.status == "succeeded" and version.answer
         ]
@@ -1856,6 +1881,10 @@ class ChatController(QObject):
         if user_message is None or assistant_message is None:
             return
         source = get_active_generation(user_message.id)
+        if self._regenerates_with_native_tools(user_message, source):
+            self._begin_task_check(user_message.content, user_message.images, regenerate=user_message.id,
+                                   implicit=True)
+            return
         if source and source.config_snapshot.get('allowed_tools'):
             if self._task_authorization is None or self._task_authorization.agent_id != self._active_agent.id:
                 self._show_notice(QMessageBox.Warning, '请先启用工具', '重新执行任务前，请在输入区检查并启用工具授权。')
@@ -1870,7 +1899,25 @@ class ChatController(QObject):
             return
         self._start_regeneration(user_message)
 
-    def _start_regeneration(self, user_message: Message, *, task_admission=None, prepared_config=None) -> None:
+    @staticmethod
+    def _runs_user_tools(snapshot) -> bool:
+        """Whether a run used tools the user enabled (commands, web search), not only native desktop tools."""
+        from ai_desktop.llm.tool_registry import native_tool_names
+        return bool(set(snapshot.get('allowed_tools') or ()) - native_tool_names())
+
+    def _regenerates_with_native_tools(self, user_message, source) -> bool:
+        """A chat answer from the general assistant is regenerated the way it was first sent."""
+        if (self._task_authorization is not None or user_message.images
+                or not self._native_tools_for(self._active_agent)):
+            return False
+        snapshot = source.config_snapshot if source else {}
+        if snapshot.get('origin') == 'action':
+            return False
+        from ai_desktop.llm.tool_registry import native_tool_names
+        return set(snapshot.get('allowed_tools') or ()) <= native_tool_names()
+
+    def _start_regeneration(self, user_message: Message, *, task_admission=None, prepared_config=None,
+                            implicit_native: bool | None = None) -> None:
         """Retry the latest user turn without duplicating the stored question."""
         versions = list_generations(user_message.id)
         source = next((version for version in versions if version.active), versions[-1] if versions else None)
@@ -1895,13 +1942,17 @@ class ChatController(QObject):
                                   '<br>'.join(html.escape(warning) for warning in plan.warnings))
         resolved = prepared_config or self._resolve_model_config(action_profile_id, request_agent)
         task_kwargs = {}
-        if snapshot.get('allowed_tools'):
+        # implicit_native False means the app's own tool check failed: send as plain chat.
+        if implicit_native is not False and (snapshot.get('allowed_tools') or implicit_native):
             try:
-                if self._task_authorization is None:
+                grant = self._task_authorization
+                if grant is None and implicit_native:
+                    grant = TaskAuthorization(agent_id=self._active_agent.id, native=True)
+                if grant is None:
                     raise ValueError('请先在输入区启用工具授权。')
                 if snapshot.get('agent_id', self._active_agent.id) != self._active_agent.id:
                     raise ValueError('请切回原任务角色并重新启用工具后执行。')
-                task_kwargs = self._task_authorization.worker_kwargs(task_admission, config.OLLAMA_BASE_URL,
+                task_kwargs = grant.worker_kwargs(task_admission, config.OLLAMA_BASE_URL,
                                                                    agent_id=self._active_agent.id, origin=origin,
                                                                    model=self._model,
                                                                    settings=TaskModelSettings.from_config(resolved))
@@ -1962,7 +2013,7 @@ class ChatController(QObject):
                 context, system_prompt, parent=self,
                 conversation_id=self._convo_id, agent_id=request_agent.id,
                 origin=origin, action_id=snapshot.get("action_id") if origin == "action" else None,
-                **worker_options,
+                session_context=self._session_context(), **worker_options,
             )
             worker._task_admission = task_admission if task_kwargs else None
         except Exception:
@@ -2239,6 +2290,7 @@ class ChatController(QObject):
         request_agent: Agent | None = None,
         task_admission=None,
         prepared_config=None,
+        implicit_native: bool | None = None,
     ) -> None:
         images = images or []
         if self._stopping or self._stopped:
@@ -2256,13 +2308,17 @@ class ChatController(QObject):
             self._show_notice(QMessageBox.Warning, '上一任务正在停止', '请等待执行进程退出后再发送。')
             return
         task = self._task_authorization if not retry_action_id else None
+        if task is None and implicit_native is None and not retry_action_id and not images:
+            implicit_native = self._native_tools_for(request_agent)
+        if task is None and implicit_native:
+            task = TaskAuthorization(agent_id=request_agent.id, native=True)
         if task is not None and task.agent_id != request_agent.id:
             if self._dialog:
                 self._dialog.restore_draft(text, images)
             self._show_notice(QMessageBox.Warning, '工具授权已失效', '请为当前角色重新启用工具后发送。')
             return
         if task is not None and task_admission is None:
-            self._begin_task_check(text, images)
+            self._begin_task_check(text, images, implicit=bool(implicit_native and task.native))
             return
         task_kwargs = {}
         resolved = prepared_config or self._resolve_model_config(action_profile_id, request_agent)
@@ -2369,7 +2425,7 @@ class ChatController(QObject):
                 recent, system_prompt or request_agent.system_prompt, parent=self,
                 conversation_id=self._convo_id, agent_id=request_agent.id,
                 origin="action" if retry_action_id else "chat", action_id=retry_action_id,
-                **worker_options,
+                session_context=self._session_context(), **worker_options,
             )
             worker._task_admission = task_admission if task_kwargs else None
             worker.thinking_event.connect(self._on_thinking_event)
@@ -2441,6 +2497,13 @@ class ChatController(QObject):
         if self._dialog:
             self._dialog.append_thinking_chunk(event.text)
 
+    def _session_objects_for(self, conversation_id):
+        from ai_desktop.services.session_objects import SessionObjects
+        return self._session_objects.setdefault(conversation_id, SessionObjects())
+
+    def _session_context(self) -> str:
+        return self._session_objects_for(self._convo_id).render()
+
     def _connect_tool_feedback(self, worker):
         if self._dialog:
             self._dialog.purge_expired_audit()
@@ -2473,10 +2536,14 @@ class ChatController(QObject):
             self.float_btn.set_task_activity("working")
         elif event.kind in {RunEventKind.TOOL_STARTED, RunEventKind.TOOL_UPDATED}:
             activity = ("waiting" if event.status == "waiting_confirmation" else
-                        "searching" if event.tool_name == "web_search" else "executing")
+                        "searching" if event.tool_name in _SEARCH_ACTIVITY_TOOLS
+                        else "executing")
             self.float_btn.set_task_activity(activity)
         elif event.kind == RunEventKind.TOOL_FINISHED:
             self.float_btn.set_task_activity("working")
+            if event.output is not None:
+                self._session_objects_for(worker.request.conversation_id).observe(
+                    event.tool_name, event.arguments_json, event.output.text, event.output.error)
         if self._dialog and event.kind in {RunEventKind.TOOL_STARTED, RunEventKind.TOOL_UPDATED,
                                           RunEventKind.TOOL_FINISHED}:
             workspace = worker.context.execution.workspace if worker.context.execution else ''
