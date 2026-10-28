@@ -16,6 +16,7 @@ private final class StubWorkspace: WorkspaceProviding, @unchecked Sendable {
     private(set) var cancelled = 0
     private(set) var responses: [(String, Bool)] = []
     var sendNote = ""
+    var modelNames = ["m1", "m2"]
     private(set) var deleted: [Int] = []
 
     func conversations(query: String) async throws -> [ConversationSummary] {
@@ -34,7 +35,7 @@ private final class StubWorkspace: WorkspaceProviding, @unchecked Sendable {
         if failSetAgent { throw CoreError.remote(code: "invalid", message: "x") }
         agentChanges.append((conversationID, agentID))
     }
-    func models() async throws -> ModelList { ModelList(models: ["m1", "m2"], current: "m1") }
+    func models() async throws -> ModelList { ModelList(models: modelNames, current: "m1") }
     func selectModel(_ model: String) async throws {}
     func send(conversationID: Int, text: String) async throws -> RunHandle {
         sent.append((conversationID, text))
@@ -299,5 +300,44 @@ final class WorkspaceToolTests: XCTestCase {
         model.send()
         await settle()
         XCTAssertEqual(model.activity, "本次未启用工具：所选模型未声明工具调用能力")
+    }
+}
+
+@MainActor
+final class WorkspaceRecoveryTests: XCTestCase {
+    private func settle() async { for _ in 0..<6 { await Task.yield(); try? await Task.sleep(nanoseconds: 5_000_000) } }
+
+    func testConnectionFailureOffersSettingsAndCoreExitExplainsRestart() async {
+        let stub = StubWorkspace()
+        let model = WorkspaceModel(provider: stub)
+        await model.start()
+        model.newChat()
+        model.draft = "hi"
+        model.send()
+        await settle()
+        stub.continuation?.yield(.finished(status: "failed", text: "", error: "无法连接到 Ollama", errorCode: "connection"))
+        await settle()
+        XCTAssertEqual(model.errorMessage, "无法连接到 Ollama")
+        XCTAssertTrue(model.errorOffersSettings)
+
+        model.draft = "again"
+        model.send()
+        await settle()
+        XCTAssertFalse(model.errorOffersSettings)
+        stub.continuation?.yield(.finished(status: "failed", text: "", error: "Aide 核心已退出", errorCode: "core"))
+        await settle()
+        XCTAssertEqual(model.errorMessage, "Aide 核心已退出，再发送一次会自动重启。")
+        XCTAssertFalse(model.errorOffersSettings)
+    }
+
+    func testNoModelsMeansServiceUnavailableUntilRefreshFindsOne() async {
+        let stub = StubWorkspace()
+        stub.modelNames = []
+        let model = WorkspaceModel(provider: stub)
+        await model.start()
+        XCTAssertTrue(model.modelServiceUnavailable)
+        stub.modelNames = ["m1"]
+        await model.refreshModels()
+        XCTAssertFalse(model.modelServiceUnavailable)
     }
 }

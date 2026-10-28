@@ -92,6 +92,11 @@ public final class WorkspaceModel {
     /// Subtle one-line status while a tool runs ("正在查找应用…"), or why this message ran without tools.
     public private(set) var activity: String?
     public private(set) var pendingConfirmation: ConfirmRequest?
+    /// True when no model could be listed: Ollama is not running or has nothing installed.
+    public private(set) var modelServiceUnavailable = false
+    /// The current error can be fixed in Settings (wrong address, service down).
+    public private(set) var errorOffersSettings = false
+    public var onOpenSettings: () -> Void = {}
     /// Bumped whenever the composer should take keyboard focus (new chat, opened conversation).
     public private(set) var focusRequest = 0
     public var draft = ""
@@ -117,12 +122,21 @@ public final class WorkspaceModel {
             let list = try await provider.models()
             models = list.models
             currentModel = list.current
+            modelServiceUnavailable = list.models.isEmpty
         } catch {
             errorMessage = "无法连接 Aide 核心"
         }
         await list
         // Resume the most recent conversation, unless the user (or a Quick Panel hand-off) already chose one.
         if generation == before, selectedID == nil, let latest = conversations.first { await select(latest.id) }
+    }
+
+    /// Re-check the model service, e.g. after the person started Ollama or fixed the address in Settings.
+    public func refreshModels() async {
+        guard let list = try? await provider.models() else { return }
+        models = list.models
+        currentModel = list.current
+        modelServiceUnavailable = list.models.isEmpty
     }
 
     public func reloadList() async {
@@ -196,6 +210,7 @@ public final class WorkspaceModel {
         guard !text.isEmpty, !isSending else { return }
         draft = ""
         errorMessage = nil
+        errorOffersSettings = false
         activity = nil
         pendingConfirmation = nil
         isSending = true
@@ -265,21 +280,29 @@ public final class WorkspaceModel {
             }
         case .confirm(let request):
             pendingConfirmation = request
-        case .finished(let status, let text, let error, _):
+        case .finished(let status, let text, let error, let code):
             activity = nil
             pendingConfirmation = nil
             turns[index].streaming = false
             switch status {
             case "succeeded": turns[index].content = text
             case "cancelled", "limited": turns[index].stopped = true
-            default: fail(error.isEmpty ? "请求失败" : error, removing: turnID)
+            default: fail(Self.describe(error, code: code), removing: turnID, offersSettings: Self.fixableInSettings(code))
             }
             isSending = false
         }
     }
 
-    private func fail(_ message: String, removing turnID: String) {
+    private static func fixableInSettings(_ code: String) -> Bool { code == "connection" || code == "timeout" }
+
+    private static func describe(_ error: String, code: String) -> String {
+        if code == "core" { return "Aide 核心已退出，再发送一次会自动重启。" }
+        return error.isEmpty ? "请求失败" : error
+    }
+
+    private func fail(_ message: String, removing turnID: String, offersSettings: Bool = false) {
         errorMessage = message
+        errorOffersSettings = offersSettings
         isSending = false
         if let index = turns.firstIndex(where: { $0.id == turnID }), turns[index].content.isEmpty {
             turns.remove(at: index)

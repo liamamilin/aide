@@ -16,6 +16,7 @@ public actor CoreClient {
 
     private let launch: Launch
     private var process: Process?
+    private var stopping = false
     private var input: FileHandle?
     private var pending: [String: CheckedContinuation<JSONValue, Error>] = [:]
     private var nextID = 0
@@ -65,7 +66,11 @@ public actor CoreClient {
         }
     }
 
+    var processIdentifier: Int32? { process?.processIdentifier }
+
     public func call(_ method: String, params: [String: JSONValue] = [:]) async throws -> JSONValue {
+        // A core that died (crash, killed) comes back on the next request; an explicit stop() does not.
+        if process == nil, !stopping { try start() }
         guard let input, process?.isRunning == true else { throw CoreError.notRunning }
         nextID += 1
         let id = String(nextID)
@@ -85,6 +90,7 @@ public actor CoreClient {
     /// Ask the core to stop, then close its stdin so it exits. Waits up to ~2 s, then terminates it.
     /// (`waitUntilExit` is avoided: it can block indefinitely even after the child has gone.)
     public func stop() async {
+        stopping = true
         _ = try? await call("shutdown")
         try? input?.close()
         let proc = process

@@ -24,6 +24,7 @@ public final class WorkspaceWindowController: NSObject, NSWindowDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        Task { await model.refreshModels(); await model.reloadAgents() }   // pick up Settings changes
         if let conversationID { Task { await model.open(conversationID: conversationID) } }
     }
 

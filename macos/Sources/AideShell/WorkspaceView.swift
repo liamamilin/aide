@@ -62,10 +62,15 @@ public struct WorkspaceView: View {
         VStack(spacing: 0) {
             if model.turns.isEmpty { emptyState } else { transcript }
             if let error = model.errorMessage {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .font(.system(size: 12)).foregroundStyle(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 24).padding(.bottom, 6)
+                HStack(spacing: 10) {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 12)).foregroundStyle(.red)
+                    if model.errorOffersSettings {
+                        Button("打开设置") { model.onOpenSettings() }.controlSize(.small)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 24).padding(.bottom, 6)
             }
             if let request = model.pendingConfirmation { ConfirmationCard(request: request) { model.respond(approved: $0) } }
             else if let activity = model.activity {
@@ -79,9 +84,20 @@ public struct WorkspaceView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 6) {
-            Text("有什么可以帮你？").font(.system(size: 20, weight: .medium))
-            Text(model.currentModel).font(.system(size: 12)).foregroundStyle(.secondary)
+        VStack(spacing: 8) {
+            if model.modelServiceUnavailable {
+                Text("没有连上模型服务").font(.system(size: 20, weight: .medium))
+                Text("请确认 Ollama 已运行并装有模型，或在设置里检查服务地址。")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                HStack {
+                    Button("重新检测") { Task { await model.refreshModels() } }
+                    Button("打开设置") { model.onOpenSettings() }
+                }
+                .padding(.top, 4)
+            } else {
+                Text("有什么可以帮你？").font(.system(size: 20, weight: .medium))
+                Text(model.currentModel).font(.system(size: 12)).foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

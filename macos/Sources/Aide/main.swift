@@ -24,7 +24,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onNoSelection = { [weak self] in self?.workspace?.show() }
         let workspace = WorkspaceWindowController(model: WorkspaceModel(provider: client))
         self.workspace = workspace
-        settings = SettingsWindowController(model: SettingsModel(provider: client))
+        let settings = SettingsWindowController(model: SettingsModel(provider: client))
+        self.settings = settings
+        workspace.model.onOpenSettings = { settings.show() }
         model.onContinue = { selection, action, answer in
             Task { @MainActor in
                 let id = try? await client.createConversation(
