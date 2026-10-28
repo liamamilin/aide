@@ -163,25 +163,35 @@ private struct TurnView: View {
 struct HiddenScroller: NSViewRepresentable {
     /// Re-applies on every layout pass: SwiftUI adds the editor's scroll view after this view and may reset it.
     final class Probe: NSView {
-        override func layout() { super.layout(); HiddenScroller.apply(near: self) }
+        private var observation: NSKeyValueObservation?
+        private weak var observed: NSScrollView?
+
+        override func layout() {
+            super.layout()
+            guard let scroll = HiddenScroller.scrollView(near: self) else { return }
+            scroll.hasVerticalScroller = false
+            guard observed !== scroll else { return }
+            observed = scroll
+            // SwiftUI re-enables the scroller whenever it updates the editor, so keep it off.
+            observation = scroll.observe(\.hasVerticalScroller, options: [.new]) { scroll, change in
+                if change.newValue == true { scroll.hasVerticalScroller = false }
+            }
+        }
     }
 
     func makeNSView(context: Context) -> NSView { Probe() }
 
-    func updateNSView(_ view: NSView, context: Context) { HiddenScroller.apply(near: view) }
+    func updateNSView(_ view: NSView, context: Context) { view.needsLayout = true }
 
-    /// Walks up a few levels and hides the scrollers of the first small scroll view found beneath.
-    static func apply(near view: NSView) {
+    /// Walks up a few levels to the first small scroll view beneath this view's ancestors.
+    static func scrollView(near view: NSView) -> NSScrollView? {
         var node = view.superview
         for _ in 0..<4 {
-            guard let current = node else { return }
-            if let scroll = firstScrollView(in: current), scroll.frame.height <= 300 {
-                scroll.hasVerticalScroller = false
-                scroll.hasHorizontalScroller = false
-                return
-            }
+            guard let current = node else { return nil }
+            if let scroll = firstScrollView(in: current), scroll.frame.height <= 300 { return scroll }
             node = current.superview
         }
+        return nil
     }
 
     private static func firstScrollView(in view: NSView) -> NSScrollView? {
