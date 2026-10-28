@@ -2,10 +2,10 @@
 # build_native.sh — build the native Aide.app (SwiftUI shell + frozen Python core) for a GitHub Release.
 #
 # Usage:
-#   ./scripts/build_native.sh            # build dist/Aide.app (ad-hoc signed) and dist/Aide-<ver>-arm64.dmg
+#   ./scripts/build_native.sh            # build dist/Aide.app (signed) and dist/Aide-<ver>-arm64.dmg
 #   ./scripts/build_native.sh --smoke    # also launch the built app in isolation and check the core starts/exits
 #
-# Not notarized: there is no Developer ID here, so Gatekeeper blocks a downloaded copy until the person
+# AIDE_SIGN_IDENTITY overrides the signing identity ("-" forces ad-hoc). Not notarized: there is no Developer ID here, so Gatekeeper blocks a downloaded copy until the person
 # allows it (see README). The core is frozen without Qt; the bundle carries no brand assets
 # (the default icon is generated; pass AIDE_ICON=... for a local build with your own).
 set -euo pipefail
@@ -25,7 +25,17 @@ done
 cd "$ROOT"
 VERSION="$($PYTHON_BIN -c 'from ai_desktop.version import __version__; print(__version__)')"
 ARCH="$(uname -m)"
-echo "==> Aide ${VERSION} (${ARCH}) — native build"
+# macOS ties Accessibility/Automation grants to the app's code identity. An ad-hoc signature changes with every
+# build, so each rebuild asks again; a stable certificate keeps the grant. Prefer one already in the keychain.
+if [[ -n "${AIDE_SIGN_IDENTITY:-}" ]]; then
+    SIGN_IDENTITY="$AIDE_SIGN_IDENTITY"
+else
+    SIGN_IDENTITY="$({
+        security find-identity -v -p codesigning 2>/dev/null || true
+    } | awk -F '"' '/Developer ID Application:|Apple Development:|AI Desktop Assistant/ { print $2; exit }')"
+    SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+fi
+echo "==> Aide ${VERSION} (${ARCH}) — native build, signing with: $([[ "$SIGN_IDENTITY" == "-" ]] && echo ad-hoc || echo "$SIGN_IDENTITY")"
 
 echo "==> [1/5] freezing the Python core (no Qt)"
 rm -rf "$WORK" && mkdir -p "$WORK"
@@ -71,15 +81,15 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-echo "==> [4/5] validating and ad-hoc signing"
+echo "==> [4/5] validating and signing"
 "$PYTHON_BIN" scripts/release_check.py --version "$VERSION" --native-bundle "$APP"
 # --deep trips over PyInstaller's onedir layout (and Contents/Helpers wants every file signed), so the frozen core
 # lives in Resources: sign each Mach-O inside-out, then the bundle itself.
 while IFS= read -r -d '' file; do
-    if file -b "$file" | grep -q "Mach-O"; then codesign --force --sign - "$file" >/dev/null 2>&1; fi
+    if file -b "$file" | grep -q "Mach-O"; then codesign --force --sign "$SIGN_IDENTITY" "$file" >/dev/null 2>&1; fi
 done < <(find "$APP/Contents/Resources/aide-core" -type f -print0)
-codesign --force --sign - "$APP/Contents/MacOS/Aide"
-codesign --force --sign - "$APP"
+codesign --force --sign "$SIGN_IDENTITY" "$APP/Contents/MacOS/Aide"
+codesign --force --sign "$SIGN_IDENTITY" "$APP"
 codesign --verify --strict "$APP"
 
 echo "==> [5/5] DMG"
