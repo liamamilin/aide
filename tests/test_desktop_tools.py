@@ -283,3 +283,10 @@ def test_append_note_does_nothing_when_denied_or_given_bad_input():
     assert not any("set body" in call[2] for call in runner.calls)
     assert DesktopToolbox(TitleThenAck(), Approver(True).broker).append_note(
         {"id": "bad", "text": "x"}, _action_context()).error
+
+
+def test_note_listing_script_tolerates_notes_without_a_modification_date():
+    # Real Notes libraries contain notes whose modification date is `missing value`; one of them used to
+    # make the whole listing fail with -1700, so "delete the note I just made" could never find its id.
+    from ai_desktop.integrations import apple
+    assert "is missing value" in apple._LIST_NOTES_SCRIPT

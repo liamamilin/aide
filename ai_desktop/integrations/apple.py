@@ -40,7 +40,12 @@ _LIST_NOTES_SCRIPT = """on run argv
     set out to ""
     repeat with i from 1 to (count of noteIds)
         if i > 2000 then exit repeat
-        set age to (nowDate - (item i of noteDates)) as integer
+        set changed to item i of noteDates
+        if changed is missing value then
+            set age to 999999999   -- some notes report no modification date; list them as oldest
+        else
+            set age to (nowDate - changed) as integer
+        end if
         set out to out & (item i of noteIds) & fieldSep & (item i of noteNames) & fieldSep & age & recordSep
     end repeat
     return out
