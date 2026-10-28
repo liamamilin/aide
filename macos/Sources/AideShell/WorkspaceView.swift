@@ -1,4 +1,5 @@
 import AideCore
+import AppKit
 import SwiftUI
 
 public struct WorkspaceView: View {
@@ -156,6 +157,25 @@ private struct TurnView: View {
     }
 }
 
+/// SwiftUI's `.scrollIndicators(.hidden)` leaves the legacy scroller track (a white bar) on an NSTextView
+/// when the system shows scroll bars permanently; overlay style makes it thin and auto-hiding.
+private struct OverlayScroller: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async {
+            var node: NSView? = view
+            while let current = node {
+                if let scroll = current as? NSScrollView { scroll.scrollerStyle = .overlay; return }
+                if let scroll = current.subviews.lazy.compactMap({ $0 as? NSScrollView }).first {
+                    scroll.scrollerStyle = .overlay; return
+                }
+                node = current.superview
+            }
+        }
+    }
+}
+
 private struct Composer: View {
     @Bindable var model: WorkspaceModel
     @FocusState private var focused: Bool
@@ -179,7 +199,7 @@ private struct Composer: View {
             TextEditor(text: $model.draft)
                 .font(.system(size: 14))
                 .scrollContentBackground(.hidden)
-                .scrollIndicators(.hidden)
+                .background(OverlayScroller())
                 .focused($focused)
                 .frame(height: editorHeight)
                 .onKeyPress(.return, phases: .down) { press in
