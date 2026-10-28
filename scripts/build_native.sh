@@ -6,7 +6,8 @@
 #   ./scripts/build_native.sh --smoke    # also launch the built app in isolation and check the core starts/exits
 #
 # Not notarized: there is no Developer ID here, so Gatekeeper blocks a downloaded copy until the person
-# allows it (see README). The core is frozen without Qt; the bundle carries no brand assets.
+# allows it (see README). The core is frozen without Qt; the bundle carries no brand assets
+# (the default icon is generated; pass AIDE_ICON=... for a local build with your own).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -40,6 +41,12 @@ test -x "$BIN"
 echo "==> [3/5] assembling Aide.app"
 rm -rf "$APP" && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Aide"
+# A neutral generated icon by default; a local build may use its own artwork: AIDE_ICON=/path/to/icon.icns
+if [[ -n "${AIDE_ICON:-}" ]]; then
+    cp "$AIDE_ICON" "$APP/Contents/Resources/AppIcon.icns"
+else
+    "$PYTHON_BIN" scripts/make_native_icon.py "$APP/Contents/Resources/AppIcon.icns"
+fi
 cp -R "$HELPER" "$APP/Contents/Resources/aide-core"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -48,6 +55,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <dict>
     <key>CFBundleExecutable</key><string>Aide</string>
     <key>CFBundleIdentifier</key><string>com.milin.aide</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleName</key><string>Aide</string>
     <key>CFBundleDisplayName</key><string>Aide</string>
     <key>CFBundlePackageType</key><string>APPL</string>
