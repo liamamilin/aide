@@ -1,3 +1,4 @@
+import AppKit
 import Carbon.HIToolbox
 import Foundation
 
@@ -7,9 +8,35 @@ public final class Hotkey {
     public struct Combo: Equatable, Sendable {
         public var keyCode: UInt32
         public var modifiers: UInt32
-        public init(keyCode: UInt32, modifiers: UInt32) { self.keyCode = keyCode; self.modifiers = modifiers }
+        /// The key as the person sees it ("L"); only used for display.
+        public var label: String
+        public init(keyCode: UInt32, modifiers: UInt32, label: String = "") {
+            self.keyCode = keyCode; self.modifiers = modifiers; self.label = label
+        }
         /// ⌘⌃L, the same default as the Qt app.
-        public static let quickPanel = Combo(keyCode: UInt32(kVK_ANSI_L), modifiers: UInt32(cmdKey | controlKey))
+        public static let quickPanel = Combo(keyCode: UInt32(kVK_ANSI_L), modifiers: UInt32(cmdKey | controlKey), label: "L")
+
+        /// "⌃⌥⌘L" in the order macOS menus use.
+        public var display: String {
+            var text = ""
+            if modifiers & UInt32(controlKey) != 0 { text += "⌃" }
+            if modifiers & UInt32(optionKey) != 0 { text += "⌥" }
+            if modifiers & UInt32(shiftKey) != 0 { text += "⇧" }
+            if modifiers & UInt32(cmdKey) != 0 { text += "⌘" }
+            return text + label
+        }
+
+        /// A global shortcut needs ⌘, ⌃ or ⌥ (Shift alone would swallow ordinary typing).
+        public static func from(keyCode: UInt16, flags: NSEvent.ModifierFlags, characters: String?) -> Combo? {
+            var modifiers: UInt32 = 0
+            if flags.contains(.command) { modifiers |= UInt32(cmdKey) }
+            if flags.contains(.control) { modifiers |= UInt32(controlKey) }
+            if flags.contains(.option) { modifiers |= UInt32(optionKey) }
+            guard modifiers != 0 else { return nil }
+            if flags.contains(.shift) { modifiers |= UInt32(shiftKey) }
+            let label = (characters ?? "").trimmingCharacters(in: .whitespaces).uppercased()
+            return Combo(keyCode: UInt32(keyCode), modifiers: modifiers, label: label.isEmpty ? "key\(keyCode)" : label)
+        }
     }
 
     private var ref: EventHotKeyRef?

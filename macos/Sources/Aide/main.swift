@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var workspace: WorkspaceWindowController?
     private var settings: SettingsWindowController?
     private var statusItem: NSStatusItem?
+    private var panelItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let client = CoreClient(launch: Self.coreLaunch())
@@ -24,7 +25,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onNoSelection = { [weak self] in self?.workspace?.show() }
         let workspace = WorkspaceWindowController(model: WorkspaceModel(provider: client))
         self.workspace = workspace
-        let settings = SettingsWindowController(model: SettingsModel(provider: client))
+        let hotkeys = HotkeySettings { [weak self] combo in
+            guard let registered = Hotkey(combo, action: { Task { @MainActor in controller.toggle() } }) else { return false }
+            self?.hotkey = registered
+            self?.panelItem?.title = "快捷面板  \(combo.display)"
+            return true
+        }
+        let settings = SettingsWindowController(model: SettingsModel(provider: client), hotkey: hotkeys)
         self.settings = settings
         workspace.model.onOpenSettings = { settings.show() }
         model.onContinue = { selection, action, answer in
@@ -34,13 +41,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 workspace.show(conversationID: id)
             }
         }
-        hotkey = Hotkey(.quickPanel) { Task { @MainActor in controller.toggle() } }
-        if hotkey == nil { NSLog("Aide: ⌘⌃L is already taken by another app") }
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "sparkle", accessibilityDescription: "Aide")
         let menu = NSMenu()
-        menu.addItem(withTitle: "快捷面板  ⌘⌃L", action: #selector(showPanel), keyEquivalent: "").target = self
+        let panelItem = menu.addItem(withTitle: "快捷面板  \(hotkeys.combo.display)", action: #selector(showPanel), keyEquivalent: "")
+        panelItem.target = self
+        self.panelItem = panelItem
+        hotkeys.activate()
         menu.addItem(withTitle: "打开 Aide", action: #selector(showWorkspace), keyEquivalent: "").target = self
         menu.addItem(withTitle: "设置…", action: #selector(showSettings), keyEquivalent: ",").target = self
         menu.addItem(.separator())

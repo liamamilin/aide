@@ -3,12 +3,13 @@ import SwiftUI
 
 public struct SettingsView: View {
     @Bindable var model: SettingsModel
+    let hotkey: HotkeySettings?
 
-    public init(model: SettingsModel) { self.model = model }
+    public init(model: SettingsModel, hotkey: HotkeySettings? = nil) { self.model = model; self.hotkey = hotkey }
 
     public var body: some View {
         TabView {
-            GeneralPane(model: model)
+            GeneralPane(model: model, hotkey: hotkey)
                 .tabItem { Label("通用", systemImage: "gearshape") }
             AgentsPane(model: model)
                 .tabItem { Label("助手", systemImage: "person.crop.square") }
@@ -20,6 +21,7 @@ public struct SettingsView: View {
 
 private struct GeneralPane: View {
     @Bindable var model: SettingsModel
+    let hotkey: HotkeySettings?
     @State private var showAdvanced = false
 
     var body: some View {
@@ -40,7 +42,11 @@ private struct GeneralPane: View {
                     }
                 }
                 Section("快捷键") {
-                    LabeledContent("快捷面板", value: "⌘⌃L")
+                    if let hotkey {
+                        HotkeyRow(hotkey: hotkey)
+                    } else {
+                        LabeledContent("快捷面板", value: "⌘⌃L")
+                    }
                 }
                 Section {
                     Button {
@@ -192,5 +198,27 @@ private struct AgentsPane: View {
 
     private func binding(_ keyPath: WritableKeyPath<AgentDraft, String>) -> Binding<String> {
         Binding(get: { model.editing?[keyPath: keyPath] ?? "" }, set: { model.editing?[keyPath: keyPath] = $0 })
+    }
+}
+
+private struct HotkeyRow: View {
+    let hotkey: HotkeySettings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            LabeledContent("快捷面板") {
+                HStack {
+                    Button(hotkey.isRecording ? "请按下新的快捷键…（Esc 取消）" : hotkey.combo.display) {
+                        hotkey.isRecording ? hotkey.stopRecording() : hotkey.startRecording()
+                    }
+                    if hotkey.combo != .quickPanel && !hotkey.isRecording {
+                        Button("恢复默认") { hotkey.reset() }
+                    }
+                }
+            }
+            if let error = hotkey.error {
+                Text(error).font(.system(size: 11)).foregroundStyle(.orange)
+            }
+        }
     }
 }
