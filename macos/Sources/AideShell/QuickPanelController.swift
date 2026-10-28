@@ -42,6 +42,7 @@ public final class QuickPanelController {
     public func toggle() {
         if panel.isVisible { model.escape(); if panel.isVisible { close(copying: nil) }; return }
         previousApp = NSWorkspace.shared.frontmostApplication
+        NSLog("Aide hotkey: panel requested, front=%@", previousApp?.localizedName ?? "?")
         Task {
             let selection = await reader.read()
             if selection == .needsAccessibility { SelectionReader.requestAccessibility() }

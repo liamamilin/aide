@@ -16,9 +16,20 @@ public struct SelectionReader: SelectionReading {
     public init() {}
 
     public func read() async -> SelectionResult {
-        guard AXIsProcessTrusted() else { return .needsAccessibility }
-        if let text = accessibilitySelection(), !text.isEmpty { return .text(text) }
-        if let text = await copiedSelection(), !text.isEmpty { return .text(text) }
+        let app = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
+        guard AXIsProcessTrusted() else {
+            NSLog("Aide selection: front=%@ accessibility NOT trusted", app)
+            return .needsAccessibility
+        }
+        if let text = accessibilitySelection(), !text.isEmpty {
+            NSLog("Aide selection: front=%@ via accessibility (%d chars)", app, text.count)
+            return .text(text)
+        }
+        if let text = await copiedSelection(), !text.isEmpty {
+            NSLog("Aide selection: front=%@ via simulated copy (%d chars)", app, text.count)
+            return .text(text)
+        }
+        NSLog("Aide selection: front=%@ nothing found (AX empty, copy gave no change)", app)
         return .empty
     }
 
