@@ -136,25 +136,51 @@ class ConversationService:
         return {}
 
     def send(self, params: dict[str, Any]) -> dict[str, Any]:
+        mode = params.get("mode", "send")
+        if mode not in ("send", "regenerate", "edit"):
+            raise _invalid("mode must be send, regenerate or edit")
         text = params.get("text")
-        if not isinstance(text, str) or not text.strip():
+        if mode != "regenerate" and (not isinstance(text, str) or not text.strip()):
             raise _invalid("text required")
         conversation = self._require(params)
+        last_user = next((m for m in reversed(conversation.messages) if m.role == "user"), None)
+        if mode != "send" and last_user is None:
+            raise _invalid("没有可以重新生成的消息。")
         with self._lock:
             if conversation.id in self._busy:
                 raise _invalid("这个对话正在生成回答。")
             self._busy.add(conversation.id)
         try:
-            return self._send(conversation, text, params.get("model"))
+            if mode == "edit":
+                self._drop_last_turn(conversation, last_user)
+                conversation = self._require(params)
+                last_user = None
+            return self._send(conversation, text if mode != "regenerate" else last_user.content,
+                              params.get("model"), regenerate_of=last_user if mode == "regenerate" else None)
         except Exception:
             with self._lock:
                 self._busy.discard(conversation.id)
             raise
 
-    def _send(self, conversation: storage.Conversation, text: str, model_override: Any) -> dict[str, Any]:
+    @staticmethod
+    def _drop_last_turn(conversation: storage.Conversation, last_user: storage.Message) -> None:
+        """Editing the last message replaces that turn: its question and every answer version go."""
+        after = False
+        for message in list(conversation.messages):
+            after = after or message.id == last_user.id
+            if after:
+                storage.delete_message(message.id)
+
+    def _send(self, conversation: storage.Conversation, text: str, model_override: Any,
+              regenerate_of: storage.Message | None = None) -> dict[str, Any]:
         agent = next((a for a in self._runs.agents if a.id == conversation.agent_id), self._runs.agents[0])
-        history = collapse_versions(conversation.messages)
-        user_message = storage.save_message(conversation.id, "user", text)
+        if regenerate_of is not None:
+            earlier = [m for m in conversation.messages if m.id < regenerate_of.id]
+            history = collapse_versions(earlier)
+            user_message = regenerate_of
+        else:
+            history = collapse_versions(conversation.messages)
+            user_message = storage.save_message(conversation.id, "user", text)
         if not conversation.messages and not conversation.title:
             self._auto_title(conversation.id, text)
         resolved = self._runs.resolve_model(

@@ -46,6 +46,9 @@ public struct ConversationDetail: Sendable, Equatable {
     }
 }
 
+/// `regenerate` answers the last question again; `edit` replaces the last question and its answers.
+public enum SendMode: String, Sendable { case send, regenerate, edit }
+
 /// What the Workspace window needs from the core. Tests stub this.
 public protocol WorkspaceProviding: Sendable {
     func conversations(query: String) async throws -> [ConversationSummary]
@@ -57,7 +60,13 @@ public protocol WorkspaceProviding: Sendable {
     func setAgent(conversationID: Int, agentID: String) async throws
     func models() async throws -> ModelList
     func selectModel(_ model: String) async throws
-    func send(conversationID: Int, text: String) async throws -> RunHandle
+    func send(conversationID: Int, text: String, mode: SendMode) async throws -> RunHandle
+}
+
+extension WorkspaceProviding {
+    public func send(conversationID: Int, text: String) async throws -> RunHandle {
+        try await send(conversationID: conversationID, text: text, mode: .send)
+    }
 }
 
 extension CoreClient: WorkspaceProviding {
@@ -125,8 +134,9 @@ extension CoreClient: WorkspaceProviding {
         _ = try await call("models.select", params: ["model": .string(model)])
     }
 
-    public func send(conversationID: Int, text: String) async throws -> RunHandle {
-        let result = try await call("chat.send", params: ["conversation_id": .number(Double(conversationID)), "text": .string(text)])
+    public func send(conversationID: Int, text: String, mode: SendMode) async throws -> RunHandle {
+        let result = try await call("chat.send", params: ["conversation_id": .number(Double(conversationID)),
+                                                           "text": .string(text), "mode": .string(mode.rawValue)])
         guard let runID = result["run_id"]?.stringValue else { throw CoreError.remote(code: "protocol", message: "missing run_id") }
         return handle(for: runID, note: result["tools_note"]?.stringValue ?? "")
     }

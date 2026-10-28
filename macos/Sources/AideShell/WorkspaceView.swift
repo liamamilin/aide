@@ -110,7 +110,7 @@ public struct WorkspaceView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 22) {
-                    ForEach(model.turns) { turn in TurnView(turn: turn).id(turn.id) }
+                    ForEach(model.turns) { turn in TurnView(turn: turn, model: model).id(turn.id) }
                 }
                 .frame(maxWidth: 720)
                 .padding(.horizontal, 24)
@@ -176,16 +176,39 @@ private struct StepRow: View {
 
 private struct TurnView: View {
     let turn: Turn
+    let model: WorkspaceModel
+    @State private var copied = false
+    @State private var editing = false
+    @State private var editText = ""
+
+    private var isLast: Bool { model.turns.last?.id == turn.id }
+    private var isLastQuestion: Bool { model.turns.dropLast().last?.id == turn.id && model.canRedo }
 
     var body: some View {
         switch turn.role {
         case .user:
-            HStack {
-                Spacer(minLength: 60)
-                Text(turn.content)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+            if editing {
+                VStack(alignment: .trailing, spacing: 6) {
+                    TextField("", text: $editText, axis: .vertical)
+                        .textFieldStyle(.roundedBorder).lineLimit(1...8)
+                    HStack {
+                        Button("取消") { editing = false }
+                        Button("重新发送") { editing = false; model.editLast(editText) }
+                            .keyboardShortcut(.defaultAction).disabled(editText.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
+            } else {
+                HStack(alignment: .center, spacing: 6) {
+                    Spacer(minLength: 60)
+                    if isLastQuestion {
+                        Button { editText = turn.content; editing = true } label: { Image(systemName: "pencil") }
+                            .buttonStyle(.plain).foregroundStyle(.secondary).help("编辑并重新发送")
+                    }
+                    Text(turn.content)
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+                }
             }
         case .assistant:
             VStack(alignment: .leading, spacing: 6) {
@@ -196,6 +219,20 @@ private struct TurnView: View {
                     MessageText(turn.content)
                 }
                 if turn.stopped { Text("已停止").font(.system(size: 11)).foregroundStyle(.secondary) }
+                if !turn.streaming && !turn.content.isEmpty {
+                    HStack(spacing: 14) {
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(turn.content, forType: .string)
+                            copied = true
+                            Task { try? await Task.sleep(nanoseconds: 1_500_000_000); copied = false }
+                        } label: { Label(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc") }
+                        if isLast && model.canRedo {
+                            Button { model.regenerate() } label: { Label("重新生成", systemImage: "arrow.clockwise") }
+                        }
+                    }
+                    .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(.secondary)
+                }
             }
             .font(.system(size: 14))
         }

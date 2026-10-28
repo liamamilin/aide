@@ -147,3 +147,39 @@ def test_set_agent_applies_to_the_next_turn_and_validates(env):
     chats.send({"conversation_id": convo_id, "text": "hi"})
     assert _finished(events)["status"] == "succeeded"
     assert fake.requests[0]["payload"]["messages"][0]["content"] == translator["system_prompt"]
+
+
+def _say(chats, fake, events, convo_id, answer, **params):
+    fake.enqueue(_frame(answer), _frame("", done=True, done_reason="stop"))
+    chats.send({"conversation_id": convo_id, **params})
+    _finished(events)
+
+
+def test_regenerate_replaces_the_answer_without_a_new_question(env):
+    chats, fake, events = env
+    convo_id = chats.create({"agent_id": "general_assistant"})["id"]
+    _say(chats, fake, events, convo_id, "v1", text="first")
+    _say(chats, fake, events, convo_id, "v2", text="second")
+    _say(chats, fake, events, convo_id, "v2b", mode="regenerate")
+    got = chats.get({"id": convo_id})["messages"]
+    assert [(m["role"], m["content"]) for m in got] == [
+        ("user", "first"), ("assistant", "v1"), ("user", "second"), ("assistant", "v2b")]
+    sent = fake.requests[-1]["payload"]["messages"]
+    assert [m["content"] for m in sent if m["role"] != "system"] == ["first", "v1", "second"]
+    assert len(storage.list_generations(got[2]["id"])) == 2
+
+
+def test_edit_replaces_the_last_turn(env):
+    chats, fake, events = env
+    convo_id = chats.create({"agent_id": "general_assistant"})["id"]
+    _say(chats, fake, events, convo_id, "v1", text="first")
+    _say(chats, fake, events, convo_id, "v2", text="second")
+    _say(chats, fake, events, convo_id, "v3", mode="edit", text="second, rephrased")
+    got = chats.get({"id": convo_id})["messages"]
+    assert [(m["role"], m["content"]) for m in got] == [
+        ("user", "first"), ("assistant", "v1"), ("user", "second, rephrased"), ("assistant", "v3")]
+    with pytest.raises(ProtocolError):
+        chats.send({"conversation_id": convo_id, "mode": "edit"})
+    empty = chats.create({"agent_id": "general_assistant"})["id"]
+    with pytest.raises(ProtocolError):
+        chats.send({"conversation_id": empty, "mode": "regenerate"})

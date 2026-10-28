@@ -216,6 +216,32 @@ public final class WorkspaceModel {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isSending else { return }
         draft = ""
+        run(text, mode: .send)
+    }
+
+    /// The last answer can be asked for again, and the last question can be reworded, while nothing is running.
+    public var canRedo: Bool {
+        !isSending && selectedID != nil && turns.count >= 2 && turns.last?.role == .assistant
+            && !turns.last!.streaming
+    }
+
+    public func regenerate() {
+        guard canRedo, let question = turns.dropLast().last, question.role == .user else { return }
+        turns.removeLast(2)
+        run(question.content, mode: .regenerate)
+    }
+
+    /// Replaces the last question (and its answers) with `text` and asks again.
+    public func editLast(_ text: String) {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard canRedo, !text.isEmpty else { return }
+        turns.removeLast(2)
+        run(text, mode: .edit)
+    }
+
+    public var lastQuestion: String? { canRedo ? turns.dropLast().last?.content : nil }
+
+    private func run(_ text: String, mode: SendMode) {
         errorMessage = nil
         errorOffersSettings = false
         activity = nil
@@ -229,7 +255,7 @@ public final class WorkspaceModel {
         Task {
             do {
                 let conversationID = try await ensureConversation()
-                let handle = try await provider.send(conversationID: conversationID, text: text)
+                let handle = try await provider.send(conversationID: conversationID, text: text, mode: mode)
                 guard generation == mine else { await handle.cancel(); return }
                 self.handle = handle
                 if !handle.note.isEmpty { activity = handle.note }

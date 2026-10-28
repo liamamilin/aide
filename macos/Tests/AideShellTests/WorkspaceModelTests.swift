@@ -37,8 +37,10 @@ private final class StubWorkspace: WorkspaceProviding, @unchecked Sendable {
     }
     func models() async throws -> ModelList { ModelList(models: modelNames, current: "m1") }
     func selectModel(_ model: String) async throws {}
-    func send(conversationID: Int, text: String) async throws -> RunHandle {
+    private(set) var modes: [SendMode] = []
+    func send(conversationID: Int, text: String, mode: SendMode) async throws -> RunHandle {
         sent.append((conversationID, text))
+        modes.append(mode)
         var c: AsyncStream<RunUpdate>.Continuation!
         let stream = AsyncStream<RunUpdate> { c = $0 }
         continuation = c
@@ -76,6 +78,29 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertFalse(model.isSending)
         XCTAssertEqual(model.turns.last?.content, "Hi there")
         XCTAssertEqual(model.turns.last?.streaming, false)
+    }
+
+    func testRegenerateAndEditReuseTheLastTurn() async {
+        let stub = StubWorkspace()
+        let model = WorkspaceModel(provider: stub)
+        await model.start()
+        await model.select(1)
+        XCTAssertTrue(model.canRedo)
+        XCTAssertEqual(model.lastQuestion, "q")
+        model.regenerate()
+        await settle()
+        XCTAssertEqual(stub.modes, [.regenerate])
+        XCTAssertEqual(stub.sent.last?.1, "q")
+        XCTAssertEqual(model.turns.map(\.content), ["q", ""])      // old answer gone, new one streaming
+        XCTAssertFalse(model.canRedo)                               // not while a reply is running
+        stub.continuation?.yield(.finished(status: "succeeded", text: "a2", error: "", errorCode: ""))
+        stub.continuation?.finish()
+        await settle()
+        model.editLast("  q2  ")
+        await settle()
+        XCTAssertEqual(stub.modes, [.regenerate, .edit])
+        XCTAssertEqual(model.turns.map(\.content), ["q2", ""])
+        XCTAssertNil(model.lastQuestion)
     }
 
     func testFirstSendCreatesConversationWithSelectedAgent() async {
@@ -182,7 +207,7 @@ private struct FocusStub: WorkspaceProviding {
     func setAgent(conversationID: Int, agentID: String) async throws {}
     func models() async throws -> ModelList { ModelList(models: [], current: "") }
     func selectModel(_ model: String) async throws {}
-    func send(conversationID: Int, text: String) async throws -> RunHandle {
+    func send(conversationID: Int, text: String, mode: SendMode) async throws -> RunHandle {
         RunHandle(updates: AsyncStream { $0.finish() }, cancel: {})
     }
 }
