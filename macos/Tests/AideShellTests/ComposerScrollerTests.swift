@@ -18,6 +18,8 @@ private struct EmptyWorkspace: WorkspaceProviding {
 
 @MainActor
 final class ComposerScrollerTests: XCTestCase {
+    private static var windows: [NSWindow] = []
+
     func testComposerEditorHasNoVisibleScroller() async throws {
         let model = WorkspaceModel(provider: EmptyWorkspace())
         let host = NSHostingView(rootView: Composer(model: model).frame(width: 600, height: 120))
@@ -31,6 +33,7 @@ final class ComposerScrollerTests: XCTestCase {
         let found = scrollViews(host)
         XCTAssertFalse(found.isEmpty, "composer should contain the editor's scroll view")
         XCTAssertTrue(found.allSatisfy { !$0.hasVerticalScroller })
-        window.close()
+        // Keep the window alive past the test: tearing down a hosted SwiftUI view mid-run can crash xctest.
+        Self.windows.append(window)
     }
 }
