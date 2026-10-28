@@ -69,6 +69,10 @@ class RunService:
         return {"actions": [{"id": a.id, "name": a.name, "agent_id": a.agent_id}
                             for a in self._actions.visible_actions]}
 
+    @property
+    def action_service(self):
+        return self._actions
+
     def start(self, params: dict[str, Any]) -> dict[str, Any]:
         action_id, material = params.get("action_id"), params.get("material")
         if not isinstance(action_id, str) or not isinstance(material, str):

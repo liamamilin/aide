@@ -14,6 +14,7 @@ from ai_desktop import config
 from ai_desktop.core import protocol
 from ai_desktop.core.runs import RunService
 from ai_desktop.llm.chat_client import list_models
+from ai_desktop.services.action_service import Action
 from ai_desktop.settings_manager import SettingsManager
 
 # key -> (low, high, integer?) for the advanced numeric limits
@@ -123,4 +124,48 @@ class PreferencesService:
         if len(remaining) == len(customs):
             raise _invalid("只能删除自定义助手。")
         manager.save_custom(remaining)
+        return {}
+
+    # ── quick actions ──────────────────────────────────────
+    def list_actions(self, _params: dict[str, Any]) -> dict[str, Any]:
+        service = self._runs.action_service
+        builtin = {a.id for a in service.actions if service.is_builtin(a.id)}
+        return {"actions": [{"id": a.id, "name": a.name, "agent_id": a.agent_id, "instruction": a.instruction,
+                             "enabled": a.enabled, "builtin": a.id in builtin} for a in service.actions]}
+
+    def save_action(self, params: dict[str, Any]) -> dict[str, Any]:
+        service = self._runs.action_service
+        name = str(params.get("name", "")).strip()
+        instruction = str(params.get("instruction", "")).strip()
+        agent_id = params.get("agent_id")
+        if not any(a.id == agent_id for a in self._runs.agents):
+            raise _invalid("助手不存在。")
+        action_id = params.get("id")
+        existing = service.get(action_id) if action_id is not None else None
+        if action_id is not None and existing is None:
+            raise _invalid("动作不存在。")
+        if existing is None:
+            action_id = f"custom_{uuid.uuid4().hex[:8]}"
+        enabled = params.get("enabled", True)
+        try:
+            service.save(Action(
+                action_id, name, agent_id, instruction,
+                profile_id=existing.profile_id if existing else None,
+                pinned_order=existing.pinned_order if existing else None,
+                enabled=enabled if isinstance(enabled, bool) else True))
+        except ValueError as exc:
+            raise _invalid(str(exc)) from exc
+        return {"id": action_id}
+
+    def delete_action(self, params: dict[str, Any]) -> dict[str, Any]:
+        """A custom action is removed; a built-in one goes back to its default wording."""
+        service = self._runs.action_service
+        action_id = params.get("id")
+        try:
+            if service.is_builtin(action_id):
+                service.reset(action_id)
+            else:
+                service.delete_custom(action_id)
+        except LookupError as exc:
+            raise _invalid(str(exc)) from exc
         return {}

@@ -69,3 +69,37 @@ def test_custom_agent_lifecycle(prefs):
         prefs.delete_agent({"id": "general_assistant"})
     prefs.delete_agent({"id": created})
     assert created not in {a.id for a in prefs._runs.agents}
+
+
+def test_custom_action_lifecycle_and_builtin_reset(prefs):
+    runs = prefs._runs
+    first = prefs.list_actions({})["actions"]
+    assert {a["id"] for a in first if a["builtin"]} == {"translate", "explain", "summarize", "rewrite"}
+
+    made = prefs.save_action(
+        {"name": "邮件语气", "agent_id": "polisher", "instruction": "润色成礼貌的邮件语气。"})["id"]
+    assert made.startswith("custom_")
+    assert made in {a["id"] for a in runs.list_actions({})["actions"]}          # shows in the Quick Panel
+
+    prefs.save_action({"id": made, "name": "邮件语气 2", "agent_id": "polisher", "instruction": "x", "enabled": False})
+    assert made not in {a["id"] for a in runs.list_actions({})["actions"]}      # hidden, still managed
+    assert next(a for a in prefs.list_actions({})["actions"] if a["id"] == made)["name"] == "邮件语气 2"
+
+    prefs.save_action({"id": "translate", "name": "翻译", "agent_id": "translator", "instruction": "改过的"})
+    prefs.delete_action({"id": "translate"})                                    # built-in: back to default
+    assert "改过的" not in next(a for a in prefs.list_actions({})["actions"] if a["id"] == "translate")["instruction"]
+    prefs.delete_action({"id": made})
+    assert made not in {a["id"] for a in prefs.list_actions({})["actions"]}
+
+
+@pytest.mark.parametrize("bad", [
+    {"name": "", "agent_id": "polisher", "instruction": "x"},
+    {"name": "n", "agent_id": "nope", "instruction": "x"},
+    {"name": "n", "agent_id": "polisher", "instruction": " "},
+    {"id": "ghost", "name": "n", "agent_id": "polisher", "instruction": "x"},
+])
+def test_save_action_rejects_invalid(prefs, bad):
+    with pytest.raises(ProtocolError):
+        prefs.save_action(bad)
+    with pytest.raises(ProtocolError):
+        prefs.delete_action({"id": "ghost"})

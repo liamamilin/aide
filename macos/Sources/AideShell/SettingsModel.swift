@@ -17,6 +17,19 @@ public struct AgentDraft: Equatable, Identifiable {
     }
 }
 
+public struct ActionDraft: Equatable {
+    public var source: ActionInfo?          // nil = a new custom action
+    public var name = ""
+    public var agentID = ""
+    public var instruction = ""
+    public var enabled = true
+    public var builtin: Bool { source?.builtin ?? false }
+    public init(source: ActionInfo? = nil, agentID: String = "") {
+        self.source = source; self.agentID = agentID
+        if let source { name = source.name; self.agentID = source.agentID; instruction = source.instruction; enabled = source.enabled }
+    }
+}
+
 /// Settings window state: everyday options, "advanced" sampling limits, and custom agents.
 @MainActor @Observable
 public final class SettingsModel {
@@ -26,6 +39,8 @@ public final class SettingsModel {
     public private(set) var isTesting = false
     public private(set) var agents: [AgentInfo] = []
     public var editing: AgentDraft?
+    public private(set) var actions: [ActionInfo] = []
+    public var editingAction: ActionDraft?
     public private(set) var errorMessage: String?
 
     private let provider: PreferencesProviding
@@ -45,6 +60,7 @@ public final class SettingsModel {
             let loaded = try await provider.settings()
             settings = loaded; saved = loaded
             agents = try await provider.agents()
+            actions = try await provider.manageActions()
             errorMessage = nil
         } catch { errorMessage = Self.describe(error) }
     }
@@ -90,6 +106,37 @@ public final class SettingsModel {
             try await provider.deleteAgent(id: id)
             agents = try await provider.agents()
             if editing?.id == id { editing = nil }
+            errorMessage = nil
+        } catch { errorMessage = Self.describe(error) }
+    }
+
+    public var canSaveAction: Bool {
+        guard let draft = editingAction else { return false }
+        return !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !draft.instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !draft.agentID.isEmpty
+    }
+
+    public func newAction() { editingAction = ActionDraft(agentID: agents.first?.id ?? "") }
+
+    public func edit(_ action: ActionInfo) { editingAction = ActionDraft(source: action) }
+
+    public func saveAction() async {
+        guard canSaveAction, let draft = editingAction else { return }
+        do {
+            try await provider.saveAction(draft.source, name: draft.name, agentID: draft.agentID,
+                                          instruction: draft.instruction, enabled: draft.enabled)
+            actions = try await provider.manageActions()
+            editingAction = nil
+            errorMessage = nil
+        } catch { errorMessage = Self.describe(error) }
+    }
+
+    /// Custom actions are removed; built-in ones return to their default wording.
+    public func deleteAction(_ id: String) async {
+        do {
+            try await provider.deleteAction(id: id)
+            actions = try await provider.manageActions()
+            editingAction = nil
             errorMessage = nil
         } catch { errorMessage = Self.describe(error) }
     }

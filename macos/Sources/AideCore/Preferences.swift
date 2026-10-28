@@ -54,6 +54,20 @@ public struct ConnectionStatus: Sendable, Equatable {
     public init(ok: Bool, modelCount: Int) { self.ok = ok; self.modelCount = modelCount }
 }
 
+/// A quick action as managed in Settings (the Quick Panel only needs `QuickAction`).
+public struct ActionInfo: Sendable, Equatable, Identifiable {
+    public let id: String
+    public var name: String
+    public var agentID: String
+    public var instruction: String
+    public var enabled: Bool
+    public let builtin: Bool
+    public init(id: String, name: String, agentID: String, instruction: String, enabled: Bool = true, builtin: Bool = false) {
+        self.id = id; self.name = name; self.agentID = agentID; self.instruction = instruction
+        self.enabled = enabled; self.builtin = builtin
+    }
+}
+
 /// What the Settings window needs from the core. Tests stub this.
 public protocol PreferencesProviding: Sendable {
     func settings() async throws -> AppSettings
@@ -62,6 +76,9 @@ public protocol PreferencesProviding: Sendable {
     func agents() async throws -> [AgentInfo]
     func saveAgent(id: String?, name: String, icon: String, systemPrompt: String) async throws
     func deleteAgent(id: String) async throws
+    func manageActions() async throws -> [ActionInfo]
+    func saveAction(_ action: ActionInfo?, name: String, agentID: String, instruction: String, enabled: Bool) async throws
+    func deleteAction(id: String) async throws
 }
 
 extension CoreClient: PreferencesProviding {
@@ -86,5 +103,26 @@ extension CoreClient: PreferencesProviding {
 
     public func deleteAgent(id: String) async throws {
         _ = try await call("agents.delete", params: ["id": .string(id)])
+    }
+
+    public func manageActions() async throws -> [ActionInfo] {
+        (try await call("actions.manage")["actions"]?.arrayValue ?? []).compactMap { row in
+            guard let id = row["id"]?.stringValue, let name = row["name"]?.stringValue else { return nil }
+            return ActionInfo(id: id, name: name, agentID: row["agent_id"]?.stringValue ?? "",
+                              instruction: row["instruction"]?.stringValue ?? "",
+                              enabled: row["enabled"]?.boolValue ?? true, builtin: row["builtin"]?.boolValue ?? false)
+        }
+    }
+
+    /// `action == nil` creates a custom action.
+    public func saveAction(_ action: ActionInfo?, name: String, agentID: String, instruction: String, enabled: Bool) async throws {
+        var params: [String: JSONValue] = ["name": .string(name), "agent_id": .string(agentID),
+                                           "instruction": .string(instruction), "enabled": .bool(enabled)]
+        if let action { params["id"] = .string(action.id) }
+        _ = try await call("actions.save", params: params)
+    }
+
+    public func deleteAction(id: String) async throws {
+        _ = try await call("actions.delete", params: ["id": .string(id)])
     }
 }

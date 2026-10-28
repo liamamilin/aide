@@ -72,6 +72,8 @@ BUILTIN_ACTIONS: tuple[Action, ...] = (
     ),
 )
 
+MAX_CUSTOM_ACTIONS = 20
+
 
 def validate_action(action: Action) -> Action:
     action_id = str(action.id).strip()
@@ -200,6 +202,9 @@ class ActionService:
         )
         return self.recent_actions()
 
+    def is_builtin(self, action_id: str) -> bool:
+        return action_id in self._defaults
+
     def get(self, action_id: str) -> Action | None:
         return self._actions.get(action_id)
 
@@ -207,13 +212,14 @@ class ActionService:
         self._actions = dict(self._defaults)
         for record in storage.list_action_records():
             action = _from_record(record)
-            if action is not None and action.id in self._defaults:
+            if action is not None:
                 self._actions[action.id] = action
 
     def save(self, action: Action) -> Action:
         normalized = validate_action(action)
-        if normalized.id not in self._defaults:
-            raise ValueError("首版仅支持配置内置动作。")
+        if normalized.id not in self._defaults and normalized.id not in self._actions:
+            if sum(1 for item in self._actions if item not in self._defaults) >= MAX_CUSTOM_ACTIONS:
+                raise ValueError(f"自定义动作最多 {MAX_CUSTOM_ACTIONS} 个。")
         if normalized.pinned_order is not None:
             for action_id, current in list(self._actions.items()):
                 if (
@@ -233,6 +239,12 @@ class ActionService:
         for action in normalized:
             self._persist(action)
         return self.actions
+
+    def delete_custom(self, action_id: str) -> None:
+        if action_id in self._defaults or action_id not in self._actions:
+            raise LookupError("只能删除自定义动作。")
+        storage.delete_action_record(action_id)
+        del self._actions[action_id]
 
     def reset(self, action_id: str) -> Action:
         default = self._defaults.get(action_id)

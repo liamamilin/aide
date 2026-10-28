@@ -41,6 +41,8 @@ def build_handlers(emit) -> dict:
         "conversations.list": chats.list, "conversations.get": chats.get, "conversations.create": chats.create,
         "conversations.delete": chats.delete, "conversations.rename": chats.rename,
         "conversations.set_agent": chats.set_agent, "chat.send": chats.send,
+        "actions.manage": prefs.list_actions, "actions.save": prefs.save_action,
+        "actions.delete": prefs.delete_action,
         "agents.list": chats.agents, "agents.save": prefs.save_agent, "agents.delete": prefs.delete_agent,
         "settings.get": prefs.get, "settings.set": prefs.set, "settings.test_connection": prefs.test_connection,
         "models.list": chats.models, "models.select": chats.select_model,

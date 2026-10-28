@@ -13,6 +13,8 @@ public struct SettingsView: View {
                 .tabItem { Label("通用", systemImage: "gearshape") }
             AgentsPane(model: model)
                 .tabItem { Label("助手", systemImage: "person.crop.square") }
+            ActionsPane(model: model)
+                .tabItem { Label("动作", systemImage: "bolt") }
         }
         .frame(width: 560, height: 480)
         .task { await model.load() }
@@ -220,5 +222,68 @@ private struct HotkeyRow: View {
                 Text(error).font(.system(size: 11)).foregroundStyle(.orange)
             }
         }
+    }
+}
+
+private struct ActionsPane: View {
+    @Bindable var model: SettingsModel
+
+    var body: some View {
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                List(model.actions, selection: Binding(
+                    get: { model.editingAction?.source?.id },
+                    set: { id in if let action = model.actions.first(where: { $0.id == id }) { model.edit(action) } }
+                )) { action in
+                    Text(action.name).foregroundStyle(action.enabled ? .primary : .secondary).tag(action.id as String?)
+                }
+                Divider()
+                HStack {
+                    Button { model.newAction() } label: { Image(systemName: "plus") }
+                    Spacer()
+                }
+                .buttonStyle(.borderless).padding(8)
+            }
+            .frame(width: 170)
+            Divider()
+            editor
+        }
+    }
+
+    @ViewBuilder private var editor: some View {
+        if let draft = model.editingAction {
+            VStack(alignment: .leading, spacing: 10) {
+                TextField("名称，例如：润色成邮件语气", text: binding(\.name)).textFieldStyle(.roundedBorder)
+                Picker("使用助手", selection: binding(\.agentID)) {
+                    ForEach(model.agents) { Text("\($0.icon) \($0.name)").tag($0.id) }
+                }
+                Text("指令").font(.system(size: 12)).foregroundStyle(.secondary)
+                TextEditor(text: binding(\.instruction))
+                    .font(.system(size: 13))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary))
+                Text("选中的文字会作为材料交给助手，按这条指令处理。").font(.system(size: 11)).foregroundStyle(.secondary)
+                Toggle("在快捷面板中显示", isOn: binding(\.enabled))
+                if let error = model.errorMessage { Text(error).font(.system(size: 12)).foregroundStyle(.orange) }
+                HStack {
+                    Button(draft.builtin ? "恢复默认" : "删除", role: .destructive) {
+                        if let id = draft.source?.id { Task { await model.deleteAction(id) } } else { model.editingAction = nil }
+                    }
+                    Spacer()
+                    Button("保存") { Task { await model.saveAction() } }
+                        .keyboardShortcut(.defaultAction).disabled(!model.canSaveAction)
+                }
+            }
+            .padding(16)
+        } else {
+            VStack(spacing: 6) {
+                Image(systemName: "bolt").font(.system(size: 22)).foregroundStyle(.secondary)
+                Text("选一个动作编辑，或点 + 新建").foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func binding<V>(_ path: WritableKeyPath<ActionDraft, V>) -> Binding<V> {
+        Binding(get: { model.editingAction![keyPath: path] }, set: { model.editingAction?[keyPath: path] = $0 })
     }
 }

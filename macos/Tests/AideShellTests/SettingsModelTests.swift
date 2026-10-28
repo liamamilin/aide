@@ -23,6 +23,14 @@ private final class StubPreferences: PreferencesProviding, @unchecked Sendable {
         savedAgents.append((id, name))
     }
     func deleteAgent(id: String) async throws { deletedAgents.append(id); agentList.removeAll { $0.id == id } }
+    var actionList = [ActionInfo(id: "translate", name: "翻译", agentID: "general_assistant", instruction: "译", builtin: true)]
+    private(set) var savedActions: [(String?, String, String)] = []
+    func manageActions() async throws -> [ActionInfo] { actionList }
+    func saveAction(_ action: ActionInfo?, name: String, agentID: String, instruction: String, enabled: Bool) async throws {
+        savedActions.append((action?.id, name, instruction))
+        if action == nil { actionList.append(ActionInfo(id: "custom_9", name: name, agentID: agentID, instruction: instruction)) }
+    }
+    func deleteAction(id: String) async throws { actionList.removeAll { $0.id == id && !$0.builtin } }
 }
 
 @MainActor
@@ -82,5 +90,24 @@ final class SettingsModelTests: XCTestCase {
         await model.deleteAgent("custom_1")
         XCTAssertEqual(stub.deletedAgents, ["custom_1"])
         XCTAssertEqual(model.agents.map(\.id), ["general_assistant"])
+    }
+
+    func testCustomActionCreateNeedsNameInstructionAndAgent() async {
+        let stub = StubPreferences()
+        let model = SettingsModel(provider: stub)
+        await model.load()
+        XCTAssertEqual(model.actions.map(\.id), ["translate"])
+        model.newAction()
+        XCTAssertEqual(model.editingAction?.agentID, "general_assistant")
+        XCTAssertFalse(model.canSaveAction)
+        model.editingAction?.name = "邮件语气"
+        model.editingAction?.instruction = "润色成邮件语气"
+        XCTAssertTrue(model.canSaveAction)
+        await model.saveAction()
+        XCTAssertNil(stub.savedActions.first?.0)
+        XCTAssertEqual(model.actions.map(\.id), ["translate", "custom_9"])
+        XCTAssertNil(model.editingAction)
+        await model.deleteAction("custom_9")
+        XCTAssertEqual(model.actions.map(\.id), ["translate"])
     }
 }
