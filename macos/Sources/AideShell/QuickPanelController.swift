@@ -44,7 +44,7 @@ public final class QuickPanelController {
 
     /// Hotkey entry point: capture first (the source app is still frontmost), then show.
     public func toggle() {
-        if panel.isVisible { model.escape(); if panel.isVisible { close(copying: nil) }; return }
+        if panel.isVisible { Task { await toggleWhileVisible() }; return }
         previousApp = NSWorkspace.shared.frontmostApplication
         NSLog("Aide hotkey: panel requested, front=%@", previousApp?.localizedName ?? "?")
         Task {
@@ -57,6 +57,21 @@ public final class QuickPanelController {
             if selection == .needsAccessibility { SelectionReader.requestAccessibility() }
             show()
             await model.present(selection)
+        }
+    }
+
+    /// Second press with the panel open: a new selection reuses the current action; nothing selected closes it.
+    private func toggleWhileVisible() async {
+        // The panel is key, so a simulated ⌘C would go to it; give the source app the keyboard while reading.
+        previousApp?.activate()
+        try? await Task.sleep(nanoseconds: 80_000_000)
+        let selection = await reader.read()
+        if case .text(let text) = selection {
+            panel.makeKeyAndOrderFront(nil)
+            await model.reselect(text)
+        } else {
+            model.escape()
+            if panel.isVisible { close(copying: nil) }
         }
     }
 

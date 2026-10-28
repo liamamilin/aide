@@ -2,8 +2,9 @@ import AideCore
 import XCTest
 @testable import AideShell
 
-private struct FixedReader: SelectionReading {
-    let result: SelectionResult
+private final class FixedReader: SelectionReading, @unchecked Sendable {
+    var result: SelectionResult
+    init(result: SelectionResult) { self.result = result }
     func read() async -> SelectionResult { result }
 }
 
@@ -40,5 +41,30 @@ final class QuickPanelControllerTests: XCTestCase {
         let outcome = await run(.text("hello"))
         XCTAssertFalse(outcome.opened)
         XCTAssertTrue(outcome.visible)
+    }
+
+    func testSecondPressWithNewSelectionReusesTheActionAndWithNothingClosesThePanel() async {
+        let reader = FixedReader(result: .text("hello"))
+        let model = QuickPanelModel(provider: NoActions())
+        let controller = QuickPanelController(model: model, reader: reader)
+        Self.keep.append(controller)
+        controller.toggle()
+        for _ in 0..<20 { try? await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertTrue(controller.isVisible)
+        model.choose(index: 0)                       // the person picked 翻译
+        for _ in 0..<10 { try? await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(model.activeAction?.id, "translate")
+
+        reader.result = .text("world")
+        controller.toggle()
+        for _ in 0..<30 { try? await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertTrue(controller.isVisible, "a new selection keeps the panel open")
+        XCTAssertEqual(model.selection, "world")
+        XCTAssertEqual(model.activeAction?.id, "translate", "same action, new text")
+
+        reader.result = .empty
+        controller.toggle()
+        for _ in 0..<30 { try? await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertFalse(controller.isVisible, "nothing selected toggles the panel off")
     }
 }

@@ -62,6 +62,15 @@ public final class QuickPanelModel {
         }
     }
 
+    /// The hotkey pressed again while the panel is open, with something new selected: keep the action the
+    /// person already chose and run it on the new text (to switch action, Esc first). With no action
+    /// chosen yet, show the action list for the new selection.
+    public func reselect(_ text: String) async {
+        guard let action = activeAction else { await present(.text(text)); return }
+        selection = text
+        run(action)
+    }
+
     public func moveHighlight(_ delta: Int) {
         guard phase == .ready, !actions.isEmpty else { return }
         highlighted = (highlighted + delta + actions.count) % actions.count
