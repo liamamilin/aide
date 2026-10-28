@@ -143,6 +143,19 @@ private struct Composer: View {
     @FocusState private var focused: Bool
 
     var body: some View {
+        VStack(spacing: 0) {
+            field
+            // The hint lives outside the field: text being composed by an input method is not in the
+            // binding yet, so an in-field placeholder would draw underneath the composition.
+            Text("↩ 发送  ·  ⇧↩ 换行")
+                .font(.system(size: 11)).foregroundStyle(.tertiary)
+                .padding(.top, 4).padding(.bottom, 10)
+        }
+        .onAppear { focused = true }
+        .onChange(of: model.focusRequest) { _, _ in focused = true }
+    }
+
+    private var field: some View {
         HStack(alignment: .bottom, spacing: 8) {
             // TextEditor (an NSTextView) gives native ⇧↩ newline; ↩ is intercepted to send.
             TextEditor(text: $model.draft)
@@ -150,13 +163,6 @@ private struct Composer: View {
                 .scrollContentBackground(.hidden)
                 .focused($focused)
                 .frame(height: editorHeight)
-                .overlay(alignment: .topLeading) {
-                    if model.draft.isEmpty {
-                        Text("输入消息，↩ 发送，⇧↩ 换行")
-                            .font(.system(size: 14)).foregroundStyle(.tertiary)
-                            .padding(.leading, 5).allowsHitTesting(false)
-                    }
-                }
                 .onKeyPress(.return, phases: .down) { press in
                     if press.modifiers.contains(.shift) { return .ignored }
                     model.send()
@@ -176,10 +182,8 @@ private struct Composer: View {
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary))
         .frame(maxWidth: 720)
-        .padding(.horizontal, 24).padding(.bottom, 16).padding(.top, 4)
+        .padding(.horizontal, 24).padding(.top, 4)
         .frame(maxWidth: .infinity)
-        .onAppear { focused = true }
-        .onChange(of: model.focusRequest) { _, _ in focused = true }
     }
 
     /// Grows with explicit lines (1…8); long wrapped lines scroll inside the editor.
