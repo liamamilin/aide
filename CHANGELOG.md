@@ -31,6 +31,12 @@ GitHub Release.
 
 ## 1.5.0 — Candidate
 
+- New native macOS shell (SwiftUI/AppKit, `macos/`) on a headless, Qt-free Python
+  core: Quick Panel, Workspace, Settings and menu bar; the Qt UI remains until retired.
+  Adds desktop tools with confirmation, custom agents and quick actions, a
+  configurable Quick Panel hotkey, copy/regenerate/edit of answers, and
+  screenshot Q&A (⌘⌃S, vision models). Releases ship an unsigned-by-Apple
+  (not notarized) `Aide-<version>-arm64.dmg`.
 - Added managed attachment validation, reference tracking, inference copies, and
   safe garbage collection while preserving legacy image history.
 - Added asynchronous Ollama image-capability checks with supported,
