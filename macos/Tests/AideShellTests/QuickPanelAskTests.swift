@@ -8,6 +8,8 @@ private final class AskStub: WorkspaceProviding, @unchecked Sendable {
     private(set) var responses: [(String, Bool)] = []
     private(set) var cancelled = 0
     var note = ""
+    /// When set, `send` waits for the test to release it, like a core that is slow to start the run.
+    var gate: AsyncStream<Void>?
 
     func conversations(query: String) async throws -> [ConversationSummary] { [] }
     func conversation(id: Int) async throws -> ConversationDetail { ConversationDetail(id: id, title: "", agentID: "", messages: []) }
@@ -20,6 +22,7 @@ private final class AskStub: WorkspaceProviding, @unchecked Sendable {
     func selectModel(_ model: String) async throws {}
     func send(conversationID: Int, text: String, mode: SendMode, images: [String]) async throws -> RunHandle {
         sent.append((conversationID, text))
+        if let gate { for await _ in gate { break } }
         var c: AsyncStream<RunUpdate>.Continuation!
         let stream = AsyncStream<RunUpdate> { c = $0 }
         continuation = c
@@ -129,5 +132,70 @@ final class QuickPanelAskTests: XCTestCase {
         await settle()
         guard case .files(let items)? = model.steps.first?.result else { return XCTFail("no result card") }
         XCTAssertEqual(items.first?.path, "/tmp/a.pdf")
+    }
+
+    func testEscBeforeTheRunHandleArrivesStopsItAsSoonAsItDoes() async {
+        let stub = AskStub()
+        var release: AsyncStream<Void>.Continuation!
+        stub.gate = AsyncStream<Void> { release = $0 }
+        let model = QuickPanelModel(provider: Actions(), ask: stub)
+        await model.present(.empty)
+        model.askText = "找 PDF"
+        model.confirm()
+        await settle()
+        XCTAssertEqual(model.phase, .running)
+        model.escape()                                      // the core has not handed back a run yet
+        XCTAssertEqual(model.phase, .cancelled)
+        release.yield(())
+        await settle()
+        XCTAssertEqual(stub.cancelled, 1, "the run that started late is cancelled right away")
+        stub.continuation?.yield(.delta(kind: "content", text: "迟到"))
+        await settle()
+        XCTAssertEqual(model.output, "")
+        XCTAssertEqual(model.phase, .cancelled)
+    }
+
+    func testNothingIsSentWhenStoppedBeforeTheConversationExists() async {
+        let stub = AskStub()
+        let model = QuickPanelModel(provider: Actions(), ask: stub)
+        await model.present(.empty)
+        model.askText = "x"
+        model.confirm()
+        model.escape()                                      // same turn: the task has not even run yet
+        await settle()
+        XCTAssertTrue(stub.sent.isEmpty)
+        XCTAssertEqual(model.phase, .cancelled)
+    }
+
+    func testStoppingAfterAChangeSaysItWasNotUndone() async {
+        let stub = AskStub()
+        let model = QuickPanelModel(provider: Actions(), ask: stub)
+        await model.present(.empty)
+        model.askText = "新建备忘录"
+        model.confirm()
+        await settle()
+        stub.continuation?.yield(.tool(callID: "c1", name: "create_note", state: "tool_finished", status: "succeeded"))
+        await settle()
+        XCTAssertTrue(model.keptChanges)
+        model.escape()
+        XCTAssertEqual(model.phase, .cancelled)
+        XCTAssertTrue(model.keptChanges, "cancel does not claim the note was rolled back")
+    }
+
+    func testLookupOnlyRunHasNoChangesToKeep() async {
+        let stub = AskStub()
+        let model = QuickPanelModel(provider: Actions(), ask: stub)
+        await model.present(.empty)
+        model.askText = "找文件"
+        model.confirm()
+        await settle()
+        stub.continuation?.yield(.tool(callID: "c1", name: "find_files", state: "tool_finished", status: "succeeded"))
+        await settle()
+        XCTAssertFalse(model.keptChanges)
+    }
+
+    func testOpeningAMissingFileFailsWithoutPretendingItWorked() {
+        XCTAssertNotNil(ToolResultView.open("/nonexistent/aide-\(UUID().uuidString).pdf"))
+        XCTAssertNotNil(ToolResultView.reveal("/nonexistent/aide-\(UUID().uuidString).pdf"))
     }
 }

@@ -33,6 +33,11 @@ public enum ToolLabels {
         }
     }
 
+    /// Lookups change nothing; every other tool does something that stays done after a cancel.
+    public static func isLookup(_ name: String) -> Bool {
+        name.hasPrefix("find_") || name.hasPrefix("list_") || name == "web_search"
+    }
+
     public static func running(_ name: String) -> String {
         switch name {
         case "find_apps": "正在查找应用…"
@@ -198,9 +203,14 @@ public final class WorkspaceModel {
             guard generation == mine else { return }
             selectedID = id
             selectedAgentID = detail.agentID
-            turns = detail.messages.map {
-                Turn(id: "m\($0.id)", role: $0.role, content: $0.content,
-                     imageURL: $0.images.first.map { URL(fileURLWithPath: $0) })
+            turns = detail.messages.map { message in
+                // Lookup results shown when the answer was first given come back as the same openable items.
+                let steps = message.toolResults.enumerated().compactMap { index, saved -> ToolStep? in
+                    guard let result = ToolResults.parse(tool: saved.tool, output: saved.output) else { return nil }
+                    return ToolStep(id: "m\(message.id)-\(index)", name: saved.tool, state: .succeeded, result: result)
+                }
+                return Turn(id: "m\(message.id)", role: message.role, content: message.content, steps: steps,
+                            imageURL: message.images.first.map { URL(fileURLWithPath: $0) })
             }
             errorMessage = nil
             focusRequest += 1

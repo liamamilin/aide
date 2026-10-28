@@ -144,6 +144,21 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertNil(model.turns.last?.imageURL)
     }
 
+    func testReopenedConversationShowsTheLookupResultsSavedWithTheAnswer() async {
+        let stub = StubWorkspace()
+        let json = #"{"results":[{"name":"报告.pdf","path":"/tmp/报告.pdf","kind":"file"}]}"#
+        stub.details[1] = ConversationDetail(id: 1, title: "t", agentID: "general_assistant", messages: [
+            ChatMessage(id: 1, role: .user, content: "找 PDF"),
+            ChatMessage(id: 2, role: .assistant, content: "找到一个",
+                        toolResults: [.init(tool: "find_files", output: json), .init(tool: "find_files", output: "not json")])])
+        let model = WorkspaceModel(provider: stub)
+        await model.start()
+        let steps = model.turns.last?.steps ?? []
+        XCTAssertEqual(steps.count, 1, "unreadable saved output is skipped, not shown")
+        guard case .files(let items)? = steps.first?.result else { return XCTFail("expected files") }
+        XCTAssertEqual(items.first?.name, "报告.pdf")
+    }
+
     func testFirstSendCreatesConversationWithSelectedAgent() async {
         let stub = StubWorkspace()
         let model = WorkspaceModel(provider: stub)

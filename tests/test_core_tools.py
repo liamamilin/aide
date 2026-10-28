@@ -190,3 +190,15 @@ def test_lookup_tools_forward_their_real_output_but_actions_do_not(env):
             break
     assert finished and finished[0]["tool"] == "find_apps"
     assert "results" in finished[0]["output"]            # the tool's own JSON, not model prose
+
+
+def test_reopened_conversation_carries_the_lookup_results_it_showed(env):
+    chats, _runs, fake, events, _runner = env
+    convo = chats.create({"agent_id": "general_assistant"})["id"]
+    fake.enqueue(_tool_turn("find_apps", {"query": "Safari"}))
+    fake.enqueue(*_final("找到了。"))
+    chats.send({"conversation_id": convo, "text": "找 Safari"})
+    assert _next(events, "run.finished")["status"] == "succeeded"
+    answer = chats.get({"id": convo})["messages"][-1]
+    assert answer["role"] == "assistant" and answer["tool_results"][0]["tool"] == "find_apps"
+    assert "results" in answer["tool_results"][0]["output"]
