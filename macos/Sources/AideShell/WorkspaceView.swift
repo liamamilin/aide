@@ -158,25 +158,40 @@ private struct TurnView: View {
 }
 
 /// SwiftUI's `.scrollIndicators(.hidden)` leaves the legacy scroller track (a white bar) on an NSTextView
-/// when the system shows scroll bars permanently; overlay style makes it thin and auto-hiding.
-private struct OverlayScroller: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView { NSView() }
+/// when the system shows scroll bars permanently. The composer is capped at 8 lines and still scrolls with
+/// the wheel, so the scroller is removed from the editor's own scroll view.
+struct HiddenScroller: NSViewRepresentable {
+    /// Re-applies on every layout pass: SwiftUI adds the editor's scroll view after this view and may reset it.
+    final class Probe: NSView {
+        override func layout() { super.layout(); HiddenScroller.apply(near: self) }
+    }
 
-    func updateNSView(_ view: NSView, context: Context) {
-        DispatchQueue.main.async {
-            var node: NSView? = view
-            while let current = node {
-                if let scroll = current as? NSScrollView { scroll.scrollerStyle = .overlay; return }
-                if let scroll = current.subviews.lazy.compactMap({ $0 as? NSScrollView }).first {
-                    scroll.scrollerStyle = .overlay; return
-                }
-                node = current.superview
+    func makeNSView(context: Context) -> NSView { Probe() }
+
+    func updateNSView(_ view: NSView, context: Context) { HiddenScroller.apply(near: view) }
+
+    /// Walks up a few levels and hides the scrollers of the first small scroll view found beneath.
+    static func apply(near view: NSView) {
+        var node = view.superview
+        for _ in 0..<4 {
+            guard let current = node else { return }
+            if let scroll = firstScrollView(in: current), scroll.frame.height <= 300 {
+                scroll.hasVerticalScroller = false
+                scroll.hasHorizontalScroller = false
+                return
             }
+            node = current.superview
         }
+    }
+
+    private static func firstScrollView(in view: NSView) -> NSScrollView? {
+        if let scroll = view as? NSScrollView { return scroll }
+        for child in view.subviews { if let found = firstScrollView(in: child) { return found } }
+        return nil
     }
 }
 
-private struct Composer: View {
+struct Composer: View {
     @Bindable var model: WorkspaceModel
     @FocusState private var focused: Bool
 
@@ -199,7 +214,7 @@ private struct Composer: View {
             TextEditor(text: $model.draft)
                 .font(.system(size: 14))
                 .scrollContentBackground(.hidden)
-                .background(OverlayScroller())
+                .background(HiddenScroller())
                 .focused($focused)
                 .frame(height: editorHeight)
                 .onKeyPress(.return, phases: .down) { press in

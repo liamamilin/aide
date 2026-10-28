@@ -63,6 +63,7 @@ public final class WorkspaceModel {
     }
 
     public func start() async {
+        let before = generation
         async let list: Void = reloadList()
         do {
             agents = try await provider.agents()
@@ -74,6 +75,8 @@ public final class WorkspaceModel {
             errorMessage = "无法连接 Aide 核心"
         }
         await list
+        // Resume the most recent conversation, unless the user (or a Quick Panel hand-off) already chose one.
+        if generation == before, selectedID == nil, let latest = conversations.first { await select(latest.id) }
     }
 
     public func reloadList() async {

@@ -189,3 +189,13 @@ final class WorkspaceAgentTests: XCTestCase {
         XCTAssertEqual(model.selectedAgentID, "general_assistant")
     }
 }
+
+@MainActor
+final class WorkspaceResumeTests: XCTestCase {
+    func testStartResumesTheMostRecentConversation() async {
+        let model = WorkspaceModel(provider: StubWorkspace())
+        await model.start()
+        XCTAssertEqual(model.selectedID, 1)
+        XCTAssertEqual(model.turns.map(\.content), ["q", "a"])
+    }
+}
