@@ -88,6 +88,14 @@ public final class WorkspaceModel {
         turns = []
         errorMessage = nil
         focusRequest += 1
+        Task { await reloadAgents() }
+    }
+
+    /// Picks up agents created or removed in Settings; keeps the selection when it still exists.
+    public func reloadAgents() async {
+        guard let latest = try? await provider.agents() else { return }
+        agents = latest
+        if !latest.contains(where: { $0.id == selectedAgentID }) { selectedAgentID = latest.first?.id }
     }
 
     public func select(_ id: Int) async {

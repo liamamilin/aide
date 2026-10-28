@@ -174,3 +174,18 @@ private struct FocusStub: WorkspaceProviding {
         RunHandle(updates: AsyncStream { $0.finish() }, cancel: {})
     }
 }
+
+@MainActor
+final class WorkspaceAgentTests: XCTestCase {
+    func testNewChatRefreshesAgentsAndDropsAMissingSelection() async {
+        let stub = StubWorkspace()
+        let model = WorkspaceModel(provider: stub)
+        await model.start()
+        model.selectedAgentID = "gone"
+        await model.reloadAgents()
+        XCTAssertEqual(model.selectedAgentID, "general_assistant")
+        model.selectedAgentID = "general_assistant"
+        await model.reloadAgents()
+        XCTAssertEqual(model.selectedAgentID, "general_assistant")
+    }
+}

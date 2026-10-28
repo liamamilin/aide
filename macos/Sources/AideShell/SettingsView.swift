@@ -43,7 +43,19 @@ private struct GeneralPane: View {
                     LabeledContent("快捷面板", value: "⌘⌃L")
                 }
                 Section {
-                    DisclosureGroup("高级", isExpanded: $showAdvanced) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { showAdvanced.toggle() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.right").rotationEffect(.degrees(showAdvanced ? 90 : 0))
+                                .font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                            Text("高级")
+                            Spacer()
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if showAdvanced {
                         number("上下文长度", value: $model.settings.numCtx)
                         number("最大输出", value: $model.settings.numPredict)
                         number("超时（秒）", value: $model.settings.timeout)
@@ -132,7 +144,7 @@ private struct AgentsPane: View {
         if let draft = model.editing {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    TextField("图标", text: binding(\.icon)).frame(width: 50)
+                    iconMenu(draft)
                     TextField("名称", text: binding(\.name))
                 }
                 .disabled(draft.builtin)
@@ -161,6 +173,21 @@ private struct AgentsPane: View {
             }
             .frame(maxWidth: .infinity)
         }
+    }
+
+    private static let icons = ["🤖", "💡", "📝", "📚", "🧠", "🔍", "💻", "🌐", "✍️", "📊", "🎨", "🎯", "🗂️", "🧪", "🛠️", "😎"]
+
+    private func iconMenu(_ draft: AgentDraft) -> some View {
+        Menu {
+            ForEach(Self.icons, id: \.self) { icon in
+                Button(icon) { model.editing?.icon = icon }
+            }
+        } label: {
+            Text(draft.icon.isEmpty ? "🤖" : draft.icon).font(.system(size: 16))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("选择图标")
     }
 
     private func binding(_ keyPath: WritableKeyPath<AgentDraft, String>) -> Binding<String> {

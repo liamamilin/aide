@@ -21,6 +21,7 @@ public struct WorkspaceView: View {
                     .help("新对话 ⌘N")
                     .keyboardShortcut("n")
             }
+            ToolbarItem(placement: .primaryAction) { agentMenu }
             ToolbarItem(placement: .primaryAction) { modelMenu }
         }
         .task { await model.start() }
@@ -97,6 +98,23 @@ public struct WorkspaceView: View {
         }
     }
 
+    /// Switchable before the first message; a started conversation keeps its agent.
+    private var agentMenu: some View {
+        Menu {
+            ForEach(model.agents) { agent in
+                Button { model.selectedAgentID = agent.id } label: {
+                    if agent.id == model.selectedAgentID { Label("\(agent.icon) \(agent.name)", systemImage: "checkmark") }
+                    else { Text("\(agent.icon) \(agent.name)") }
+                }
+            }
+        } label: {
+            let current = model.agents.first { $0.id == model.selectedAgentID }
+            Text(current.map { "\($0.icon) \($0.name)" } ?? "助手").font(.system(size: 12))
+        }
+        .disabled(model.selectedID != nil)
+        .help(model.selectedID == nil ? "选择助手" : "这个对话已开始，助手不能更换。新对话可以选择其他助手。")
+    }
+
     private var modelMenu: some View {
         Menu {
             ForEach(model.models, id: \.self) { name in
@@ -161,6 +179,7 @@ private struct Composer: View {
             TextEditor(text: $model.draft)
                 .font(.system(size: 14))
                 .scrollContentBackground(.hidden)
+                .scrollIndicators(.hidden)
                 .focused($focused)
                 .frame(height: editorHeight)
                 .onKeyPress(.return, phases: .down) { press in
