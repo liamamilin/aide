@@ -183,3 +183,44 @@ def test_edit_replaces_the_last_turn(env):
     empty = chats.create({"agent_id": "general_assistant"})["id"]
     with pytest.raises(ProtocolError):
         chats.send({"conversation_id": empty, "mode": "regenerate"})
+
+
+_PNG = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+        b"\x00\x00\x00\rIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02\xfe\xa7\x9a\xa0\xa0\x00\x00\x00\x00IEND\xaeB`\x82")
+
+
+def test_send_with_a_shell_prepared_screenshot_reaches_a_vision_model(env, monkeypatch, tmp_path):
+    import base64
+
+    from ai_desktop.core import conversations as core_conversations
+
+    chats, fake, events = env
+    monkeypatch.setattr(core_conversations, "vision_capable", lambda model: True)
+    shot = tmp_path / "shot.png"
+    shot.write_bytes(_PNG)
+    convo_id = chats.create({"agent_id": "general_assistant"})["id"]
+    _say(chats, fake, events, convo_id, "一张图", text="这是什么", images=[str(shot)])
+    sent = fake.requests[0]["payload"]["messages"][-1]
+    assert sent["images"] == [base64.b64encode(_PNG).decode()]
+    saved = storage.get_conversation(convo_id).messages[0]
+    assert len(saved.images) == 1 and saved.images[0].endswith(".prepared.png")
+
+
+def test_images_are_refused_for_text_only_models_and_bad_files(env, monkeypatch, tmp_path):
+    from ai_desktop.core import conversations as core_conversations
+
+    chats, fake, events = env
+    shot = tmp_path / "shot.png"
+    shot.write_bytes(_PNG)
+    bad = tmp_path / "bad.png"
+    bad.write_bytes(b"not a png")
+    convo_id = chats.create({"agent_id": "general_assistant"})["id"]
+    monkeypatch.setattr(core_conversations, "vision_capable", lambda model: False)
+    with pytest.raises(ProtocolError, match="不支持看图"):
+        chats.send({"conversation_id": convo_id, "text": "?", "images": [str(shot)]})
+    monkeypatch.setattr(core_conversations, "vision_capable", lambda model: None)
+    with pytest.raises(ProtocolError):
+        chats.send({"conversation_id": convo_id, "text": "?", "images": [str(bad)]})
+    assert storage.get_conversation(convo_id).messages == []     # nothing saved, and not left busy
+    with pytest.raises(ProtocolError):
+        chats.send({"conversation_id": convo_id, "mode": "regenerate", "images": [str(shot)]})

@@ -60,12 +60,13 @@ public protocol WorkspaceProviding: Sendable {
     func setAgent(conversationID: Int, agentID: String) async throws
     func models() async throws -> ModelList
     func selectModel(_ model: String) async throws
-    func send(conversationID: Int, text: String, mode: SendMode) async throws -> RunHandle
+    /// `images` are PNG files already bounded by the shell; only valid with `.send`.
+    func send(conversationID: Int, text: String, mode: SendMode, images: [String]) async throws -> RunHandle
 }
 
 extension WorkspaceProviding {
     public func send(conversationID: Int, text: String) async throws -> RunHandle {
-        try await send(conversationID: conversationID, text: text, mode: .send)
+        try await send(conversationID: conversationID, text: text, mode: .send, images: [])
     }
 }
 
@@ -134,9 +135,11 @@ extension CoreClient: WorkspaceProviding {
         _ = try await call("models.select", params: ["model": .string(model)])
     }
 
-    public func send(conversationID: Int, text: String, mode: SendMode) async throws -> RunHandle {
-        let result = try await call("chat.send", params: ["conversation_id": .number(Double(conversationID)),
-                                                           "text": .string(text), "mode": .string(mode.rawValue)])
+    public func send(conversationID: Int, text: String, mode: SendMode, images: [String]) async throws -> RunHandle {
+        var params: [String: JSONValue] = ["conversation_id": .number(Double(conversationID)),
+                                           "text": .string(text), "mode": .string(mode.rawValue)]
+        if !images.isEmpty { params["images"] = .array(images.map { .string($0) }) }
+        let result = try await call("chat.send", params: params)
         guard let runID = result["run_id"]?.stringValue else { throw CoreError.remote(code: "protocol", message: "missing run_id") }
         return handle(for: runID, note: result["tools_note"]?.stringValue ?? "")
     }

@@ -38,9 +38,13 @@ private final class StubWorkspace: WorkspaceProviding, @unchecked Sendable {
     func models() async throws -> ModelList { ModelList(models: modelNames, current: "m1") }
     func selectModel(_ model: String) async throws {}
     private(set) var modes: [SendMode] = []
-    func send(conversationID: Int, text: String, mode: SendMode) async throws -> RunHandle {
+    private(set) var sentImages: [[String]] = []
+    var failSend: Error?
+    func send(conversationID: Int, text: String, mode: SendMode, images: [String]) async throws -> RunHandle {
         sent.append((conversationID, text))
         modes.append(mode)
+        sentImages.append(images)
+        if let failure = failSend { throw failure }
         var c: AsyncStream<RunUpdate>.Continuation!
         let stream = AsyncStream<RunUpdate> { c = $0 }
         continuation = c
@@ -101,6 +105,32 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertEqual(stub.modes, [.regenerate, .edit])
         XCTAssertEqual(model.turns.map(\.content), ["q2", ""])
         XCTAssertNil(model.lastQuestion)
+    }
+
+    func testScreenshotIsSentOnceAndComesBackWhenTheSendIsRefused() async throws {
+        let stub = StubWorkspace()
+        let model = WorkspaceModel(provider: stub)
+        await model.start()
+        let shot = FileManager.default.temporaryDirectory.appendingPathComponent("t-\(UUID().uuidString).png")
+        try Data([1]).write(to: shot)
+        model.startScreenshotChat(shot)
+        XCTAssertTrue(model.canSend)                       // a screenshot alone is enough to send
+        stub.failSend = CoreError.remote(code: "invalid", message: "当前模型 m1 不支持看图")
+        model.send()
+        await settle()
+        XCTAssertEqual(model.errorMessage, "当前模型 m1 不支持看图")
+        XCTAssertEqual(model.attachment, shot)             // not lost: pick another model and resend
+        XCTAssertTrue(model.turns.isEmpty)
+
+        stub.failSend = nil
+        model.draft = "这是什么"
+        model.send()
+        await settle()
+        XCTAssertEqual(stub.sentImages.last, [shot.path])
+        XCTAssertEqual(stub.sent.last?.1, "这是什么")
+        XCTAssertNil(model.attachment)
+        XCTAssertEqual(model.turns.first?.imageURL, shot)
+        model.clearAttachment()
     }
 
     func testFirstSendCreatesConversationWithSelectedAgent() async {
@@ -207,7 +237,7 @@ private struct FocusStub: WorkspaceProviding {
     func setAgent(conversationID: Int, agentID: String) async throws {}
     func models() async throws -> ModelList { ModelList(models: [], current: "") }
     func selectModel(_ model: String) async throws {}
-    func send(conversationID: Int, text: String, mode: SendMode) async throws -> RunHandle {
+    func send(conversationID: Int, text: String, mode: SendMode, images: [String]) async throws -> RunHandle {
         RunHandle(updates: AsyncStream { $0.finish() }, cancel: {})
     }
 }

@@ -51,6 +51,8 @@ public struct Turn: Identifiable, Equatable {
     public var streaming = false
     public var stopped = false
     public var steps: [ToolStep] = []
+    /// The screenshot sent with this question (local to this window session; history shows text only).
+    public var imageURL: URL?
 }
 
 public struct ConversationGroup: Equatable {
@@ -103,6 +105,8 @@ public final class WorkspaceModel {
     /// Bumped whenever the composer should take keyboard focus (new chat, opened conversation).
     public private(set) var focusRequest = 0
     public var draft = ""
+    /// A prepared screenshot waiting to be sent with the next message.
+    public private(set) var attachment: URL?
     public var search = "" { didSet { if search != oldValue { Task { await reloadList() } } } }
     public var selectedAgentID: String?
 
@@ -158,6 +162,7 @@ public final class WorkspaceModel {
         turns = []
         errorMessage = nil
         activity = nil
+        clearAttachment()
         focusRequest += 1
         Task { await reloadAgents() }
     }
@@ -212,11 +217,31 @@ public final class WorkspaceModel {
         catch { errorMessage = "切换模型失败" }
     }
 
+    public static let defaultImagePrompt = "请看这张截图，说明其中的内容。"
+
+    public var canSend: Bool {
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attachment != nil
+    }
+
     public func send() {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let typed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = typed.isEmpty && attachment != nil ? Self.defaultImagePrompt : typed
         guard !text.isEmpty, !isSending else { return }
         draft = ""
         run(text, mode: .send)
+    }
+
+    /// Starts a fresh conversation around a screenshot and lets the person type the question.
+    public func startScreenshotChat(_ image: URL) {
+        newChat()
+        attachment = image
+    }
+
+    public func attach(_ image: URL) { attachment = image }
+
+    public func clearAttachment() {
+        if let attachment { try? FileManager.default.removeItem(at: attachment) }
+        attachment = nil
     }
 
     /// The last answer can be asked for again, and the last question can be reworded, while nothing is running.
@@ -249,20 +274,28 @@ public final class WorkspaceModel {
         isSending = true
         generation += 1
         let mine = generation
-        turns.append(Turn(id: UUID().uuidString, role: .user, content: text))
+        let images = (mode == .send ? attachment : nil).map { [$0] } ?? []
+        turns.append(Turn(id: UUID().uuidString, role: .user, content: text, imageURL: images.first))
+        if mode == .send { attachment = nil }
         let reply = Turn(id: UUID().uuidString, role: .assistant, content: "", streaming: true)
         turns.append(reply)
         Task {
             do {
                 let conversationID = try await ensureConversation()
-                let handle = try await provider.send(conversationID: conversationID, text: text, mode: mode)
+                let handle = try await provider.send(conversationID: conversationID, text: text, mode: mode, images: images.map(\.path))
                 guard generation == mine else { await handle.cancel(); return }
                 self.handle = handle
                 if !handle.note.isEmpty { activity = handle.note }
                 for await update in handle.updates where generation == mine { apply(update, to: reply.id) }
             } catch {
                 guard generation == mine else { return }
-                fail("发送失败：\(error)", removing: reply.id)
+                fail(Self.describe(error), removing: reply.id)
+                // Nothing was started: give the question (and screenshot) back so it can be sent again.
+                if let question = turns.lastIndex(where: { $0.role == .user }), turns[question].content == text {
+                    turns.remove(at: question)
+                }
+                draft = text == Self.defaultImagePrompt && !images.isEmpty ? "" : text
+                if mode == .send, let image = images.first { attachment = image }
             }
             if generation == mine { isSending = false; self.handle = nil; pendingConfirmation = nil }
             await reloadList()
@@ -324,6 +357,11 @@ public final class WorkspaceModel {
             }
             isSending = false
         }
+    }
+
+    private static func describe(_ error: Error) -> String {
+        if case CoreError.remote(_, let message) = error { return message }
+        return "发送失败：\(error)"
     }
 
     private static func fixableInSettings(_ code: String) -> Bool { code == "connection" || code == "timeout" }

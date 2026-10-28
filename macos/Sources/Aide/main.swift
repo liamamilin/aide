@@ -7,6 +7,7 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var core: CoreClient?
     private var hotkey: Hotkey?
+    private var shotKey: Hotkey?
     private var controller: QuickPanelController?
     private var workspace: WorkspaceWindowController?
     private var settings: SettingsWindowController?
@@ -42,11 +43,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        shotKey = Hotkey(.screenshot, id: 2) { Task { @MainActor in self.askAboutScreen() } }
+        if shotKey == nil { NSLog("Aide: ⌘⌃S is already taken by another app") }
+
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "sparkle", accessibilityDescription: "Aide")
         let menu = NSMenu()
         let panelItem = menu.addItem(withTitle: "快捷面板  \(hotkeys.combo.display)", action: #selector(showPanel), keyEquivalent: "")
         panelItem.target = self
+        menu.addItem(withTitle: "截图提问  ⌘⌃S", action: #selector(askAboutScreenFromMenu), keyEquivalent: "").target = self
         self.panelItem = panelItem
         hotkeys.activate()
         menu.addItem(withTitle: "打开 Aide", action: #selector(showWorkspace), keyEquivalent: "").target = self
@@ -62,6 +67,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let done = DispatchSemaphore(value: 0)
         Task { await core.stop(); done.signal() }
         _ = done.wait(timeout: .now() + 2)
+    }
+
+    @objc private func askAboutScreenFromMenu() { askAboutScreen() }
+
+    /// Region screenshot → a new Workspace chat with the picture attached, ready for the question.
+    private func askAboutScreen() {
+        Task { @MainActor in
+            guard let image = await ScreenCapture.captureRegion() else { return }   // Esc cancels
+            workspace?.model.startScreenshotChat(image)
+            workspace?.show()
+        }
     }
 
     @objc private func showWorkspace() { workspace?.show() }

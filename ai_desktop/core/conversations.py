@@ -12,6 +12,7 @@ from typing import Any
 from ai_desktop import config
 from ai_desktop.core import protocol
 from ai_desktop.core.admission import check_admission
+from ai_desktop.core.capabilities import vision_capable
 from ai_desktop.core.runs import RunService, _Message
 from ai_desktop.llm.chat_client import ChatClient, list_models
 from ai_desktop.llm.events import ChatResult
@@ -19,6 +20,7 @@ from ai_desktop.llm.run_types import RunEvent, RunEventKind
 from ai_desktop.llm.tool_run import assemble_tool_run
 from ai_desktop.services.session_objects import SessionObjects
 from ai_desktop.services.task_admission import TaskAuthorization, TaskModelSettings
+from ai_desktop.utils import images as image_utils
 from ai_desktop.utils import storage
 
 _TITLE_CHARS = 30
@@ -142,6 +144,10 @@ class ConversationService:
         text = params.get("text")
         if mode != "regenerate" and (not isinstance(text, str) or not text.strip()):
             raise _invalid("text required")
+        raw_images = params.get("images", [])
+        if (not isinstance(raw_images, list) or not all(isinstance(p, str) for p in raw_images)
+                or (raw_images and mode != "send")):
+            raise _invalid("images must be a list of file paths on a normal send")
         conversation = self._require(params)
         last_user = next((m for m in reversed(conversation.messages) if m.role == "user"), None)
         if mode != "send" and last_user is None:
@@ -156,7 +162,8 @@ class ConversationService:
                 conversation = self._require(params)
                 last_user = None
             return self._send(conversation, text if mode != "regenerate" else last_user.content,
-                              params.get("model"), regenerate_of=last_user if mode == "regenerate" else None)
+                              params.get("model"), regenerate_of=last_user if mode == "regenerate" else None,
+                              image_sources=raw_images)
         except Exception:
             with self._lock:
                 self._busy.discard(conversation.id)
@@ -172,22 +179,32 @@ class ConversationService:
                 storage.delete_message(message.id)
 
     def _send(self, conversation: storage.Conversation, text: str, model_override: Any,
-              regenerate_of: storage.Message | None = None) -> dict[str, Any]:
+              regenerate_of: storage.Message | None = None, image_sources: list[str] | None = None
+              ) -> dict[str, Any]:
         agent = next((a for a in self._runs.agents if a.id == conversation.agent_id), self._runs.agents[0])
+        resolved = self._runs.resolve_model(
+            model_override if isinstance(model_override, str) and model_override else self._current_model(),
+            agent_profile_id=agent.profile_id,
+        )
+        images: list[str] = []
+        if image_sources:
+            if vision_capable(resolved.model) is False:
+                raise _invalid(f"当前模型 {resolved.model} 不支持看图，请在顶部切换到支持视觉的模型。")
+            try:
+                images = [image_utils.store_prepared_png(path) for path in image_sources]
+            except (image_utils.AttachmentError, OSError) as exc:
+                raise _invalid(str(exc)) from exc
         if regenerate_of is not None:
             earlier = [m for m in conversation.messages if m.id < regenerate_of.id]
             history = collapse_versions(earlier)
             user_message = regenerate_of
         else:
             history = collapse_versions(conversation.messages)
-            user_message = storage.save_message(conversation.id, "user", text)
+            user_message = storage.save_message(conversation.id, "user", text, images or None)
         if not conversation.messages and not conversation.title:
             self._auto_title(conversation.id, text)
-        resolved = self._runs.resolve_model(
-            model_override if isinstance(model_override, str) and model_override else self._current_model(),
-            agent_profile_id=agent.profile_id,
-        )
-        messages = [_Message(m["role"], m["content"]) for m in history] + [_Message("user", text, user_message.id)]
+        messages = [_Message(m["role"], m["content"]) for m in history] + [
+            _Message("user", text, user_message.id, tuple(images))]
         admission, tools_note = self._admit_tools(agent, resolved)
         if admission is None:
             request = ChatClient(model=resolved.model).create_request(

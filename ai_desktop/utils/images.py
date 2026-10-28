@@ -20,6 +20,8 @@ MAX_ATTACHMENTS_PER_MESSAGE = 4
 MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 MAX_ATTACHMENT_PIXELS = 40_000_000
 MAX_INFERENCE_EDGE = 2048
+# Screenshots the native shell has already downscaled and re-encoded as PNG (the core stays Qt-free).
+PREPARED_SUFFIX = ".prepared.png"
 
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff", ".heic"}
 _MANAGED_TOP_LEVEL = {"attachments", "images"}
@@ -177,6 +179,23 @@ def store_image(src_path: str) -> str:
     return str(destination)
 
 
+def store_prepared_png(src_path: str) -> str:
+    """Copy a shell-prepared PNG into managed storage after a cheap signature and size check."""
+    source = Path(src_path).expanduser()
+    if not source.is_file():
+        raise AttachmentError("图片文件不存在。")
+    size = source.stat().st_size
+    if not 0 < size <= MAX_ATTACHMENT_BYTES:
+        raise AttachmentError("图片大小不符合要求（最大 20 MiB）。")
+    with source.open("rb") as handle:
+        if handle.read(8) != b"\x89PNG\r\n\x1a\n":
+            raise AttachmentError("图片格式不受支持。")
+    destination = images_dir() / f"{_unique_name()}{PREPARED_SUFFIX}"
+    with _lock:
+        _atomic_copy(source, destination)
+    return str(destination)
+
+
 def store_pixmap(pixmap) -> str:
     """Validate and atomically persist a pasted or dropped QPixmap as PNG."""
     from PyQt5.QtGui import QPixmap
@@ -299,6 +318,8 @@ def prepare_image_for_inference(path: str) -> str:
 
 def encode_image_base64(path: str) -> str:
     """Prepare and encode an image for Ollama without a data-URI prefix."""
+    if Path(path).name.endswith(PREPARED_SUFFIX):    # already bounded by the native shell; no Qt needed
+        return base64.b64encode(Path(path).read_bytes()).decode("ascii")
     prepared = Path(prepare_image_for_inference(path))
     return base64.b64encode(prepared.read_bytes()).decode("ascii")
 

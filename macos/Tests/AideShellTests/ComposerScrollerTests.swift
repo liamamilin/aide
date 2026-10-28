@@ -14,7 +14,7 @@ private struct EmptyWorkspace: WorkspaceProviding {
     func setAgent(conversationID: Int, agentID: String) async throws {}
     func models() async throws -> ModelList { ModelList(models: [], current: "") }
     func selectModel(_ model: String) async throws {}
-    func send(conversationID: Int, text: String, mode: SendMode) async throws -> RunHandle { throw CoreError.remote(code: "x", message: "") }
+    func send(conversationID: Int, text: String, mode: SendMode, images: [String]) async throws -> RunHandle { throw CoreError.remote(code: "x", message: "") }
 }
 
 @MainActor

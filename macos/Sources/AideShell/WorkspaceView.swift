@@ -204,10 +204,15 @@ private struct TurnView: View {
                         Button { editText = turn.content; editing = true } label: { Image(systemName: "pencil") }
                             .buttonStyle(.plain).foregroundStyle(.secondary).help("编辑并重新发送")
                     }
-                    Text(turn.content)
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+                    VStack(alignment: .trailing, spacing: 6) {
+                        if let url = turn.imageURL, let picture = NSImage(contentsOf: url) {
+                            Image(nsImage: picture).resizable().scaledToFit().frame(maxWidth: 280, maxHeight: 200)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        Text(turn.content).textSelection(.enabled)
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
                 }
             }
         case .assistant:
@@ -319,6 +324,7 @@ struct Composer: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if let image = model.attachment { attachmentChip(image) }
             field
             // The hint lives outside the field: text being composed by an input method is not in the
             // binding yet, so an in-field placeholder would draw underneath the composition.
@@ -328,6 +334,26 @@ struct Composer: View {
         }
         .onAppear { focused = true }
         .onChange(of: model.focusRequest) { _, _ in focused = true }
+    }
+
+    private func attachmentChip(_ image: URL) -> some View {
+        HStack {
+            HStack(spacing: 8) {
+                if let picture = NSImage(contentsOf: image) {
+                    Image(nsImage: picture).resizable().scaledToFill().frame(width: 44, height: 44)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                Text("截图").font(.system(size: 12)).foregroundStyle(.secondary)
+                Button { model.clearAttachment() } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.plain).foregroundStyle(.secondary).help("移除截图")
+            }
+            .padding(6)
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+            Spacer()
+        }
+        .frame(maxWidth: 720)
+        .padding(.horizontal, 24).padding(.bottom, 4)
+        .frame(maxWidth: .infinity)
     }
 
     private var field: some View {
@@ -368,5 +394,5 @@ struct Composer: View {
         return CGFloat(lines) * 19 + 8
     }
 
-    private var canSend: Bool { !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var canSend: Bool { model.canSend }
 }

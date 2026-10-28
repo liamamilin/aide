@@ -43,3 +43,16 @@ def thinking_capability(model: str, base_url: str = "") -> ThinkingCapability:
     if capability.known:
         cache_thinking(base_url, model, version, capability)
     return capability
+
+
+def vision_capable(model: str, base_url: str = "") -> bool | None:
+    """True/False from the model's declared capabilities; None when Ollama cannot say."""
+    base_url = (base_url or config.OLLAMA_BASE_URL).rstrip("/")
+    try:
+        response = requests.post(f"{base_url}/api/show", json={"model": model}, timeout=5)
+        data = response.json() if response.status_code == 200 else {}
+    except Exception:
+        logger.debug("vision probe failed", exc_info=True)
+        return None
+    capabilities = data.get("capabilities") if isinstance(data, dict) else None
+    return "vision" in capabilities if isinstance(capabilities, list) else None
