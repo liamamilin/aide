@@ -3,7 +3,7 @@
 SwiftUI/AppKit shell around the headless Python core (`python -m ai_desktop.core`, NDJSON over stdio).
 
 - `AideCore` — `CoreClient` (spawns the core, request/response + events) and run streaming.
-- `AideShell` — Quick Panel (⌘⌃L) and Workspace window (conversations, streaming chat), selection reader, global hotkey.
+- `AideShell` — Quick Panel (⌘⌃L: typed requests with or without a selection, actions, openable results), Workspace window (conversations, streaming Markdown chat, screenshots via ⌘⌃S), Settings, selection reader, global hotkeys.
 - `Aide` — menu-bar executable. Packaged: starts the frozen core in `Contents/Resources/aide-core`; from `swift run`: runs the core from this source tree.
 
 ```bash
@@ -16,7 +16,8 @@ First use asks for **Accessibility** permission (System Settings → Privacy & S
 from a terminal, macOS attributes the permission to that terminal app until Aide ships as a signed `.app`.
 
 Env: `AIDE_REPO` (source tree, defaults to this checkout), `AIDE_PYTHON`, `AIDE_DATA_DIR`,
-`AIDE_OLLAMA_URL`. Styling uses system fonts and semantic colors only; brand styling stays out of the repo.
+`AIDE_OLLAMA_URL`. Styling uses system fonts and semantic colors; an optional per-user accent can be set with
+`defaults write com.milin.aide accentHex -string RRGGBB` (delete the key to go back to the system accent).
 
 ## Build a release app
 

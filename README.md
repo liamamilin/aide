@@ -1,14 +1,54 @@
-<h1 align="center">AI Desktop Assistant</h1>
-<p align="center"><em>Always-on AI assistant for macOS — select text → <code>⌘⌃L</code> → ask in one keystroke, or press <code>⌘⌃S</code> to capture a screenshot region and ask. Local LLM, zero uploads.</em></p>
+<h1 align="center">Aide</h1>
+<p align="center"><em>A native macOS entry point to a local AI: press <code>⌘⌃L</code>, say what you want — or select text first — and Aide does it. Local Ollama models, nothing uploaded.</em></p>
 
 <p align="center"><a href="README.zh.md">中文</a> | <strong>English</strong></p>
 
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
-[![PyQt5](https://img.shields.io/badge/UI-PyQt5-green.svg)](https://pypi.org/project/PyQt5/)
+[![macOS](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey.svg)]()
 [![Ollama](https://img.shields.io/badge/LLM-Ollama-orange.svg)](https://ollama.com)
-[![macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
+[![Swift](https://img.shields.io/badge/UI-SwiftUI%20%2F%20AppKit-blue.svg)]()
 
 ---
+
+## Aide (native app)
+
+The native app is a SwiftUI/AppKit shell (`macos/`) around the same headless Python core (`ai_desktop/core`) used by the legacy Qt app. It is Apple-silicon only for now.
+
+| What you do | What happens |
+|---|---|
+| Press `⌘⌃L` and type a request ("打开备忘录", "找最近修改的 PDF", "查看备忘录有多少条") | The **Quick Panel** runs it with the local desktop tools; found apps and files show up as items you can open or reveal in Finder |
+| Select text, then `⌘⌃L` | Pick an action (translate, explain, summarize, rewrite, or your own — number keys, arrows, Enter) or type your own instruction; `⌘↩` continues in the Workspace, `↩` copies and returns to your app |
+| Press `⌘⌃S`, drag a region | A new Workspace chat opens with the screenshot attached (needs a vision-capable model) |
+| Open **Workspace** from the menu bar | Conversation history and search, streaming Markdown answers (tables, lists, code with copy), regenerate, edit your last question, agent and model switching |
+| Ask Aide to change something (delete a note or a reminder, append to a note, …) | A confirmation shows the exact action first; nothing runs without your approval |
+
+Settings (menu bar → 设置…, `⌘,`): Ollama address and thinking mode, a recordable Quick Panel hotkey, custom agents and custom quick actions; sampling parameters are under "高级".
+
+**Not in the native app yet:** the desktop pet, web search and the Bash tool. These stay in the legacy Qt app (below).
+
+### Install
+
+1. Download `Aide-<version>-arm64.dmg` from [Releases](https://github.com/liamamilin/aide/releases) and drag `Aide` into Applications.
+2. The build is **not notarized** (no Developer ID certificate yet): open it once, then System Settings → Privacy & Security → "Open Anyway", or `xattr -dr com.apple.quarantine /Applications/Aide.app`.
+3. Install [Ollama](https://ollama.com), run `ollama serve`, and pull a model (`ollama pull qwen3:14b`).
+4. Allow **Accessibility** (reads the selected text), **Screen Recording** (if macOS asks on the first `⌘⌃S`) and, when you ask for them, **Automation** for Notes and Reminders.
+
+Signing: a local build is signed with a stable local identity when one is in your keychain (so permission grants survive rebuilds), otherwise ad-hoc. Release DMGs are ad-hoc signed and not notarized.
+
+### Build from source
+
+```bash
+pip install -r requirements-dev.txt && pip install -e .
+./scripts/build_native.sh --smoke      # dist/Aide.app and dist/Aide-<version>-arm64.dmg
+cd macos && swift test                  # Swift tests (spawns the real core against a fake Ollama)
+```
+
+Details: [macos/README.md](macos/README.md). Your history is shared with the legacy app (`~/Library/Application Support/ai-desktop-assistant/`).
+
+---
+
+## Legacy Qt app
+
+The original PyQt5 app (floating button, desktop pet, web search, Bash tool) still works and is described below.
 
 ## Three Ways to Open
 

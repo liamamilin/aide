@@ -20,10 +20,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             do { try await client.start() } catch { NSLog("Aide core failed to start: \(error)") }
         }
-        let model = QuickPanelModel(provider: client)
+        let model = QuickPanelModel(provider: client, ask: client)
         let controller = QuickPanelController(model: model, reader: SelectionReader())
         self.controller = controller
-        controller.onNoSelection = { [weak self] in self?.workspace?.show() }
         let workspace = WorkspaceWindowController(model: WorkspaceModel(provider: client))
         self.workspace = workspace
         let hotkeys = HotkeySettings { [weak self] combo in
@@ -35,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = SettingsWindowController(model: SettingsModel(provider: client), hotkey: hotkeys)
         self.settings = settings
         workspace.model.onOpenSettings = { settings.show() }
+        model.onOpenConversation = { id in Task { @MainActor in workspace.show(conversationID: id) } }
         model.onContinue = { selection, action, answer in
             Task { @MainActor in
                 let id = try? await client.createConversation(

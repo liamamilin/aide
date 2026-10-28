@@ -17,6 +17,7 @@ public struct SettingsView: View {
                 .tabItem { Label("动作", systemImage: "bolt") }
         }
         .frame(width: 560, height: 480)
+        .tint(Theme.accent)
         .task { await model.load() }
     }
 }

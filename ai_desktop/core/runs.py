@@ -41,6 +41,10 @@ class _Message:
     images: tuple[str, ...] = ()
 
 
+_RESULT_TOOLS = frozenset({"find_apps", "find_files", "list_notes", "list_reminders"})
+_RESULT_BYTES = 32_000
+
+
 class _ActiveRun:
     def __init__(self, broker: ConfirmationBroker | None = None) -> None:
         self.cancelled = threading.Event()
@@ -188,8 +192,15 @@ class RunService:
         def on_event(event: RunEvent) -> None:
             if event.kind not in {RunEventKind.TOOL_STARTED, RunEventKind.TOOL_UPDATED, RunEventKind.TOOL_FINISHED}:
                 return
-            self._emit("run.tool", {"run_id": run_id, "call_id": event.local_call_id, "tool": event.tool_name,
-                                    "state": event.kind.value, "status": event.status})
+            data = {"run_id": run_id, "call_id": event.local_call_id, "tool": event.tool_name,
+                    "state": event.kind.value, "status": event.status}
+            # Real results of the read-only lookups, for the shell to show as openable items. They come from
+            # the tool itself, never from the model's wording.
+            if (event.kind == RunEventKind.TOOL_FINISHED and event.tool_name in _RESULT_TOOLS
+                    and event.output is not None and not event.output.error
+                    and len(event.output.text) <= _RESULT_BYTES):
+                data["output"] = event.output.text
+            self._emit("run.tool", data)
             if on_tool is not None:
                 try:
                     on_tool(event)

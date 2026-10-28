@@ -5,12 +5,19 @@ import SwiftUI
 /// light/dark and the user's accent. Brand styling is applied elsewhere, never committed here.
 public struct QuickPanelView: View {
     @Bindable var model: QuickPanelModel
+    private enum Field { case input, panel }
+    @FocusState private var focus: Field?
 
     public init(model: QuickPanelModel) { self.model = model }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
+            if showsInput {
+                if !model.selection.isEmpty { header; Divider().opacity(0.5) }
+                inputRow
+            } else {
+                header
+            }
             Divider().opacity(0.5)
             content
             Divider().opacity(0.5)
@@ -18,11 +25,18 @@ public struct QuickPanelView: View {
         }
         .frame(width: 560)
         .background(.regularMaterial)
+        .tint(Theme.accent)
         .focusable()
         .focusEffectDisabled()
+        .focused($focus, equals: .panel)
+        .onAppear { focus = showsInput ? .input : .panel }
+        .onChange(of: model.focusRequest) { _, _ in focus = showsInput ? .input : .panel }
+        .onChange(of: model.phase) { _, _ in focus = showsInput ? .input : .panel }
         .onKeyPress(.escape) { model.escape(); return .handled }
         .onKeyPress(.return, phases: .down) { press in
-            if press.modifiers.contains(.command) { model.continueInWorkspace() } else { model.confirm() }
+            if press.modifiers.contains(.command) {
+                if model.pendingConfirmation != nil { model.respond(approved: true) } else { model.continueInWorkspace() }
+            } else { model.confirm() }
             return .handled
         }
         .onKeyPress(.upArrow) { model.moveHighlight(-1); return .handled }
@@ -34,18 +48,53 @@ public struct QuickPanelView: View {
         }
     }
 
+    /// Phases that take a typed request. Without the core's conversation path (tests) the field is hidden.
+    private var showsInput: Bool {
+        model.canAsk && [.ready, .noSelection, .needsAccessibility].contains(model.phase)
+    }
+
+    private var inputRow: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "sparkle").foregroundStyle(.secondary)
+            TextField(model.selection.isEmpty ? "想做什么？例如：打开备忘录、找最近修改的 PDF"
+                                              : "或者直接说你想怎么处理这段文字", text: $model.askText)
+                .textFieldStyle(.plain)
+                .focused($focus, equals: .input)
+                .onSubmit { model.confirm() }
+                .onKeyPress(.escape) { model.escape(); return .handled }
+                // Number keys and arrows pick an action while the field is empty; otherwise they type.
+                .onKeyPress(characters: .decimalDigits) { press in
+                    guard model.askText.isEmpty, model.phase == .ready, let n = Int(press.characters) else { return .ignored }
+                    model.choose(index: n - 1)
+                    return .handled
+                }
+                .onKeyPress(.upArrow) { model.moveHighlight(-1); return .handled }
+                .onKeyPress(.downArrow) { model.moveHighlight(1); return .handled }
+        }
+        .font(.system(size: 15))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
+    }
+
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: "text.cursor").foregroundStyle(.secondary)
-            Text(model.selection.isEmpty ? "未选中文字" : model.selection)
+            Image(systemName: headerSymbol).foregroundStyle(.secondary)
+            Text(headerText)
                 .lineLimit(2)
                 .truncationMode(.tail)
-                .foregroundStyle(model.selection.isEmpty ? .secondary : .primary)
+                .foregroundStyle(model.selection.isEmpty && !model.isAsk ? .secondary : .primary)
             Spacer(minLength: 0)
         }
         .font(.system(size: 13))
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+
+    private var headerSymbol: String { model.askedConversationID != nil || model.activeAction == nil && !model.askText.isEmpty ? "sparkle" : "text.cursor" }
+
+    private var headerText: String {
+        if model.activeAction == nil, !model.askText.isEmpty { return model.askText }
+        return model.selection.isEmpty ? "未选中文字" : model.selection
     }
 
     @ViewBuilder private var content: some View {
@@ -55,10 +104,12 @@ public struct QuickPanelView: View {
         case .ready:
             actionList
         case .noSelection:
-            message("先在任意应用里选中一段文字，再按快捷键。", symbol: "cursorarrow.rays")
+            if model.canAsk { EmptyView() } else {
+                message("先在任意应用里选中一段文字，再按快捷键。", symbol: "cursorarrow.rays")
+            }
         case .needsAccessibility:
             VStack(alignment: .leading, spacing: 10) {
-                message("需要「辅助功能」权限才能读取其他应用里的选中文字。允许后再按一次快捷键。", symbol: "lock.shield")
+                message("读取其他应用里选中的文字需要「辅助功能」权限；直接输入要做的事不受影响。", symbol: "lock.shield")
                 Button("打开辅助功能设置") { SelectionReader.openAccessibilitySettings() }
                     .padding(.horizontal, 16).padding(.bottom, 12)
             }
@@ -78,7 +129,7 @@ public struct QuickPanelView: View {
                 .font(.system(size: 14))
                 .padding(.horizontal, 10)
                 .frame(height: 32)
-                .background(index == model.highlighted ? Color.accentColor.opacity(0.18) : .clear,
+                .background(index == model.highlighted ? Theme.accent.opacity(0.18) : .clear,
                             in: RoundedRectangle(cornerRadius: 7))
                 .contentShape(Rectangle())
                 .onTapGesture { model.choose(index: index) }
@@ -93,17 +144,45 @@ public struct QuickPanelView: View {
                 if case .failed(let reason) = model.phase {
                     Label(reason, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                 }
-                if model.output.isEmpty, model.phase == .running {
+                ForEach(model.steps) { step in
+                    HStack(spacing: 6) {
+                        switch step.state {
+                        case .running: ProgressView().controlSize(.mini)
+                        case .succeeded: Image(systemName: "checkmark.circle").foregroundStyle(.secondary)
+                        case .failed: Image(systemName: "exclamationmark.circle").foregroundStyle(.orange)
+                        }
+                        Text(step.state == .failed ? "\(ToolLabels.title(step.name)) 未成功" : ToolLabels.title(step.name))
+                            .foregroundStyle(step.state == .failed ? Color.orange : Color.secondary)
+                    }
+                    .font(.system(size: 12))
+                    if let result = step.result { ToolResultView(result: result) { model.onDismissKeepingFocus() } }
+                }
+                if let notice = model.notice { Text(notice).font(.system(size: 12)).foregroundStyle(.secondary) }
+                if let request = model.pendingConfirmation { confirmation(request) }
+                if model.output.isEmpty, model.phase == .running, model.steps.isEmpty, model.pendingConfirmation == nil {
                     Text(model.isThinking ? "思考中…" : "等待响应…").foregroundStyle(.secondary)
                 }
-                // Plain reading text; a card is only for code/quotes, which arrive with the Workspace.
-                Text(model.output).textSelection(.enabled).lineSpacing(3)
+                MessageText(model.output)
             }
             .font(.system(size: 14))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
         }
         .frame(minHeight: 120, maxHeight: 360)
+    }
+
+    private func confirmation(_ request: ConfirmRequest) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("需要你确认", systemImage: "hand.raised").font(.system(size: 12, weight: .medium))
+            Text(request.preview).font(.system(size: 13)).textSelection(.enabled)
+            if !request.reason.isEmpty { Text(request.reason).font(.system(size: 11)).foregroundStyle(.secondary) }
+            HStack {
+                Button("拒绝") { model.respond(approved: false) }
+                Button("允许") { model.respond(approved: true) }.buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(10)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func message(_ text: String, symbol: String) -> some View {
@@ -119,14 +198,20 @@ public struct QuickPanelView: View {
             Text(statusText).foregroundStyle(.secondary)
             Spacer()
             switch model.phase {
-            case .ready: hint("↩", "运行")
+            case .ready: hint("↩", model.askText.isEmpty ? "运行" : "发送")
+            case .noSelection, .needsAccessibility: if model.canAsk { hint("↩", "发送") }
             case .done:
                 hint("⌘↩", "继续追问")
                 hint("↩", "复制并返回")
             case .failed, .cancelled: hint("↩", "重试")
             default: EmptyView()
             }
-            hint("esc", model.phase == .running ? "停止" : "关闭")
+            if model.pendingConfirmation != nil {
+                hint("⌘↩", "允许")
+                hint("esc", "拒绝")
+            } else {
+                hint("esc", model.phase == .running ? "停止" : "关闭")
+            }
         }
         .font(.system(size: 12))
         .padding(.horizontal, 16)
@@ -135,7 +220,7 @@ public struct QuickPanelView: View {
 
     private var statusText: String {
         switch model.phase {
-        case .running: return model.activeAction.map { "\($0.name)中…" } ?? ""
+        case .running: return model.activeAction.map { "\($0.name)中…" } ?? "处理中…"
         case .done: return model.activeAction?.name ?? ""
         case .cancelled: return "已停止"
         default: return ""

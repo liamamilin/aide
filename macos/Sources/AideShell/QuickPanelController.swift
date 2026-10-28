@@ -34,13 +34,10 @@ public final class QuickPanelController {
         host.view.layer?.masksToBounds = true
         panel.contentViewController = host
         model.onClose = { [weak self] copied in self?.close(copying: copied) }
+        model.onDismissKeepingFocus = { [weak self] in self?.close(copying: nil, restoreFocus: false) }
     }
 
     public var isVisible: Bool { panel.isVisible }
-
-    /// ⌘⌃L with nothing selected has nothing to act on, so it opens the Workspace instead of an empty panel.
-    /// A missing Accessibility permission is not "nothing selected": that still shows the permission hint.
-    public var onNoSelection: () -> Void = {}
 
     /// Hotkey entry point: capture first (the source app is still frontmost), then show.
     public func toggle() {
@@ -49,11 +46,6 @@ public final class QuickPanelController {
         NSLog("Aide hotkey: panel requested, front=%@", previousApp?.localizedName ?? "?")
         Task {
             let selection = await reader.read()
-            if selection == .empty {
-                previousApp = nil
-                onNoSelection()
-                return
-            }
             show()
             await model.present(selection)
         }
@@ -85,13 +77,13 @@ public final class QuickPanelController {
         panel.makeKeyAndOrderFront(nil)
     }
 
-    private func close(copying text: String?) {
+    private func close(copying text: String?, restoreFocus: Bool = true) {
         if let text {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
         }
         panel.orderOut(nil)
-        previousApp?.activate()
+        if restoreFocus { previousApp?.activate() }
         previousApp = nil
     }
 }

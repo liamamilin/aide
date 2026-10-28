@@ -22,7 +22,8 @@ public struct ConfirmRequest: Sendable, Equatable, Identifiable {
 public enum RunUpdate: Sendable, Equatable {
     case delta(kind: String, text: String)
     /// `state` is tool_started / tool_updated / tool_finished; `status` carries the tool's own phase or result.
-    case tool(callID: String, name: String, state: String, status: String)
+    /// `output` is the lookup tool's own JSON (apps, files, notes, reminders); empty for everything else.
+    case tool(callID: String, name: String, state: String, status: String, output: String = "")
     case confirm(ConfirmRequest)
     case finished(status: String, text: String, error: String, errorCode: String)
 }
@@ -94,7 +95,8 @@ struct RunRouter {
             return .delta(kind: event.data["kind"]?.stringValue ?? "content", text: event.data["text"]?.stringValue ?? "")
         case "run.tool":
             return .tool(callID: event.data["call_id"]?.stringValue ?? "", name: event.data["tool"]?.stringValue ?? "",
-                         state: event.data["state"]?.stringValue ?? "", status: event.data["status"]?.stringValue ?? "")
+                         state: event.data["state"]?.stringValue ?? "", status: event.data["status"]?.stringValue ?? "",
+                         output: event.data["output"]?.stringValue ?? "")
         case "run.confirm_request":
             guard let id = event.data["confirmation_id"]?.stringValue else { return nil }
             return .confirm(ConfirmRequest(id: id, callID: event.data["call_id"]?.stringValue ?? "",
