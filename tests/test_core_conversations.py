@@ -204,6 +204,8 @@ def test_send_with_a_shell_prepared_screenshot_reaches_a_vision_model(env, monke
     assert sent["images"] == [base64.b64encode(_PNG).decode()]
     saved = storage.get_conversation(convo_id).messages[0]
     assert len(saved.images) == 1 and saved.images[0].endswith(".prepared.png")
+    reopened = chats.get({"id": convo_id})["messages"]
+    assert reopened[0]["images"] == saved.images and reopened[1].get("images") is None   # history restores the picture
 
 
 def test_images_are_refused_for_text_only_models_and_bad_files(env, monkeypatch, tmp_path):

@@ -5,6 +5,7 @@ import SwiftUI
 public struct WorkspaceView: View {
     @Bindable var model: WorkspaceModel
     @State private var sidebarSelection: Int?
+    @State private var followsBottom = true
 
     public init(model: WorkspaceModel) { self.model = model }
 
@@ -116,14 +117,35 @@ public struct WorkspaceView: View {
                 .padding(.horizontal, 24)
                 .padding(.vertical, 20)
                 .frame(maxWidth: .infinity)
+                .background(ScrollFollower { followsBottom = $0 })
             }
+            // New text follows only while the reader is at the bottom; scrolling up to read stops it.
             .onChange(of: model.turns.last?.content) { _, _ in
-                if let last = model.turns.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                if followsBottom { scrollToLatest(proxy) }
             }
             .onChange(of: model.turns.count) { _, _ in
-                if let last = model.turns.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                if followsBottom || model.turns.last?.role == .user { scrollToLatest(proxy) }
             }
+            .onChange(of: model.selectedID) { _, _ in
+                followsBottom = true
+                DispatchQueue.main.async { scrollToLatest(proxy) }
+            }
+            .overlay(alignment: .bottom) {
+                if !followsBottom {
+                    Button { followsBottom = true; scrollToLatest(proxy) } label: {
+                        Label("回到最新", systemImage: "arrow.down").font(.system(size: 12))
+                    }
+                    .buttonStyle(.borderedProminent).controlSize(.small).clipShape(Capsule())
+                    .padding(.bottom, 10)
+                    .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.15), value: followsBottom)
         }
+    }
+
+    private func scrollToLatest(_ proxy: ScrollViewProxy) {
+        if let last = model.turns.last { proxy.scrollTo(last.id, anchor: .bottom) }
     }
 
     /// Applies from the next message on, in new and existing conversations alike.
@@ -396,4 +418,38 @@ struct Composer: View {
     }
 
     private var canSend: Bool { model.canSend }
+}
+
+/// Reports whether the enclosing scroll view sits at the bottom. It reacts to the scroll position only,
+/// so content growing underneath a reader who scrolled up never reads as "back at the bottom".
+struct ScrollFollower: NSViewRepresentable {
+    let onChange: (Bool) -> Void
+
+    final class Probe: NSView {
+        var onChange: (Bool) -> Void = { _ in }
+        private var token: NSObjectProtocol?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil, token == nil else { return }
+            DispatchQueue.main.async { [weak self] in self?.attach() }
+        }
+
+        private func attach() {
+            guard let scroll = enclosingScrollView else { return }
+            scroll.contentView.postsBoundsChangedNotifications = true
+            token = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification,
+                                                           object: scroll.contentView, queue: .main) { [weak self, weak scroll] _ in
+                guard let scroll, let document = scroll.documentView else { return }
+                let distance = document.frame.height - scroll.contentView.bounds.maxY
+                self?.onChange(distance < 60)
+            }
+        }
+
+        deinit { if let token { NotificationCenter.default.removeObserver(token) } }
+    }
+
+    func makeNSView(context: Context) -> Probe { let probe = Probe(); probe.onChange = onChange; return probe }
+
+    func updateNSView(_ view: Probe, context: Context) { view.onChange = onChange }
 }

@@ -133,6 +133,17 @@ final class WorkspaceModelTests: XCTestCase {
         model.clearAttachment()
     }
 
+    func testReopenedConversationRestoresItsScreenshot() async {
+        let stub = StubWorkspace()
+        stub.details[1] = ConversationDetail(id: 1, title: "t", agentID: "general_assistant", messages: [
+            ChatMessage(id: 1, role: .user, content: "这是什么", images: ["/tmp/shot.prepared.png"]),
+            ChatMessage(id: 2, role: .assistant, content: "一只猫")])
+        let model = WorkspaceModel(provider: stub)
+        await model.start()                           // resumes the latest conversation
+        XCTAssertEqual(model.turns.first?.imageURL?.path, "/tmp/shot.prepared.png")
+        XCTAssertNil(model.turns.last?.imageURL)
+    }
+
     func testFirstSendCreatesConversationWithSelectedAgent() async {
         let stub = StubWorkspace()
         let model = WorkspaceModel(provider: stub)

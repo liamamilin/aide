@@ -161,8 +161,7 @@ public struct QuickPanelView: View {
                 if model.output.isEmpty, model.phase == .running, model.steps.isEmpty, model.pendingConfirmation == nil {
                     Text(model.isThinking ? "思考中…" : "等待响应…").foregroundStyle(.secondary)
                 }
-                // Plain reading text; a card is only for code/quotes, which arrive with the Workspace.
-                Text(model.output).textSelection(.enabled).lineSpacing(3)
+                MessageText(model.output)
             }
             .font(.system(size: 14))
             .frame(maxWidth: .infinity, alignment: .leading)

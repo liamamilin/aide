@@ -16,7 +16,11 @@ public struct ChatMessage: Sendable, Equatable, Identifiable {
     public let id: Int
     public let role: Role
     public var content: String
-    public init(id: Int, role: Role, content: String) { self.id = id; self.role = role; self.content = content }
+    /// Absolute paths of images sent with this (user) message that are still on disk.
+    public var images: [String]
+    public init(id: Int, role: Role, content: String, images: [String] = []) {
+        self.id = id; self.role = role; self.content = content; self.images = images
+    }
 }
 
 public struct AgentInfo: Sendable, Equatable, Identifiable {
@@ -86,7 +90,8 @@ extension CoreClient: WorkspaceProviding {
         let messages = (result["messages"]?.arrayValue ?? []).compactMap { row -> ChatMessage? in
             guard let id = row["id"]?.intValue, let role = row["role"]?.stringValue.flatMap(ChatMessage.Role.init(rawValue:))
             else { return nil }
-            return ChatMessage(id: id, role: role, content: row["content"]?.stringValue ?? "")
+            return ChatMessage(id: id, role: role, content: row["content"]?.stringValue ?? "",
+                               images: (row["images"]?.arrayValue ?? []).compactMap(\.stringValue))
         }
         return ConversationDetail(id: id, title: result["title"]?.stringValue ?? "",
                                   agentID: result["agent_id"]?.stringValue ?? "", messages: messages)

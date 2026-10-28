@@ -30,6 +30,17 @@ def _invalid(message: str) -> protocol.ProtocolError:
     return protocol.ProtocolError(protocol.ERR_INVALID, message)
 
 
+def _existing_images(message: storage.Message) -> list[str]:
+    """Absolute paths of the message's managed images that are still on disk."""
+    found: list[str] = []
+    for path in message.images or []:
+        relative = image_utils.managed_relative_path(path)
+        resolved = image_utils.resolve_managed_path(relative) if relative else None
+        if resolved is not None and resolved.is_file():
+            found.append(str(resolved))
+    return found
+
+
 def collapse_versions(messages: list[storage.Message]) -> list[dict[str, Any]]:
     """One answer per user turn: the active generation if any, else the latest assistant message."""
     turns: list[dict[str, Any]] = []
@@ -48,7 +59,8 @@ def collapse_versions(messages: list[storage.Message]) -> list[dict[str, Any]]:
             flush()
             pending = []
             last_user = message
-            turns.append({"id": message.id, "role": "user", "content": message.content})
+            turns.append({"id": message.id, "role": "user", "content": message.content,
+                          "images": _existing_images(message)})
         elif message.role == "assistant" and last_user is not None:
             pending.append(message)
     flush()

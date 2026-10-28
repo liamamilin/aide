@@ -198,7 +198,10 @@ public final class WorkspaceModel {
             guard generation == mine else { return }
             selectedID = id
             selectedAgentID = detail.agentID
-            turns = detail.messages.map { Turn(id: "m\($0.id)", role: $0.role, content: $0.content) }
+            turns = detail.messages.map {
+                Turn(id: "m\($0.id)", role: $0.role, content: $0.content,
+                     imageURL: $0.images.first.map { URL(fileURLWithPath: $0) })
+            }
             errorMessage = nil
             focusRequest += 1
         } catch {
