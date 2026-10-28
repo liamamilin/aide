@@ -96,4 +96,38 @@ final class WorkspaceCoreTests: XCTestCase {
         XCTAssertTrue(after.isEmpty)
         await core.stop()
     }
+
+    func testSettingsAndCustomAgentRoundTripAgainstRealCore() async throws {
+        let fake = try FakeOllamaProcess(mode: "stream")
+        defer { fake.stop() }
+        let (core, dataDir) = try makeCore(ollamaURL: fake.url)
+        defer { try? FileManager.default.removeItem(at: dataDir) }
+        try await core.start()
+
+        var settings = try await core.settings()
+        XCTAssertEqual(settings.baseURL, fake.url)
+        settings.think = .off
+        settings.temperature = 0.2
+        settings.numCtx = 4096
+        let stored = try await core.saveSettings(settings)
+        XCTAssertEqual(stored.think, .off)
+        XCTAssertEqual(stored.temperature, 0.2)
+        let reloaded = try await core.settings()
+        XCTAssertEqual(reloaded.numCtx, 4096)
+
+        settings.temperature = 9
+        do { _ = try await core.saveSettings(settings); XCTFail("out-of-range value accepted") } catch {}
+
+        let status = try await core.testConnection(baseURL: fake.url)
+        XCTAssertTrue(status.ok)
+
+        try await core.saveAgent(id: nil, name: "周报", icon: "📝", systemPrompt: "写周报")
+        let custom = try await core.agents().first { $0.name == "周报" }
+        XCTAssertEqual(custom?.builtin, false)
+        XCTAssertEqual(custom?.systemPrompt, "写周报")
+        try await core.deleteAgent(id: custom!.id)
+        let remaining = try await core.agents()
+        XCTAssertFalse(remaining.contains { $0.name == "周报" })
+        await core.stop()
+    }
 }

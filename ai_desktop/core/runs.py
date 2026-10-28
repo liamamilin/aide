@@ -106,6 +106,10 @@ class RunService:
         return self._agents.all_agents
 
     @property
+    def agent_manager(self) -> AgentManager:
+        return self._agents
+
+    @property
     def profiles(self) -> ModelProfileManager:
         return self._profiles
 

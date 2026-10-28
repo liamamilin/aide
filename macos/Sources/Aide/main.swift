@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkey: Hotkey?
     private var controller: QuickPanelController?
     private var workspace: WorkspaceWindowController?
+    private var settings: SettingsWindowController?
     private var statusItem: NSStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -22,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.controller = controller
         let workspace = WorkspaceWindowController(model: WorkspaceModel(provider: client))
         self.workspace = workspace
+        settings = SettingsWindowController(model: SettingsModel(provider: client))
         model.onContinue = { selection, action, answer in
             Task { @MainActor in
                 let id = try? await client.createConversation(
@@ -37,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(withTitle: "快捷面板  ⌘⌃L", action: #selector(showPanel), keyEquivalent: "").target = self
         menu.addItem(withTitle: "打开 Aide", action: #selector(showWorkspace), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "设置…", action: #selector(showSettings), keyEquivalent: ",").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "退出 Aide", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
@@ -51,6 +54,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showWorkspace() { workspace?.show() }
+
+    @objc private func showSettings() { settings?.show() }
 
     @objc private func showPanel() { controller?.toggle() }
 

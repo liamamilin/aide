@@ -22,7 +22,12 @@ public struct ChatMessage: Sendable, Equatable, Identifiable {
 public struct AgentInfo: Sendable, Equatable, Identifiable {
     public let id: String
     public let name: String
-    public init(id: String, name: String) { self.id = id; self.name = name }
+    public let icon: String
+    public let systemPrompt: String
+    public let builtin: Bool
+    public init(id: String, name: String, icon: String = "", systemPrompt: String = "", builtin: Bool = true) {
+        self.id = id; self.name = name; self.icon = icon; self.systemPrompt = systemPrompt; self.builtin = builtin
+    }
 }
 
 public struct ModelList: Sendable, Equatable {
@@ -98,7 +103,9 @@ extension CoreClient: WorkspaceProviding {
         let result = try await call("agents.list")
         return (result["agents"]?.arrayValue ?? []).compactMap { row in
             guard let id = row["id"]?.stringValue, let name = row["name"]?.stringValue else { return nil }
-            return AgentInfo(id: id, name: name)
+            return AgentInfo(id: id, name: name, icon: row["icon"]?.stringValue ?? "",
+                             systemPrompt: row["system_prompt"]?.stringValue ?? "",
+                             builtin: row["builtin"]?.boolValue ?? true)
         }
     }
 

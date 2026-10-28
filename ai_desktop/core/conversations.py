@@ -70,7 +70,9 @@ class ConversationService:
                 "messages": collapse_versions(conversation.messages)}
 
     def agents(self, _params: dict[str, Any]) -> dict[str, Any]:
-        return {"agents": [{"id": a.id, "name": a.name, "icon": a.icon} for a in self._runs.agents]}
+        builtin = {a.id for a in self._runs.agent_manager.builtin_agents}
+        return {"agents": [{"id": a.id, "name": a.name, "icon": a.icon, "system_prompt": a.system_prompt,
+                            "builtin": a.id in builtin} for a in self._runs.agents]}
 
     def models(self, _params: dict[str, Any]) -> dict[str, Any]:
         return {"models": list_models(), "current": self._current_model()}
