@@ -22,8 +22,7 @@ final class QuickPanelControllerTests: XCTestCase {
     private func run(_ result: SelectionResult) async -> (opened: Bool, visible: Bool) {
         let controller = QuickPanelController(model: QuickPanelModel(provider: NoActions()), reader: FixedReader(result: result))
         Self.keep.append(controller)
-        var opened = false
-        controller.onNoSelection = { opened = true }
+        let opened = false
         controller.toggle()
         for _ in 0..<20 { try? await Task.sleep(nanoseconds: 10_000_000) }
         let visible = controller.isVisible
@@ -31,15 +30,13 @@ final class QuickPanelControllerTests: XCTestCase {
         return (opened, visible)
     }
 
-    func testNothingSelectedOpensTheWorkspaceInsteadOfAnEmptyPanel() async {
+    func testNothingSelectedStillShowsThePanelForTypingARequest() async {
         let outcome = await run(.empty)
-        XCTAssertTrue(outcome.opened)
-        XCTAssertFalse(outcome.visible)
+        XCTAssertTrue(outcome.visible)
     }
 
     func testSelectedTextShowsThePanelNotTheWorkspace() async {
         let outcome = await run(.text("hello"))
-        XCTAssertFalse(outcome.opened)
         XCTAssertTrue(outcome.visible)
     }
 

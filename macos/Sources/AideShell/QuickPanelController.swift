@@ -38,10 +38,6 @@ public final class QuickPanelController {
 
     public var isVisible: Bool { panel.isVisible }
 
-    /// ⌘⌃L with nothing selected has nothing to act on, so it opens the Workspace instead of an empty panel.
-    /// A missing Accessibility permission is not "nothing selected": that still shows the permission hint.
-    public var onNoSelection: () -> Void = {}
-
     /// Hotkey entry point: capture first (the source app is still frontmost), then show.
     public func toggle() {
         if panel.isVisible { Task { await toggleWhileVisible() }; return }
@@ -49,11 +45,6 @@ public final class QuickPanelController {
         NSLog("Aide hotkey: panel requested, front=%@", previousApp?.localizedName ?? "?")
         Task {
             let selection = await reader.read()
-            if selection == .empty {
-                previousApp = nil
-                onNoSelection()
-                return
-            }
             show()
             await model.present(selection)
         }
