@@ -117,6 +117,17 @@ class ConversationService:
         except ValueError as exc:
             raise _invalid(str(exc)) from exc
 
+    def set_agent(self, params: dict[str, Any]) -> dict[str, Any]:
+        conversation = self._require(params)
+        agent_id = params.get("agent_id")
+        if not any(a.id == agent_id for a in self._runs.agents):
+            raise _invalid("助手不存在。")
+        with self._lock:
+            if conversation.id in self._busy:
+                raise _invalid("这个对话正在生成回答。")
+        storage.update_conversation_agent(conversation.id, agent_id)
+        return {}
+
     def send(self, params: dict[str, Any]) -> dict[str, Any]:
         text = params.get("text")
         if not isinstance(text, str) or not text.strip():

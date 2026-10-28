@@ -94,6 +94,18 @@ public final class WorkspaceModel {
         Task { await reloadAgents() }
     }
 
+    /// New chats just remember the choice; an open conversation switches agent for its next turn.
+    public func chooseAgent(_ id: String) async {
+        let previous = selectedAgentID
+        selectedAgentID = id
+        guard let conversation = selectedID, id != previous else { return }
+        do { try await provider.setAgent(conversationID: conversation, agentID: id) }
+        catch {
+            selectedAgentID = previous
+            errorMessage = "无法切换助手"
+        }
+    }
+
     /// Picks up agents created or removed in Settings; keeps the selection when it still exists.
     public func reloadAgents() async {
         guard let latest = try? await provider.agents() else { return }

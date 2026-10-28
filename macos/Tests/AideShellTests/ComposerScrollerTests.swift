@@ -11,6 +11,7 @@ private struct EmptyWorkspace: WorkspaceProviding {
     func deleteConversation(id: Int) async throws {}
     func renameConversation(id: Int, title: String) async throws {}
     func agents() async throws -> [AgentInfo] { [] }
+    func setAgent(conversationID: Int, agentID: String) async throws {}
     func models() async throws -> ModelList { ModelList(models: [], current: "") }
     func selectModel(_ model: String) async throws {}
     func send(conversationID: Int, text: String) async throws -> RunHandle { throw CoreError.remote(code: "x", message: "") }

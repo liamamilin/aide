@@ -133,3 +133,17 @@ def test_think_off_setting_is_sent_once_capability_is_probed_and_cached(env, mon
     assert _finished(events)["status"] == "succeeded"
     assert fake.requests[-1]["payload"]["think"] is False
     assert [r.get("path") for r in fake.requests].count("/api/show") == 1
+
+
+def test_set_agent_applies_to_the_next_turn_and_validates(env):
+    chats, fake, events = env
+    convo_id = chats.create({"agent_id": "general_assistant"})["id"]
+    with pytest.raises(ProtocolError):
+        chats.set_agent({"id": convo_id, "agent_id": "nope"})
+    chats.set_agent({"id": convo_id, "agent_id": "translator"})
+    assert chats.get({"id": convo_id})["agent_id"] == "translator"
+    translator = next(a for a in chats.agents({})["agents"] if a["id"] == "translator")
+    fake.enqueue(_frame("ok"), _frame("", done=True, done_reason="stop"))
+    chats.send({"conversation_id": convo_id, "text": "hi"})
+    assert _finished(events)["status"] == "succeeded"
+    assert fake.requests[0]["payload"]["messages"][0]["content"] == translator["system_prompt"]

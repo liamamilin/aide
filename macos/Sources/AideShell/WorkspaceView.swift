@@ -99,11 +99,11 @@ public struct WorkspaceView: View {
         }
     }
 
-    /// Switchable before the first message; a started conversation keeps its agent.
+    /// Applies from the next message on, in new and existing conversations alike.
     private var agentMenu: some View {
         Menu {
             ForEach(model.agents) { agent in
-                Button { model.selectedAgentID = agent.id } label: {
+                Button { Task { await model.chooseAgent(agent.id) } } label: {
                     if agent.id == model.selectedAgentID { Label("\(agent.icon) \(agent.name)", systemImage: "checkmark") }
                     else { Text("\(agent.icon) \(agent.name)") }
                 }
@@ -112,8 +112,8 @@ public struct WorkspaceView: View {
             let current = model.agents.first { $0.id == model.selectedAgentID }
             Text(current.map { "\($0.icon) \($0.name)" } ?? "助手").font(.system(size: 12))
         }
-        .disabled(model.selectedID != nil)
-        .help(model.selectedID == nil ? "选择助手" : "这个对话已开始，助手不能更换。新对话可以选择其他助手。")
+        .disabled(model.isSending)
+        .help(model.isSending ? "正在回答，完成后可切换助手" : "选择助手，下一条消息起生效")
     }
 
     private var modelMenu: some View {

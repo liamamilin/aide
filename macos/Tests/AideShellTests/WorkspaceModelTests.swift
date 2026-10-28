@@ -26,6 +26,12 @@ private final class StubWorkspace: WorkspaceProviding, @unchecked Sendable {
     func deleteConversation(id: Int) async throws { deleted.append(id); summaries.removeAll { $0.id == id } }
     func renameConversation(id: Int, title: String) async throws {}
     func agents() async throws -> [AgentInfo] { [AgentInfo(id: "general_assistant", name: "通用助手")] }
+    private(set) var agentChanges: [(Int, String)] = []
+    var failSetAgent = false
+    func setAgent(conversationID: Int, agentID: String) async throws {
+        if failSetAgent { throw CoreError.remote(code: "invalid", message: "x") }
+        agentChanges.append((conversationID, agentID))
+    }
     func models() async throws -> ModelList { ModelList(models: ["m1", "m2"], current: "m1") }
     func selectModel(_ model: String) async throws {}
     func send(conversationID: Int, text: String) async throws -> RunHandle {
@@ -168,6 +174,7 @@ private struct FocusStub: WorkspaceProviding {
     func deleteConversation(id: Int) async throws {}
     func renameConversation(id: Int, title: String) async throws {}
     func agents() async throws -> [AgentInfo] { [] }
+    func setAgent(conversationID: Int, agentID: String) async throws {}
     func models() async throws -> ModelList { ModelList(models: [], current: "") }
     func selectModel(_ model: String) async throws {}
     func send(conversationID: Int, text: String) async throws -> RunHandle {
@@ -197,5 +204,19 @@ final class WorkspaceResumeTests: XCTestCase {
         await model.start()
         XCTAssertEqual(model.selectedID, 1)
         XCTAssertEqual(model.turns.map(\.content), ["q", "a"])
+    }
+
+    func testChoosingAgentInAnOpenConversationPersistsAndRollsBackOnFailure() async {
+        let stub = StubWorkspace()
+        let model = WorkspaceModel(provider: stub)
+        await model.start()
+        XCTAssertEqual(model.selectedID, 1)
+        await model.chooseAgent("translator")
+        XCTAssertEqual(model.selectedAgentID, "translator")
+        XCTAssertEqual(stub.agentChanges.first?.1, "translator")
+        stub.failSetAgent = true
+        await model.chooseAgent("code_expert")
+        XCTAssertEqual(model.selectedAgentID, "translator")
+        XCTAssertEqual(model.errorMessage, "无法切换助手")
     }
 }
