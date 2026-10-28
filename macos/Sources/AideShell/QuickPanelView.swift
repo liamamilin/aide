@@ -25,6 +25,7 @@ public struct QuickPanelView: View {
         }
         .frame(width: 560)
         .background(.regularMaterial)
+        .tint(Theme.accent)
         .focusable()
         .focusEffectDisabled()
         .focused($focus, equals: .panel)
@@ -128,7 +129,7 @@ public struct QuickPanelView: View {
                 .font(.system(size: 14))
                 .padding(.horizontal, 10)
                 .frame(height: 32)
-                .background(index == model.highlighted ? Color.accentColor.opacity(0.18) : .clear,
+                .background(index == model.highlighted ? Theme.accent.opacity(0.18) : .clear,
                             in: RoundedRectangle(cornerRadius: 7))
                 .contentShape(Rectangle())
                 .onTapGesture { model.choose(index: index) }

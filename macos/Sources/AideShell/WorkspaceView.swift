@@ -17,6 +17,7 @@ public struct WorkspaceView: View {
             detail
         }
         .navigationTitle(model.title)
+        .tint(Theme.accent)
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button { model.newChat() } label: { Label("新对话", systemImage: "square.and.pencil") }
@@ -235,7 +236,7 @@ private struct TurnView: View {
                         Text(turn.content).textSelection(.enabled)
                     }
                     .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+                    .background(Theme.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
                 }
             }
         case .assistant:
@@ -399,7 +400,7 @@ struct Composer: View {
                 Image(systemName: model.isSending ? "stop.circle.fill" : "arrow.up.circle.fill").font(.system(size: 22))
             }
             .buttonStyle(.plain)
-            .foregroundStyle(canSend || model.isSending ? Color.accentColor : .secondary)
+            .foregroundStyle(canSend || model.isSending ? Theme.accent : .secondary)
             .disabled(!model.isSending && !canSend)
             .help(model.isSending ? "停止" : "发送")
         }

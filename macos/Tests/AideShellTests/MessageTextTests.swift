@@ -45,3 +45,12 @@ final class MessageTextTests: XCTestCase {
         XCTAssertEqual(MessageText.blocks("| a | b |"), [.prose("| a | b |")])
     }
 }
+
+final class ThemeTests: XCTestCase {
+    func testAccentOverrideParsesHexAndIgnoresGarbage() {
+        XCTAssertNotNil(Theme.parse("D94D32"))
+        XCTAssertNotNil(Theme.parse("#ad3523"))
+        XCTAssertNil(Theme.parse("red"))
+        XCTAssertNil(Theme.parse("12345"))
+    }
+}

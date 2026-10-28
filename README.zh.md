@@ -1,14 +1,54 @@
-<h1 align="center">AI 桌面助手</h1>
-<p align="center"><em>macOS 常驻 AI 助手 — 选中文字 → <code>⌘⌃L</code> → 一键提问，<code>⌘⌃S</code> 框选截图提问，本地 LLM 零上传。</em></p>
+<h1 align="center">Aide</h1>
+<p align="center"><em>macOS 原生的本地 AI 入口：按 <code>⌘⌃L</code> 说出想做的事，或先选中文字再按——Aide 来完成。本地 Ollama 模型，零上传。</em></p>
 
 <p align="center"><strong>中文</strong> | <a href="README.md">English</a></p>
 
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
-[![PyQt5](https://img.shields.io/badge/UI-PyQt5-green.svg)](https://pypi.org/project/PyQt5/)
+[![macOS](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey.svg)]()
 [![Ollama](https://img.shields.io/badge/LLM-Ollama-orange.svg)](https://ollama.com)
-[![macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
+[![Swift](https://img.shields.io/badge/UI-SwiftUI%20%2F%20AppKit-blue.svg)]()
 
 ---
+
+## Aide（原生版）
+
+原生版是 SwiftUI/AppKit 外壳（`macos/`），下面是和旧版 Qt 应用共用的无界面 Python 核心（`ai_desktop/core`）。目前只提供 Apple 芯片版本。
+
+| 你做什么 | 发生什么 |
+|---|---|
+| 按 `⌘⌃L`，直接输入要做的事（“打开备忘录”“找最近修改的 PDF”“查看备忘录有多少条”） | **快捷面板**用本地桌面工具执行；找到的应用和文件会显示成可直接打开、可在 Finder 中显示的条目 |
+| 选中文字后按 `⌘⌃L` | 选一个动作（翻译、解释、摘要、改写或你自己的——数字键、方向键、回车）或输入自己的要求；`⌘↩` 转入工作区继续，`↩` 复制并回到原应用 |
+| 按 `⌘⌃S` 并框选区域 | 打开工作区新对话并附上截图（需要支持看图的模型） |
+| 菜单栏打开**工作区** | 历史与搜索、流式 Markdown 回答（表格、列表、可复制代码）、重新生成、编辑上一条提问、切换助手与模型 |
+| 让 Aide 修改数据（删除备忘录或提醒、追加备忘录等） | 先弹出确认，显示将要执行的确切操作；未经你同意不会执行 |
+
+设置（菜单栏 → 设置…，`⌘,`）：Ollama 地址与思考模式、可录制的快捷面板快捷键、自定义助手与自定义快捷动作；采样参数在“高级”里。
+
+**原生版暂未包含：**桌面宠物、联网搜索、Bash 工具，这些仍在旧版 Qt 应用中（见下）。
+
+### 安装
+
+1. 从 [Releases](https://github.com/liamamilin/aide/releases) 下载 `Aide-<版本>-arm64.dmg`，把 `Aide` 拖进“应用程序”。
+2. 目前**未经 Apple 公证**（没有 Developer ID 证书）：先打开一次，再到 系统设置 → 隐私与安全性 点“仍要打开”，或执行 `xattr -dr com.apple.quarantine /Applications/Aide.app`。
+3. 安装 [Ollama](https://ollama.com)，运行 `ollama serve` 并拉取模型（`ollama pull qwen3:14b`）。
+4. 允许**辅助功能**（读取选中文字）、**屏幕录制**（第一次 `⌘⌃S` 时 macOS 若询问），以及需要时的备忘录/提醒事项**自动化**权限。
+
+签名：本地构建在钥匙串里有稳定的本地证书时会用它签名（这样重新构建后权限不丢），否则为临时签名。Release 的 DMG 是临时签名、未公证。
+
+### 从源码构建
+
+```bash
+pip install -r requirements-dev.txt && pip install -e .
+./scripts/build_native.sh --smoke      # dist/Aide.app 与 dist/Aide-<版本>-arm64.dmg
+cd macos && swift test                  # Swift 测试（会用假的 Ollama 启动真实核心）
+```
+
+详情见 [macos/README.md](macos/README.md)。历史记录与旧版共用（`~/Library/Application Support/ai-desktop-assistant/`）。
+
+---
+
+## 旧版 Qt 应用
+
+最初的 PyQt5 应用（悬浮按钮、桌面宠物、联网搜索、Bash 工具）仍可使用，说明如下。
 
 ## 三入口
 
