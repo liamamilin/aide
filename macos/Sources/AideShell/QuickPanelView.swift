@@ -57,8 +57,11 @@ public struct QuickPanelView: View {
         case .noSelection:
             message("先在任意应用里选中一段文字，再按快捷键。", symbol: "cursorarrow.rays")
         case .needsAccessibility:
-            message("需要「辅助功能」权限才能读取其他应用里的选中文字。请在 系统设置 → 隐私与安全性 → 辅助功能 中允许 Aide。",
-                    symbol: "lock.shield")
+            VStack(alignment: .leading, spacing: 10) {
+                message("需要「辅助功能」权限才能读取其他应用里的选中文字。允许后再按一次快捷键。", symbol: "lock.shield")
+                Button("打开辅助功能设置") { SelectionReader.openAccessibilitySettings() }
+                    .padding(.horizontal, 16).padding(.bottom, 12)
+            }
         case .running, .done, .cancelled, .failed:
             result
         }

@@ -33,6 +33,15 @@ public struct SelectionReader: SelectionReading {
         return .empty
     }
 
+    public static let accessibilitySettingsURL = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+
+    /// One deliberate click opens the right Settings pane. Not called automatically: the system's own
+    /// permission dialog on top of the panel's explanation would be two popups for one missing permission.
+    public static func openAccessibilitySettings() {
+        NSWorkspace.shared.open(accessibilitySettingsURL)
+    }
+
     public static func requestAccessibility() {
         // Literal key: the C constant is a mutable global that Swift 6 flags.
         _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)

@@ -67,4 +67,11 @@ final class QuickPanelControllerTests: XCTestCase {
         for _ in 0..<30 { try? await Task.sleep(nanoseconds: 10_000_000) }
         XCTAssertFalse(controller.isVisible, "nothing selected toggles the panel off")
     }
+
+    func testMissingPermissionShowsOnlyThePanelHintAndHasASettingsLink() async {
+        let outcome = await run(.needsAccessibility)
+        XCTAssertTrue(outcome.visible)      // the panel explains; no system dialog is raised on its own
+        XCTAssertFalse(outcome.opened)
+        XCTAssertEqual(SelectionReader.accessibilitySettingsURL.scheme, "x-apple.systempreferences")
+    }
 }

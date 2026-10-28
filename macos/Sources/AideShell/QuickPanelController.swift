@@ -54,7 +54,6 @@ public final class QuickPanelController {
                 onNoSelection()
                 return
             }
-            if selection == .needsAccessibility { SelectionReader.requestAccessibility() }
             show()
             await model.present(selection)
         }
