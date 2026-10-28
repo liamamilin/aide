@@ -21,16 +21,23 @@ public struct SelectionReader: SelectionReading {
             NSLog("Aide selection: front=%@ accessibility NOT trusted", app)
             return .needsAccessibility
         }
-        if let text = accessibilitySelection(), !text.isEmpty {
+        if let text = accessibilitySelection(), Self.isMeaningful(text) {
             NSLog("Aide selection: front=%@ via accessibility (%d chars)", app, text.count)
             return .text(text)
         }
-        if let text = await copiedSelection(), !text.isEmpty {
+        if let text = await copiedSelection(), Self.isMeaningful(text) {
             NSLog("Aide selection: front=%@ via simulated copy (%d chars)", app, text.count)
             return .text(text)
         }
         NSLog("Aide selection: front=%@ nothing found (AX empty, copy gave no change)", app)
         return .empty
+    }
+
+    /// Text worth acting on: has a letter, digit or emoji. Some apps report a cursor or placeholder glyph
+    /// (a block "█", an object-replacement character, blanks) as the "selection"; that is no selection.
+    public static func isMeaningful(_ text: String) -> Bool {
+        text.unicodeScalars.contains { $0.properties.isAlphabetic || $0.properties.numericType != nil
+            || $0.properties.isEmojiPresentation }
     }
 
     public static let accessibilitySettingsURL = URL(

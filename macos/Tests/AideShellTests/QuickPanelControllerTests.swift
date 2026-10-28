@@ -74,4 +74,9 @@ final class QuickPanelControllerTests: XCTestCase {
         XCTAssertFalse(outcome.opened)
         XCTAssertEqual(SelectionReader.accessibilitySettingsURL.scheme, "x-apple.systempreferences")
     }
+
+    func testPlaceholderGlyphsAreNotASelection() {
+        for junk in ["█", "\u{FFFC}", "  \n", "▌ ", "\u{FFFD}"] { XCTAssertFalse(SelectionReader.isMeaningful(junk), junk) }
+        for text in ["a", "你好", "42", "😀", "  hello  ", "—x—"] { XCTAssertTrue(SelectionReader.isMeaningful(text), text) }
+    }
 }
