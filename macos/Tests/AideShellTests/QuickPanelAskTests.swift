@@ -198,4 +198,43 @@ final class QuickPanelAskTests: XCTestCase {
         XCTAssertNotNil(ToolResultView.open("/nonexistent/aide-\(UUID().uuidString).pdf"))
         XCTAssertNotNil(ToolResultView.reveal("/nonexistent/aide-\(UUID().uuidString).pdf"))
     }
+
+    func testAfterAStopANewQuestionCanBeTypedAndTheOldRunStaysSilent() async {
+        let stub = AskStub()
+        let model = QuickPanelModel(provider: Actions(), ask: stub)
+        await model.present(.empty)
+        model.askText = "写一篇长文章"
+        model.confirm()
+        await settle()
+        let first = stub.continuation
+        model.escape()
+        XCTAssertEqual(model.phase, .cancelled)
+        XCTAssertTrue(model.acceptsTypedRequest, "the field is back after a stop")
+        model.askText = "换个问题"
+        model.confirm()                                     // a typed question goes out, it is not a retry
+        await settle()
+        XCTAssertEqual(stub.sent.map(\.1), ["写一篇长文章", "换个问题"])
+        XCTAssertEqual(model.lastAsk, "换个问题")
+        XCTAssertEqual(model.askText, "")
+        first?.yield(.delta(kind: "content", text: "旧"))
+        await settle()
+        XCTAssertEqual(model.output, "", "nothing from the stopped run gets in")
+        stub.continuation?.yield(.delta(kind: "content", text: "新"))
+        await settle()
+        XCTAssertEqual(model.output, "新")
+    }
+
+    func testEmptyFieldAfterAStopRetriesTheSameRequest() async {
+        let stub = AskStub()
+        let model = QuickPanelModel(provider: Actions(), ask: stub)
+        await model.present(.empty)
+        model.askText = "找 PDF"
+        model.confirm()
+        await settle()
+        model.escape()
+        model.confirm()
+        await settle()
+        XCTAssertEqual(stub.sent.map(\.1), ["找 PDF", "找 PDF"])
+        XCTAssertEqual(model.phase, .running)
+    }
 }

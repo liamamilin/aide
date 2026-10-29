@@ -15,7 +15,7 @@ from ai_desktop.core.admission import check_admission
 from ai_desktop.core.capabilities import vision_capable
 from ai_desktop.core.runs import RESULT_BYTES, RESULT_TOOLS, RunService, _Message
 from ai_desktop.llm.chat_client import ChatClient, list_models
-from ai_desktop.llm.events import ChatResult
+from ai_desktop.llm.events import ChatResult, ResultStatus
 from ai_desktop.llm.run_types import RunEvent, RunEventKind
 from ai_desktop.llm.tool_run import assemble_tool_run
 from ai_desktop.services.session_objects import SessionObjects
@@ -48,7 +48,15 @@ def collapse_versions(messages: list[storage.Message]) -> list[dict[str, Any]]:
     last_user: storage.Message | None = None
 
     def flush() -> None:
-        if last_user is None or not pending:
+        if last_user is None:
+            return
+        if not pending:
+            # No answer text (the model failed, said nothing, or the run was stopped) but lookups did return:
+            # keep what they found so a reopened conversation still shows it.
+            saved = [g for g in storage.list_generations(last_user.id) if (g.config_snapshot or {}).get("tool_results")]
+            if saved:
+                turns.append({"id": -saved[-1].id, "role": "assistant", "content": "",
+                              "tool_results": saved[-1].config_snapshot["tool_results"]})
             return
         active = storage.get_active_generation(last_user.id)
         chosen = next((m for m in pending if active and m.id == active.assistant_message_id), pending[-1])
@@ -221,7 +229,7 @@ class ConversationService:
             user_message = storage.save_message(conversation.id, "user", text, images or None)
         if not conversation.messages and not conversation.title:
             self._auto_title(conversation.id, text)
-        messages = [_Message(m["role"], m["content"]) for m in history] + [
+        messages = [_Message(m["role"], m["content"]) for m in history if m["content"]] + [
             _Message("user", text, user_message.id, tuple(images))]
         admission, tools_note = self._admit_tools(agent, resolved)
         if admission is None:
@@ -261,15 +269,20 @@ class ConversationService:
                 shown_results.append({"tool": event.tool_name, "output": event.output.text})
 
         def persist(result: ChatResult) -> None:
+            snapshot = {"model": request.model, "run_id": request.run_id, "allowed_tools": tool_names,
+                        "tool_results": shown_results, "admission": admission[0].record() if admission else None}
             try:
                 if result.ok and result.text:
                     assistant = storage.save_message(conversation.id, "assistant", result.text)
                     storage.save_generation(
                         user_message.id, request.request_id, status="succeeded", answer=result.text,
                         assistant_message_id=assistant.id, active=True,
-                        config_snapshot={"model": request.model, "run_id": request.run_id,
-                                         "allowed_tools": tool_names, "tool_results": shown_results,
-                                         "admission": admission[0].record() if admission else None})
+                        config_snapshot=snapshot)
+                elif shown_results:
+                    storage.save_generation(
+                        user_message.id, request.request_id,
+                        status="cancelled" if result.status == ResultStatus.CANCELLED else "failed",
+                        config_snapshot=snapshot)
             finally:
                 with self._lock:
                     self._busy.discard(conversation.id)

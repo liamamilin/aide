@@ -202,3 +202,37 @@ def test_reopened_conversation_carries_the_lookup_results_it_showed(env):
     answer = chats.get({"id": convo})["messages"][-1]
     assert answer["role"] == "assistant" and answer["tool_results"][0]["tool"] == "find_apps"
     assert "results" in answer["tool_results"][0]["output"]
+
+
+def _lookup_then(env, second):
+    chats, _runs, fake, events, _runner = env
+    convo = chats.create({"agent_id": "general_assistant"})["id"]
+    fake.enqueue(_tool_turn("find_apps", {"query": "Safari"}))
+    second(fake)
+    chats.send({"conversation_id": convo, "text": "找 Safari"})
+    finished = _next(events, "run.finished")
+    return chats, convo, finished
+
+
+def test_lookup_results_survive_a_model_failure_after_the_tool_ran(env):
+    chats, convo, finished = _lookup_then(env, lambda fake: fake.enqueue(status=500))
+    assert finished["status"] == "failed"
+    messages = chats.get({"id": convo})["messages"]
+    assert [m["role"] for m in messages] == ["user", "assistant"]
+    assert messages[-1]["content"] == "" and messages[-1]["tool_results"][0]["tool"] == "find_apps"
+
+
+def test_lookup_results_survive_an_empty_final_answer(env):
+    chats, convo, _finished = _lookup_then(env, lambda fake: fake.enqueue(*_final("")))
+    messages = chats.get({"id": convo})["messages"]
+    assert messages[-1]["role"] == "assistant" and "results" in messages[-1]["tool_results"][0]["output"]
+
+
+def test_an_answerless_turn_is_not_fed_back_to_the_model(env):
+    chats, convo, _finished = _lookup_then(env, lambda fake: fake.enqueue(status=500))
+    _chats, _runs, fake, events, _runner = env
+    fake.enqueue(*_final("好"))
+    chats.send({"conversation_id": convo, "text": "再来"})
+    assert _next(events, "run.finished")["status"] == "succeeded"
+    sent = fake.requests[-1]["payload"]["messages"]
+    assert not any(m["role"] == "assistant" and not m.get("content") for m in sent)

@@ -24,7 +24,9 @@ private final class StubWorkspace: WorkspaceProviding, @unchecked Sendable {
     }
     func conversation(id: Int) async throws -> ConversationDetail { details[id]! }
     func createConversation(agentID: String?, seed: [(role: ChatMessage.Role, content: String)]) async throws -> Int {
-        created.append((agentID, seed.count)); return 2
+        created.append((agentID, seed.count))
+        if let gate = createGate { for await _ in gate { break } }
+        return 2
     }
     func deleteConversation(id: Int) async throws { deleted.append(id); summaries.removeAll { $0.id == id } }
     func renameConversation(id: Int, title: String) async throws {}
@@ -40,10 +42,14 @@ private final class StubWorkspace: WorkspaceProviding, @unchecked Sendable {
     private(set) var modes: [SendMode] = []
     private(set) var sentImages: [[String]] = []
     var failSend: Error?
+    /// Hold `createConversation` / `send` until the test lets go, like a slow core.
+    var createGate: AsyncStream<Void>?
+    var sendGate: AsyncStream<Void>?
     func send(conversationID: Int, text: String, mode: SendMode, images: [String]) async throws -> RunHandle {
         sent.append((conversationID, text))
         modes.append(mode)
         sentImages.append(images)
+        if let gate = sendGate { for await _ in gate { break } }
         if let failure = failSend { throw failure }
         var c: AsyncStream<RunUpdate>.Continuation!
         let stream = AsyncStream<RunUpdate> { c = $0 }
@@ -157,6 +163,74 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertEqual(steps.count, 1, "unreadable saved output is skipped, not shown")
         guard case .files(let items)? = steps.first?.result else { return XCTFail("expected files") }
         XCTAssertEqual(items.first?.name, "报告.pdf")
+    }
+
+    func testStopWhileTheConversationIsBeingCreatedSendsNothingAndGivesTheQuestionBack() async {
+        let stub = StubWorkspace()
+        var release: AsyncStream<Void>.Continuation!
+        stub.createGate = AsyncStream<Void> { release = $0 }
+        let model = WorkspaceModel(provider: stub)
+        await model.start()
+        model.newChat()
+        model.draft = "hello"
+        model.send()
+        await settle()
+        XCTAssertTrue(model.isSending)
+        model.stop()
+        XCTAssertFalse(model.isSending)
+        XCTAssertEqual(model.draft, "hello", "a question that never left is not lost")
+        XCTAssertTrue(model.turns.isEmpty)
+        release.yield(())
+        await settle()
+        XCTAssertTrue(stub.sent.isEmpty, "nothing is sent after stopping")
+        XCTAssertFalse(model.isSending)
+    }
+
+    func testStopBeforeTheRunHandleReturnsCancelsItWhenItArrivesAndIgnoresItsOutput() async {
+        let stub = StubWorkspace()
+        var release: AsyncStream<Void>.Continuation!
+        stub.sendGate = AsyncStream<Void> { release = $0 }
+        let model = WorkspaceModel(provider: stub)
+        await model.start()
+        model.newChat()
+        model.draft = "hello"
+        model.send()
+        await settle()
+        XCTAssertEqual(stub.sent.count, 1)                  // already on its way to the core
+        model.stop()
+        XCTAssertFalse(model.isSending)
+        XCTAssertEqual(model.turns.last?.stopped, true)
+        release.yield(())
+        await settle()
+        XCTAssertEqual(stub.cancelled, 1, "the run that started late is cancelled at once")
+        stub.continuation?.yield(.delta(kind: "content", text: "迟到"))
+        await settle()
+        XCTAssertEqual(model.turns.last?.content, "")
+        XCTAssertFalse(model.isSending)
+    }
+
+    func testNewQuestionAfterAStoppedOneIsNotOverwrittenByTheOldRun() async {
+        let stub = StubWorkspace()
+        var release: AsyncStream<Void>.Continuation!
+        stub.sendGate = AsyncStream<Void> { release = $0 }
+        let model = WorkspaceModel(provider: stub)
+        await model.start()
+        model.newChat()
+        model.draft = "one"
+        model.send()
+        await settle()
+        model.stop()
+        stub.sendGate = nil
+        model.draft = "two"
+        model.send()
+        await settle()
+        let second = stub.continuation                      // the new run's stream, before the old send returns
+        release.yield(())
+        await settle()
+        second?.yield(.delta(kind: "content", text: "B"))
+        await settle()
+        XCTAssertEqual(model.turns.last?.content, "B")
+        XCTAssertEqual(stub.sent.map(\.1), ["one", "two"])
     }
 
     func testFirstSendCreatesConversationWithSelectedAgent() async {
