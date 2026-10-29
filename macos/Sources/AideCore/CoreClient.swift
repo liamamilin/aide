@@ -21,6 +21,7 @@ public actor CoreClient {
     private var pending: [String: CheckedContinuation<JSONValue, Error>] = [:]
     private var nextID = 0
     private var router = RunRouter()
+    private var flushScheduled = false
     private var eventContinuation: AsyncStream<CoreEvent>.Continuation?
 
     /// Core-originated notifications (`core.ready`, run events, ...).
@@ -29,7 +30,8 @@ public actor CoreClient {
     public init(launch: Launch) {
         self.launch = launch
         var continuation: AsyncStream<CoreEvent>.Continuation!
-        self.events = AsyncStream { continuation = $0 }
+        // Nothing in the app reads this stream; keep only the latest so it never grows with every token.
+        self.events = AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation = $0 }
         self.eventContinuation = continuation
     }
 
@@ -105,7 +107,10 @@ public actor CoreClient {
         guard let message = try? JSONDecoder().decode(WireMessage.self, from: line) else { return }
         if let name = message.event {
             let event = CoreEvent(name: name, data: message.data ?? .null)
-            router.route(event)
+            if router.route(event), !flushScheduled {
+                flushScheduled = true
+                Task { try? await Task.sleep(nanoseconds: 40_000_000); self.flushDeltas() }
+            }
             eventContinuation?.yield(event)
         } else if let id = message.id, let continuation = pending.removeValue(forKey: id) {
             if let failure = message.error {
@@ -114,6 +119,11 @@ public actor CoreClient {
                 continuation.resume(returning: message.result ?? .null)
             }
         }
+    }
+
+    private func flushDeltas() {
+        flushScheduled = false
+        router.flushAll()
     }
 
     private func handleTermination() {

@@ -18,8 +18,15 @@ public struct ChatMessage: Sendable, Equatable, Identifiable {
     public var content: String
     /// Absolute paths of images sent with this (user) message that are still on disk.
     public var images: [String]
-    public init(id: Int, role: Role, content: String, images: [String] = []) {
-        self.id = id; self.role = role; self.content = content; self.images = images
+    /// What lookup tools returned for this (assistant) answer, as saved with it: `(tool, raw JSON output)`.
+    public var toolResults: [ToolOutput]
+    public struct ToolOutput: Sendable, Equatable {
+        public let tool: String
+        public let output: String
+        public init(tool: String, output: String) { self.tool = tool; self.output = output }
+    }
+    public init(id: Int, role: Role, content: String, images: [String] = [], toolResults: [ToolOutput] = []) {
+        self.id = id; self.role = role; self.content = content; self.images = images; self.toolResults = toolResults
     }
 }
 
@@ -91,7 +98,11 @@ extension CoreClient: WorkspaceProviding {
             guard let id = row["id"]?.intValue, let role = row["role"]?.stringValue.flatMap(ChatMessage.Role.init(rawValue:))
             else { return nil }
             return ChatMessage(id: id, role: role, content: row["content"]?.stringValue ?? "",
-                               images: (row["images"]?.arrayValue ?? []).compactMap(\.stringValue))
+                               images: (row["images"]?.arrayValue ?? []).compactMap(\.stringValue),
+                               toolResults: (row["tool_results"]?.arrayValue ?? []).compactMap { item in
+                                   guard let tool = item["tool"]?.stringValue, let out = item["output"]?.stringValue else { return nil }
+                                   return ChatMessage.ToolOutput(tool: tool, output: out)
+                               })
         }
         return ConversationDetail(id: id, title: result["title"]?.stringValue ?? "",
                                   agentID: result["agent_id"]?.stringValue ?? "", messages: messages)

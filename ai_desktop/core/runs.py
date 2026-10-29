@@ -41,8 +41,8 @@ class _Message:
     images: tuple[str, ...] = ()
 
 
-_RESULT_TOOLS = frozenset({"find_apps", "find_files", "list_notes", "list_reminders"})
-_RESULT_BYTES = 32_000
+RESULT_TOOLS = frozenset({"find_apps", "find_files", "list_notes", "list_reminders"})
+RESULT_BYTES = 32_000
 
 
 class _ActiveRun:
@@ -196,9 +196,9 @@ class RunService:
                     "state": event.kind.value, "status": event.status}
             # Real results of the read-only lookups, for the shell to show as openable items. They come from
             # the tool itself, never from the model's wording.
-            if (event.kind == RunEventKind.TOOL_FINISHED and event.tool_name in _RESULT_TOOLS
+            if (event.kind == RunEventKind.TOOL_FINISHED and event.tool_name in RESULT_TOOLS
                     and event.output is not None and not event.output.error
-                    and len(event.output.text) <= _RESULT_BYTES):
+                    and len(event.output.text) <= RESULT_BYTES):
                 data["output"] = event.output.text
             self._emit("run.tool", data)
             if on_tool is not None:

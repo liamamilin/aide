@@ -13,7 +13,7 @@ from ai_desktop import config
 from ai_desktop.core import protocol
 from ai_desktop.core.admission import check_admission
 from ai_desktop.core.capabilities import vision_capable
-from ai_desktop.core.runs import RunService, _Message
+from ai_desktop.core.runs import RESULT_BYTES, RESULT_TOOLS, RunService, _Message
 from ai_desktop.llm.chat_client import ChatClient, list_models
 from ai_desktop.llm.events import ChatResult
 from ai_desktop.llm.run_types import RunEvent, RunEventKind
@@ -52,7 +52,13 @@ def collapse_versions(messages: list[storage.Message]) -> list[dict[str, Any]]:
             return
         active = storage.get_active_generation(last_user.id)
         chosen = next((m for m in pending if active and m.id == active.assistant_message_id), pending[-1])
-        turns.append({"id": chosen.id, "role": "assistant", "content": chosen.content})
+        turn = {"id": chosen.id, "role": "assistant", "content": chosen.content}
+        shown = None
+        if active and active.assistant_message_id == chosen.id:
+            shown = (active.config_snapshot or {}).get("tool_results")
+        if shown:
+            turn["tool_results"] = shown
+        turns.append(turn)
 
     for message in messages:
         if message.role == "user":
@@ -243,6 +249,17 @@ class ConversationService:
             if not tool_names:
                 context, broker = None, None
 
+        shown_results: list[dict[str, str]] = []
+        observe = self._observer(conversation.id)
+
+        def on_tool(event: RunEvent) -> None:
+            observe(event)
+            # What the lookup tools really returned, kept with the answer so a reopened conversation shows it again.
+            if (event.kind == RunEventKind.TOOL_FINISHED and event.tool_name in RESULT_TOOLS
+                    and event.output is not None and not event.output.error
+                    and len(event.output.text) <= RESULT_BYTES):
+                shown_results.append({"tool": event.tool_name, "output": event.output.text})
+
         def persist(result: ChatResult) -> None:
             try:
                 if result.ok and result.text:
@@ -251,14 +268,14 @@ class ConversationService:
                         user_message.id, request.request_id, status="succeeded", answer=result.text,
                         assistant_message_id=assistant.id, active=True,
                         config_snapshot={"model": request.model, "run_id": request.run_id,
-                                         "allowed_tools": tool_names,
+                                         "allowed_tools": tool_names, "tool_results": shown_results,
                                          "admission": admission[0].record() if admission else None})
             finally:
                 with self._lock:
                     self._busy.discard(conversation.id)
 
         self._runs.launch(request, on_finished=persist, context=context, broker=broker,
-                          on_tool=self._observer(conversation.id))
+                          on_tool=on_tool)
         return {"run_id": request.run_id, "conversation_id": conversation.id, "user_message_id": user_message.id,
                 "model": request.model, "tools": tool_names, "tools_note": tools_note}
 

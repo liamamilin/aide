@@ -151,3 +151,24 @@ final class RunRouterToolEventTests: XCTestCase {
         XCTAssertEqual(got[1], .confirm(ConfirmRequest(id: "k1", callID: "c1", preview: "删除备忘录：周报", reason: "可恢复")))
     }
 }
+
+final class RunRouterCoalescingTests: XCTestCase {
+    private func delta(_ kind: String, _ text: String) -> CoreEvent {
+        CoreEvent(name: "run.delta", data: .object(["run_id": .string("r1"), "kind": .string(kind), "text": .string(text)]))
+    }
+
+    func testManyTokensBecomeFewUpdatesInOrderAndNothingIsLost() async {
+        var router = RunRouter()
+        let stream = router.register(runID: "r1")
+        XCTAssertTrue(router.route(delta("thinking", "想")))
+        for piece in ["Hel", "lo", " wor", "ld"] { router.route(delta("content", piece)) }
+        router.flushAll()
+        router.route(delta("content", "!"))
+        router.route(CoreEvent(name: "run.finished", data: .object(["run_id": .string("r1"), "status": .string("succeeded")])))
+        var got: [RunUpdate] = []
+        for await update in stream { got.append(update) }
+        XCTAssertEqual(got, [.delta(kind: "thinking", text: "想"), .delta(kind: "content", text: "Hello world"),
+                             .delta(kind: "content", text: "!"),
+                             .finished(status: "succeeded", text: "", error: "", errorCode: "")])
+    }
+}

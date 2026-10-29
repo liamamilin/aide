@@ -52,6 +52,11 @@ public final class QuickPanelModel {
     /// `ask` runs typed requests through the normal conversation path (same core, tools and confirmations).
     public init(provider: RunProviding, ask: WorkspaceProviding? = nil) { self.provider = provider; asker = ask }
 
+    /// Something already changed on the Mac before the request was stopped; stopping cannot undo it.
+    public var keptChanges: Bool {
+        steps.contains { $0.state == .succeeded && !ToolLabels.isLookup($0.name) }
+    }
+
     public var isAsk: Bool { activeAction == nil && askedConversationID != nil }
     public var canAsk: Bool { asker != nil }
 
@@ -137,13 +142,10 @@ public final class QuickPanelModel {
         runTask = Task {
             do {
                 let id = try await asker.createConversation(agentID: nil, seed: [])
-                await MainActor.run { if self.generation == mine { self.askedConversationID = id } }
+                guard await self.isCurrent(mine) else { return }          // stopped before anything was sent
+                await MainActor.run { self.askedConversationID = id }
                 let handle = try await asker.send(conversationID: id, text: material)
-                await MainActor.run {
-                    guard self.generation == mine else { return }
-                    self.handle = handle
-                    if !handle.note.isEmpty { self.notice = handle.note }
-                }
+                guard await self.adopt(handle, for: mine) else { return }
                 for await update in handle.updates {
                     await MainActor.run { if self.generation == mine { self.apply(update) } }
                 }
@@ -153,6 +155,17 @@ public final class QuickPanelModel {
                 }
             }
         }
+    }
+
+    private func isCurrent(_ mine: Int) -> Bool { generation == mine && !Task.isCancelled }
+
+    /// Takes the run handle if this request is still the current one; if the person stopped or moved on while
+    /// it was starting, the run it just got is cancelled at once.
+    private func adopt(_ handle: RunHandle, for mine: Int) async -> Bool {
+        guard isCurrent(mine) else { await handle.cancel(); return false }
+        self.handle = handle
+        if !handle.note.isEmpty { notice = handle.note }
+        return true
     }
 
     /// Answers the pending confirmation; the core runs the action only on an explicit approval.
@@ -177,8 +190,9 @@ public final class QuickPanelModel {
         phase = .running
         runTask = Task { [provider, selection] in
             do {
+                guard await self.isCurrent(mine) else { return }
                 let handle = try await provider.start(actionID: action.id, material: selection)
-                await MainActor.run { if self.generation == mine { self.handle = handle } }
+                guard await self.adopt(handle, for: mine) else { return }
                 for await update in handle.updates {
                     await MainActor.run { if self.generation == mine { self.apply(update) } }
                 }
@@ -246,8 +260,11 @@ public final class QuickPanelModel {
         }
     }
 
+    /// Stops the current request and retires its generation, so nothing it still emits can reach the panel.
     private func cancelRun() {
+        generation += 1
         runTask?.cancel()
+        runTask = nil
         let handle = self.handle
         self.handle = nil
         if let handle { Task { await handle.cancel() } }

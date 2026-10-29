@@ -56,18 +56,45 @@ public protocol RunProviding: Sendable {
 struct RunRouter {
     private var listeners: [String: AsyncStream<RunUpdate>.Continuation] = [:]
     private var early: [String: [RunUpdate]] = [:]
+    /// Streamed text waiting for the next flush: many tiny deltas become one update, so the UI redraws a
+    /// few dozen times a second instead of once per token.
+    private var pendingText: [String: (kind: String, text: String)] = [:]
+    /// Runs that no one registered for (their start failed) must not pile up buffered events.
+    private static let maxEarlyRuns = 8
 
-    mutating func route(_ event: CoreEvent) {
-        guard let runID = event.data["run_id"]?.stringValue, let update = Self.update(from: event) else { return }
+    /// True when a delta was held back and a flush should be scheduled.
+    @discardableResult
+    mutating func route(_ event: CoreEvent) -> Bool {
+        guard let runID = event.data["run_id"]?.stringValue, let update = Self.update(from: event) else { return false }
+        if case .delta(let kind, let text) = update {
+            if let held = pendingText[runID], held.kind != kind { flush(runID) }
+            pendingText[runID, default: (kind, "")].text += text
+            return true
+        }
+        flush(runID)                                         // keep order: held text goes out before this update
+        deliver(update, to: runID)
+        return false
+    }
+
+    mutating func flushAll() { for runID in Array(pendingText.keys) { flush(runID) } }
+
+    private mutating func flush(_ runID: String) {
+        guard let held = pendingText.removeValue(forKey: runID), !held.text.isEmpty else { return }
+        deliver(.delta(kind: held.kind, text: held.text), to: runID)
+    }
+
+    private mutating func deliver(_ update: RunUpdate, to runID: String) {
         if let listener = listeners[runID] {
             listener.yield(update)
             if case .finished = update { listener.finish(); listeners[runID] = nil }
         } else {
+            if early[runID] == nil, early.count >= Self.maxEarlyRuns, let oldest = early.keys.first { early[oldest] = nil }
             early[runID, default: []].append(update)
         }
     }
 
     mutating func register(runID: String) -> AsyncStream<RunUpdate> {
+        flush(runID)
         var continuation: AsyncStream<RunUpdate>.Continuation!
         let stream = AsyncStream<RunUpdate> { continuation = $0 }
         var finished = false
@@ -87,6 +114,7 @@ struct RunRouter {
         }
         listeners.removeAll()
         early.removeAll()
+        pendingText.removeAll()
     }
 
     private static func update(from event: CoreEvent) -> RunUpdate? {

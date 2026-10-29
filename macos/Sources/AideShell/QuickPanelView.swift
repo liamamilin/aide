@@ -34,15 +34,18 @@ public struct QuickPanelView: View {
         .onChange(of: model.phase) { _, _ in focus = showsInput ? .input : .panel }
         .onKeyPress(.escape) { model.escape(); return .handled }
         .onKeyPress(.return, phases: .down) { press in
+            // With the input field showing, plain Return belongs to it (its own submit, IME-safe).
+            if showsInput && !press.modifiers.contains(.command) { return .ignored }
             if press.modifiers.contains(.command) {
                 if model.pendingConfirmation != nil { model.respond(approved: true) } else { model.continueInWorkspace() }
             } else { model.confirm() }
             return .handled
         }
-        .onKeyPress(.upArrow) { model.moveHighlight(-1); return .handled }
-        .onKeyPress(.downArrow) { model.moveHighlight(1); return .handled }
+        // Arrows and digits only drive the action list when no text field is there to edit.
+        .onKeyPress(.upArrow) { showsInput ? .ignored : { model.moveHighlight(-1); return .handled }() }
+        .onKeyPress(.downArrow) { showsInput ? .ignored : { model.moveHighlight(1); return .handled }() }
         .onKeyPress(characters: .decimalDigits) { press in
-            guard let n = Int(press.characters), model.phase == .ready else { return .ignored }
+            guard !showsInput, let n = Int(press.characters), model.phase == .ready else { return .ignored }
             model.choose(index: n - 1)
             return .handled
         }
@@ -51,6 +54,10 @@ public struct QuickPanelView: View {
     /// Phases that take a typed request. Without the core's conversation path (tests) the field is hidden.
     private var showsInput: Bool {
         model.canAsk && [.ready, .noSelection, .needsAccessibility].contains(model.phase)
+    }
+
+    private var pickingAction: Bool {
+        model.phase == .ready && model.askText.isEmpty && !model.selection.isEmpty
     }
 
     private var inputRow: some View {
@@ -62,14 +69,15 @@ public struct QuickPanelView: View {
                 .focused($focus, equals: .input)
                 .onSubmit { model.confirm() }
                 .onKeyPress(.escape) { model.escape(); return .handled }
-                // Number keys and arrows pick an action while the field is empty; otherwise they type.
+                // With a selection and an empty field, a digit or an arrow picks an action. Once anything is
+                // typed (or there is no selection), digits are text and arrows move the cursor.
                 .onKeyPress(characters: .decimalDigits) { press in
-                    guard model.askText.isEmpty, model.phase == .ready, let n = Int(press.characters) else { return .ignored }
+                    guard pickingAction, let n = Int(press.characters) else { return .ignored }
                     model.choose(index: n - 1)
                     return .handled
                 }
-                .onKeyPress(.upArrow) { model.moveHighlight(-1); return .handled }
-                .onKeyPress(.downArrow) { model.moveHighlight(1); return .handled }
+                .onKeyPress(.upArrow) { pickingAction ? { model.moveHighlight(-1); return .handled }() : .ignored }
+                .onKeyPress(.downArrow) { pickingAction ? { model.moveHighlight(1); return .handled }() : .ignored }
         }
         .font(.system(size: 15))
         .padding(.horizontal, 16)
@@ -151,7 +159,8 @@ public struct QuickPanelView: View {
                         case .succeeded: Image(systemName: "checkmark.circle").foregroundStyle(.secondary)
                         case .failed: Image(systemName: "exclamationmark.circle").foregroundStyle(.orange)
                         }
-                        Text(step.state == .failed ? "\(ToolLabels.title(step.name)) 未成功" : ToolLabels.title(step.name))
+                        Text(step.state == .failed ? "\(ToolLabels.title(step.name)) 未成功"
+                             : step.state == .running ? ToolLabels.running(step.name) : ToolLabels.title(step.name))
                             .foregroundStyle(step.state == .failed ? Color.orange : Color.secondary)
                     }
                     .font(.system(size: 12))
@@ -222,7 +231,7 @@ public struct QuickPanelView: View {
         switch model.phase {
         case .running: return model.activeAction.map { "\($0.name)中…" } ?? "处理中…"
         case .done: return model.activeAction?.name ?? ""
-        case .cancelled: return "已停止"
+        case .cancelled: return model.keptChanges ? "已停止后续执行；已完成的操作不会撤销" : "已停止"
         default: return ""
         }
     }
