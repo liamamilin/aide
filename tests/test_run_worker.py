@@ -245,11 +245,14 @@ def test_idle_timeout_before_first_token_and_during_stream(qtbot, ollama_server,
 
 
 def test_active_stream_can_outlive_connection_and_idle_budgets(qtbot, ollama_server):
-    ollama_server.enqueue(*[{"message": {"content": "x"}}] * 8, {"done": True}, delay=0.04)
+    # The stream as a whole (16 x 0.04 s) runs longer than both budgets, while each gap between frames stays far
+    # inside the idle budget, so only a real inactivity timeout could end it. A 0.2 s idle budget left just 5x
+    # headroom over a frame gap, which a stalled shared CI runner can exceed.
+    ollama_server.enqueue(*[{"message": {"content": "x"}}] * 16, {"done": True}, delay=0.04)
     worker = RunWorker([], "SYSTEM")
-    worker.request = replace(worker.request, timeout=0.2, connect_timeout=0.1)
+    worker.request = replace(worker.request, timeout=0.5, connect_timeout=0.3)
     result = run_and_wait(qtbot, worker)
-    assert result.ok and result.text == "xxxxxxxx"
+    assert result.ok and result.text == "x" * 16, (result.error_code, result.error, result.text)
 
 
 def test_truncated_http_body_is_not_success(qtbot, ollama_server):

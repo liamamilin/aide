@@ -247,7 +247,8 @@ private struct TurnView: View {
                 } else {
                     MessageText(turn.content)
                 }
-                if turn.stopped { Text("已停止").font(.system(size: 11)).foregroundStyle(.secondary) }
+                if turn.stopped { Text(turn.steps.contains { $0.state == .succeeded && !ToolLabels.isLookup($0.name) }
+                                        ? "已停止后续执行；已完成的操作不会撤销" : "已停止").font(.system(size: 11)).foregroundStyle(.secondary) }
                 if !turn.streaming && !turn.content.isEmpty {
                     HStack(spacing: 14) {
                         Button {

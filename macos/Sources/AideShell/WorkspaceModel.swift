@@ -120,6 +120,9 @@ public final class WorkspaceModel {
     private let provider: WorkspaceProviding
     private var handle: RunHandle?
     private var generation = 0
+    /// True once the current request has been handed to the core (before that, stopping can take it back).
+    private var sentToCore = false
+    private var pendingQuestion: (text: String, image: URL?)?
 
     public init(provider: WorkspaceProviding) { self.provider = provider }
 
@@ -294,11 +297,15 @@ public final class WorkspaceModel {
         if mode == .send { attachment = nil }
         let reply = Turn(id: UUID().uuidString, role: .assistant, content: "", streaming: true)
         turns.append(reply)
+        sentToCore = false
+        pendingQuestion = (text == Self.defaultImagePrompt && !images.isEmpty ? "" : text, images.first)
         Task {
             do {
                 let conversationID = try await ensureConversation()
+                guard generation == mine else { return }          // stopped while the conversation was being made
+                sentToCore = true
                 let handle = try await provider.send(conversationID: conversationID, text: text, mode: mode, images: images.map(\.path))
-                guard generation == mine else { await handle.cancel(); return }
+                guard generation == mine else { await handle.cancel(); await reloadList(); return }   // stopped before the run came back
                 self.handle = handle
                 if !handle.note.isEmpty { activity = handle.note }
                 for await update in handle.updates where generation == mine { apply(update, to: reply.id) }
@@ -326,10 +333,29 @@ public final class WorkspaceModel {
 
     public func stop() {
         guard isSending else { return }
+        guard handle != nil else { stopBeforeRunStarted(); return }
         let handle = self.handle
         self.handle = nil
         pendingConfirmation = nil
         if let handle { Task { await handle.cancel() } }
+    }
+
+    /// Stop pressed while the conversation is being created or the send has not come back yet. Retiring the
+    /// generation drops everything the pending task would still do; a run that does start is cancelled the moment
+    /// its handle arrives. A question that never left for the core goes back to the input box.
+    private func stopBeforeRunStarted() {
+        generation += 1
+        isSending = false
+        pendingConfirmation = nil
+        activity = nil
+        guard let reply = turns.lastIndex(where: { $0.role == .assistant && $0.streaming }) else { return }
+        if sentToCore {
+            turns[reply].streaming = false
+            turns[reply].stopped = true
+        } else {
+            turns.removeSubrange((reply - 1)...reply)
+            if let question = pendingQuestion { draft = question.text; if let image = question.image { attachment = image } }
+        }
     }
 
     /// Open a conversation created elsewhere (e.g. "continue" from the Quick Panel).

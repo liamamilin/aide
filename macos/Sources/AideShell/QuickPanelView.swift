@@ -32,6 +32,7 @@ public struct QuickPanelView: View {
         .onAppear { focus = showsInput ? .input : .panel }
         .onChange(of: model.focusRequest) { _, _ in focus = showsInput ? .input : .panel }
         .onChange(of: model.phase) { _, _ in focus = showsInput ? .input : .panel }
+        .background(actionShortcuts)
         .onKeyPress(.escape) { model.escape(); return .handled }
         .onKeyPress(.return, phases: .down) { press in
             // With the input field showing, plain Return belongs to it (its own submit, IME-safe).
@@ -51,13 +52,26 @@ public struct QuickPanelView: View {
         }
     }
 
+    /// With the input field showing, typing owns plain digits and arrows (so "2026 年…" is just text, and the
+    /// input method is never interrupted). Actions are picked with the mouse, ⌘1–⌘9, or ⌘↑/⌘↓ then Return.
+    /// These are real key equivalents, so they work while the text field has focus.
+    private var actionShortcuts: some View {
+        ZStack {
+            if showsInput && model.phase == .ready {
+                ForEach(0..<min(9, model.actions.count), id: \.self) { index in
+                    Button("") { model.choose(index: index) }
+                        .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                }
+                Button("") { model.moveHighlight(-1) }.keyboardShortcut(.upArrow, modifiers: .command)
+                Button("") { model.moveHighlight(1) }.keyboardShortcut(.downArrow, modifiers: .command)
+            }
+        }
+        .frame(width: 0, height: 0).opacity(0).allowsHitTesting(false).accessibilityHidden(true)
+    }
+
     /// Phases that take a typed request. Without the core's conversation path (tests) the field is hidden.
     private var showsInput: Bool {
         model.canAsk && [.ready, .noSelection, .needsAccessibility].contains(model.phase)
-    }
-
-    private var pickingAction: Bool {
-        model.phase == .ready && model.askText.isEmpty && !model.selection.isEmpty
     }
 
     private var inputRow: some View {
@@ -69,15 +83,6 @@ public struct QuickPanelView: View {
                 .focused($focus, equals: .input)
                 .onSubmit { model.confirm() }
                 .onKeyPress(.escape) { model.escape(); return .handled }
-                // With a selection and an empty field, a digit or an arrow picks an action. Once anything is
-                // typed (or there is no selection), digits are text and arrows move the cursor.
-                .onKeyPress(characters: .decimalDigits) { press in
-                    guard pickingAction, let n = Int(press.characters) else { return .ignored }
-                    model.choose(index: n - 1)
-                    return .handled
-                }
-                .onKeyPress(.upArrow) { pickingAction ? { model.moveHighlight(-1); return .handled }() : .ignored }
-                .onKeyPress(.downArrow) { pickingAction ? { model.moveHighlight(1); return .handled }() : .ignored }
         }
         .font(.system(size: 15))
         .padding(.horizontal, 16)
@@ -132,7 +137,7 @@ public struct QuickPanelView: View {
                 HStack {
                     Text(action.name)
                     Spacer()
-                    if index < 9 { Text("\(index + 1)").foregroundStyle(.tertiary).monospacedDigit() }
+                    if index < 9 { Text(showsInput ? "⌘\(index + 1)" : "\(index + 1)").foregroundStyle(.tertiary).monospacedDigit() }
                 }
                 .font(.system(size: 14))
                 .padding(.horizontal, 10)
