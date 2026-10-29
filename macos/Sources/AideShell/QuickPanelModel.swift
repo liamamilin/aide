@@ -40,7 +40,8 @@ public final class QuickPanelModel {
     private var runTask: Task<Void, Never>?
     private var handle: RunHandle?
     private var generation = 0
-    private var lastAsk: String?
+    /// The request last sent from the field, shown as the header while it runs.
+    public private(set) var lastAsk: String?
 
     /// Called when the panel should close; `restoreFocus` is false when the user is still reading.
     public var onClose: (_ copied: String?) -> Void = { _ in }
@@ -59,6 +60,15 @@ public final class QuickPanelModel {
 
     public var isAsk: Bool { activeAction == nil && askedConversationID != nil }
     public var canAsk: Bool { asker != nil }
+
+    /// The input field is there: before anything runs, and again after a stop or a failure.
+    public var acceptsTypedRequest: Bool {
+        guard canAsk else { return false }
+        switch phase {
+        case .ready, .noSelection, .needsAccessibility, .cancelled, .failed: return true
+        case .loading, .running, .done: return false
+        }
+    }
 
     public func present(_ capture: SelectionResult) async {
         cancelRun()
@@ -120,7 +130,7 @@ public final class QuickPanelModel {
     /// Return in the input field: run the typed request (the selection, if any, is its context).
     public func submitAsk() {
         let text = askText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard canAsk, !text.isEmpty, [.ready, .noSelection, .needsAccessibility].contains(phase) else { return }
+        guard acceptsTypedRequest, !text.isEmpty else { return }
         lastAsk = text
         startAsk(text)
     }
@@ -132,6 +142,7 @@ public final class QuickPanelModel {
         let mine = generation
         activeAction = nil
         askedConversationID = nil
+        askText = ""
         output = ""
         steps = []
         notice = nil
@@ -255,7 +266,9 @@ public final class QuickPanelModel {
         case .noSelection, .needsAccessibility: submitAsk()
         case .ready: chooseHighlighted()
         case .done: onClose(output)
-        case .failed, .cancelled: retry()
+        case .failed, .cancelled:
+            // After a stop or a failure the field is back: a new question goes out, an empty field retries.
+            if askText.trimmingCharacters(in: .whitespaces).isEmpty { retry() } else { submitAsk() }
         default: break
         }
     }

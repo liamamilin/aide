@@ -13,7 +13,7 @@ public struct QuickPanelView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if showsInput {
-                if !model.selection.isEmpty { header; Divider().opacity(0.5) }
+                if !model.selection.isEmpty || model.lastAsk != nil { header; Divider().opacity(0.5) }
                 inputRow
             } else {
                 header
@@ -71,7 +71,7 @@ public struct QuickPanelView: View {
 
     /// Phases that take a typed request. Without the core's conversation path (tests) the field is hidden.
     private var showsInput: Bool {
-        model.canAsk && [.ready, .noSelection, .needsAccessibility].contains(model.phase)
+        model.acceptsTypedRequest
     }
 
     private var inputRow: some View {
@@ -103,10 +103,10 @@ public struct QuickPanelView: View {
         .padding(.vertical, 12)
     }
 
-    private var headerSymbol: String { model.askedConversationID != nil || model.activeAction == nil && !model.askText.isEmpty ? "sparkle" : "text.cursor" }
+    private var headerSymbol: String { model.activeAction == nil && model.lastAsk != nil ? "sparkle" : "text.cursor" }
 
     private var headerText: String {
-        if model.activeAction == nil, !model.askText.isEmpty { return model.askText }
+        if model.activeAction == nil, let ask = model.lastAsk { return ask }
         return model.selection.isEmpty ? "未选中文字" : model.selection
     }
 
@@ -217,7 +217,7 @@ public struct QuickPanelView: View {
             case .done:
                 hint("⌘↩", "继续追问")
                 hint("↩", "复制并返回")
-            case .failed, .cancelled: hint("↩", "重试")
+            case .failed, .cancelled: hint("↩", model.askText.isEmpty ? "重试" : "发送")
             default: EmptyView()
             }
             if model.pendingConfirmation != nil {
