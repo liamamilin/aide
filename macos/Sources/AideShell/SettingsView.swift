@@ -5,10 +5,12 @@ public struct SettingsView: View {
     @Bindable var model: SettingsModel
     let hotkey: HotkeySettings?
     let system: SystemModel?
+    let search: SearchSettingsModel?
     let version: String
 
-    public init(model: SettingsModel, hotkey: HotkeySettings? = nil, system: SystemModel? = nil, version: String = "") {
-        self.model = model; self.hotkey = hotkey; self.system = system; self.version = version
+    public init(model: SettingsModel, hotkey: HotkeySettings? = nil, system: SystemModel? = nil,
+                search: SearchSettingsModel? = nil, version: String = "") {
+        self.model = model; self.hotkey = hotkey; self.system = system; self.search = search; self.version = version
     }
 
     public var body: some View {
@@ -22,6 +24,10 @@ public struct SettingsView: View {
             if let system {
                 ModelsPane(model: system)
                     .tabItem { Label("模型", systemImage: "cpu") }
+                if let search {
+                    SearchPane(model: search)
+                        .tabItem { Label("联网搜索", systemImage: "globe") }
+                }
                 AboutPane(model: system, version: version)
                     .tabItem { Label("关于", systemImage: "info.circle") }
             }

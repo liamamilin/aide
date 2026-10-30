@@ -30,10 +30,12 @@ def build_handlers(emit) -> dict:
     from ai_desktop.core.conversations import ConversationService
     from ai_desktop.core.preferences import PreferencesService
     from ai_desktop.core.runs import RunService
+    from ai_desktop.core.search import SearchService
     from ai_desktop.core.system import SystemService
 
     runs = RunService(emit)
-    chats = ConversationService(runs)
+    search = SearchService()
+    chats = ConversationService(runs, search)
     prefs = PreferencesService(runs)
     system = SystemService(emit)
     return {
@@ -51,4 +53,6 @@ def build_handlers(emit) -> dict:
         "models.detail": system.models_detail, "models.pull": system.models_pull,
         "export.conversations": system.export, "diagnostics.report": system.diagnostics,
         "updates.check": system.check_update,
+        "search.status": search.status, "search.save_key": search.save_key, "search.delete_key": search.delete_key,
+        "conversations.set_search": search.set_conversation,
     }

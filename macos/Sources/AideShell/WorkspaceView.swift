@@ -24,6 +24,7 @@ public struct WorkspaceView: View {
                     .help("新对话 ⌘N")
                     .keyboardShortcut("n")
             }
+            ToolbarItem(placement: .primaryAction) { searchToggle }
             ToolbarItem(placement: .primaryAction) { agentMenu }
             ToolbarItem(placement: .primaryAction) { modelMenu }
         }
@@ -164,6 +165,20 @@ public struct WorkspaceView: View {
         }
         .disabled(model.isSending)
         .help(model.isSending ? "正在回答，完成后可切换助手" : "选择助手，下一条消息起生效")
+    }
+
+    @ViewBuilder private var searchToggle: some View {
+        if model.searchAvailable {
+            Button { Task { await model.toggleSearch() } } label: {
+                Label(model.searchEnabled ? "联网搜索：开" : "联网搜索", systemImage: "globe")
+                    .font(.system(size: 12))
+                    .foregroundStyle(model.searchEnabled ? Theme.accent : Color.secondary)
+            }
+            .disabled(model.isSending)
+            .help(model.searchEnabled
+                  ? "已开启：这个对话里模型可能把搜索词发送到搜索服务。点击关闭。"
+                  : "默认关闭。开启后，模型可能把搜索词发送到你配置的搜索服务。")
+        }
     }
 
     private var modelMenu: some View {

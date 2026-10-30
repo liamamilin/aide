@@ -144,3 +144,39 @@ struct AboutPane: View {
         Task { await model.export(to: url, format: format) }
     }
 }
+
+/// "联网搜索" tab. Search is off in every conversation until switched on in the Workspace toolbar.
+struct SearchPane: View {
+    @Bindable var model: SearchSettingsModel
+
+    var body: some View {
+        Form {
+            Section {
+                Text("默认关闭。在 Workspace 的某个对话里打开「联网搜索」后，模型才可能把搜索词发送到下面选择的搜索服务；其他对话和快捷面板不会联网。对话内容、剪贴板和选中的文字不会被发送，只有模型生成的搜索词。")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            Section("搜索服务") {
+                Picker("服务", selection: $model.provider) {
+                    ForEach(model.status?.providers ?? ["exa", "parallel"], id: \.self) { Text($0.capitalized).tag($0) }
+                }
+                LabeledContent("密钥") {
+                    if model.status?.hasKey == true {
+                        Label("已保存", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    } else {
+                        Text("未保存").foregroundStyle(.secondary)
+                    }
+                }
+                SecureField("粘贴 API 密钥", text: $model.keyDraft).textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("保存到钥匙串") { Task { await model.saveKey() } }.disabled(!model.canSave)
+                    Button("移除密钥") { Task { await model.removeKey() } }.disabled(model.status?.hasKey != true)
+                }
+                Text("密钥只保存在 macOS 钥匙串，Aide 不会再显示它。").font(.caption).foregroundStyle(.secondary)
+            }
+            if let notice = model.notice { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
+            if let error = model.errorMessage { Text(error).foregroundStyle(.red).font(.callout) }
+        }
+        .formStyle(.grouped)
+        .task { await model.load() }
+    }
+}

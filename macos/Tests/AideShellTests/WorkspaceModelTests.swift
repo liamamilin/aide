@@ -500,3 +500,55 @@ final class WorkspaceRecoveryTests: XCTestCase {
         XCTAssertFalse(model.modelServiceUnavailable)
     }
 }
+
+private final class StubSearch: SearchProviding, @unchecked Sendable {
+    var hasKey = true
+    private(set) var calls: [(Int, Bool)] = []
+    func searchStatus() async throws -> SearchStatus { SearchStatus(provider: "exa", providers: ["exa"], hasKey: hasKey) }
+    func saveSearchKey(provider: String, key: String) async throws -> SearchStatus { try await searchStatus() }
+    func deleteSearchKey(provider: String) async throws -> SearchStatus { try await searchStatus() }
+    func setSearch(conversationID: Int, enabled: Bool) async throws { calls.append((conversationID, enabled)) }
+}
+
+@MainActor
+final class WorkspaceSearchTests: XCTestCase {
+    func testOffByDefaultAndNeedsAKey() async {
+        let search = StubSearch()
+        search.hasKey = false
+        let model = WorkspaceModel(provider: StubWorkspace(), search: search)
+        await model.start()
+        XCTAssertFalse(model.searchEnabled)
+        await model.toggleSearch()
+        XCTAssertFalse(model.searchEnabled)
+        XCTAssertTrue(model.errorOffersSettings)
+        XCTAssertTrue(search.calls.isEmpty)
+    }
+
+    func testToggleOnAnOpenConversationIsSentToTheCoreAndTurnedOffAgain() async {
+        let search = StubSearch()
+        let model = WorkspaceModel(provider: StubWorkspace(), search: search)
+        await model.start()                      // resumes conversation 1
+        await model.toggleSearch()
+        XCTAssertTrue(model.searchEnabled)
+        await model.toggleSearch()
+        XCTAssertFalse(model.searchEnabled)
+        XCTAssertEqual(search.calls.map(\.1), [true, false])
+        XCTAssertEqual(search.calls.map(\.0), [1, 1])
+    }
+
+    func testNewChatStartsOffAndSwitchSurvivesUntilTheConversationExists() async {
+        let search = StubSearch()
+        let model = WorkspaceModel(provider: StubWorkspace(), search: search)
+        await model.start()
+        await model.toggleSearch()
+        model.newChat()
+        XCTAssertFalse(model.searchEnabled)      // never carried into another conversation
+        await model.toggleSearch()               // no conversation yet: remembered locally
+        XCTAssertTrue(model.searchEnabled)
+        XCTAssertEqual(search.calls.count, 1)    // only the first toggle reached the core
+    }
+
+    func testWithoutASearchProviderTheToggleIsHidden() {
+        XCTAssertFalse(WorkspaceModel(provider: StubWorkspace()).searchAvailable)
+    }
+}

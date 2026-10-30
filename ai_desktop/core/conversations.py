@@ -14,10 +14,12 @@ from ai_desktop.core import protocol
 from ai_desktop.core.admission import check_admission
 from ai_desktop.core.capabilities import vision_capable
 from ai_desktop.core.runs import RESULT_BYTES, RESULT_TOOLS, RunService, _Message
+from ai_desktop.core.search import SearchService, conversation_flag
 from ai_desktop.llm.chat_client import ChatClient, list_models
 from ai_desktop.llm.events import ChatResult, ResultStatus
 from ai_desktop.llm.run_types import RunEvent, RunEventKind
 from ai_desktop.llm.tool_run import assemble_tool_run
+from ai_desktop.services.http_search import HttpSearchExecutor
 from ai_desktop.services.session_objects import SessionObjects
 from ai_desktop.services.task_admission import TaskAuthorization, TaskModelSettings
 from ai_desktop.utils import images as image_utils
@@ -82,8 +84,9 @@ def collapse_versions(messages: list[storage.Message]) -> list[dict[str, Any]]:
 
 
 class ConversationService:
-    def __init__(self, runs: RunService) -> None:
+    def __init__(self, runs: RunService, search: SearchService | None = None) -> None:
         self._runs = runs
+        self._search = search or SearchService()
         self._busy: set[int] = set()
         self._lock = threading.Lock()
         self._session_objects: dict[int, SessionObjects] = {}
@@ -102,7 +105,7 @@ class ConversationService:
     def get(self, params: dict[str, Any]) -> dict[str, Any]:
         conversation = self._require(params)
         return {"id": conversation.id, "title": conversation.title, "agent_id": conversation.agent_id,
-                "messages": collapse_versions(conversation.messages)}
+                "messages": collapse_versions(conversation.messages), "search": conversation_flag(conversation.id)}
 
     def agents(self, _params: dict[str, Any]) -> dict[str, Any]:
         builtin = {a.id for a in self._runs.agent_manager.builtin_agents}
@@ -232,6 +235,8 @@ class ConversationService:
         messages = [_Message(m["role"], m["content"]) for m in history if m["content"]] + [
             _Message("user", text, user_message.id, tuple(images))]
         admission, tools_note = self._admit_tools(agent, resolved)
+        if admission is None and conversation_flag(conversation.id):
+            tools_note = tools_note or "联网搜索未启用：当前模型不满足工具要求。"
         if admission is None:
             request = ChatClient(model=resolved.model).create_request(
                 messages, agent.system_prompt, conversation_id=conversation.id, agent_id=agent.id,
@@ -248,10 +253,18 @@ class ConversationService:
             )
             request = replace(request, options=tuple(granted["options"].items()))
             session = self._session_objects.setdefault(conversation.id, SessionObjects())
+            search_settings, search_note = None, ""
+            if conversation_flag(conversation.id):
+                if self._search.has_key():
+                    search_settings = self._search.settings()
+                else:
+                    search_note = "联网搜索未启用：没有可用的搜索密钥。"
             assembly = assemble_tool_run(
                 request, agent.system_prompt, tools_admitted=True, native_tools=True,
                 make_broker=self._runs.new_broker, session_context=session.render(),
-                desktop_runner=self._runs.desktop_runner)
+                desktop_runner=self._runs.desktop_runner, search_settings=search_settings,
+                search_executor_factory=lambda cfg: HttpSearchExecutor(cfg, credentials=self._search.credentials))
+            tools_note = tools_note or search_note
             request, context, broker = assembly.request, assembly.context, assembly.confirmations
             tool_names = [tool.name for tool in context.tools]
             if not tool_names:

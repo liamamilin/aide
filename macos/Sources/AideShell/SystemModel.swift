@@ -81,3 +81,46 @@ public final class SystemModel {
         return "无法连接到 Aide 核心，请重启 Aide。"
     }
 }
+
+/// "联网搜索" settings: which provider, and the API key held in the macOS Keychain (write-only here).
+@MainActor @Observable
+public final class SearchSettingsModel {
+    public private(set) var status: SearchStatus?
+    public var provider = "parallel"
+    public var keyDraft = ""
+    public private(set) var errorMessage: String?
+    public private(set) var notice: String?
+
+    private let provider_: SearchProviding
+
+    public init(provider: SearchProviding) { self.provider_ = provider }
+
+    public var canSave: Bool { !keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    public func load() async {
+        do {
+            let current = try await provider_.searchStatus()
+            status = current
+            provider = current.provider
+            errorMessage = nil
+        } catch { errorMessage = SystemModel.describe(error) }
+    }
+
+    public func saveKey() async {
+        guard canSave else { return }
+        do {
+            status = try await provider_.saveSearchKey(provider: provider, key: keyDraft.trimmingCharacters(in: .whitespacesAndNewlines))
+            keyDraft = ""
+            notice = "密钥已保存到钥匙串"
+            errorMessage = nil
+        } catch { errorMessage = SystemModel.describe(error) }
+    }
+
+    public func removeKey() async {
+        do {
+            status = try await provider_.deleteSearchKey(provider: provider)
+            notice = "密钥已移除"
+            errorMessage = nil
+        } catch { errorMessage = SystemModel.describe(error) }
+    }
+}

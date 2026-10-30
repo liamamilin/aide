@@ -32,7 +32,8 @@ def assemble_tool_run(request: RequestContext, system_prompt: str, *, tools_admi
                       search_settings: SearchSettings | None = None, native_tools: bool = False,
                       confirmations: ConfirmationBroker | None = None,
                       make_broker: Callable[[], ConfirmationBroker] | None = None,
-                      session_context: str = "", desktop_runner: Runner = run_command) -> ToolAssembly:
+                      session_context: str = "", desktop_runner: Runner = run_command,
+                      search_executor_factory: Callable[[SearchSettings], object] | None = None) -> ToolAssembly:
     """Grant tools only for an admitted chat request; append the tool rules to the system prompt."""
     tools: tuple[ToolSpec, ...] = ()
     allowed = tools_admitted and chat_tools_eligible(request.agent_id, request.origin)
@@ -42,8 +43,11 @@ def assemble_tool_run(request: RequestContext, system_prompt: str, *, tools_admi
         tools = (ToolSpec.create('bash', BashExecutor(confirmations)),)
     search_executor = None
     if allowed and search_settings is not None:
-        from ai_desktop.services.search_executor import SearchExecutor
-        search_executor = SearchExecutor(search_settings)
+        factory = search_executor_factory
+        if factory is None:
+            from ai_desktop.services.search_executor import SearchExecutor
+            factory = SearchExecutor
+        search_executor = factory(search_settings)
         tools += (ToolSpec.create('web_search', search_executor),)
     if allowed and (tools or native_tools) and config.DESKTOP_TOOLS_ENABLED:
         toolbox = DesktopToolbox(runner=desktop_runner, confirmations=confirmations)

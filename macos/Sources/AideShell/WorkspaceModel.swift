@@ -124,7 +124,43 @@ public final class WorkspaceModel {
     private var sentToCore = false
     private var pendingQuestion: (text: String, image: URL?)?
 
-    public init(provider: WorkspaceProviding) { self.provider = provider }
+    /// Web search is off for every conversation until the person turns it on here, and needs a saved key.
+    public private(set) var searchEnabled = false
+    public private(set) var searchHasKey = false
+    private let searcher: SearchProviding?
+
+    public init(provider: WorkspaceProviding, search: SearchProviding? = nil) {
+        self.provider = provider
+        self.searcher = search
+    }
+
+    public var searchAvailable: Bool { searcher != nil }
+
+    public func refreshSearchStatus() async {
+        guard let searcher else { return }
+        searchHasKey = (try? await searcher.searchStatus().hasKey) ?? false
+        if !searchHasKey { searchEnabled = false }
+    }
+
+    public func toggleSearch() async {
+        guard let searcher else { return }
+        if searchEnabled {
+            searchEnabled = false
+            if let id = selectedID { try? await searcher.setSearch(conversationID: id, enabled: false) }
+            return
+        }
+        await refreshSearchStatus()
+        guard searchHasKey else {
+            errorMessage = "联网搜索需要先在设置的「联网搜索」页保存 API 密钥。"
+            errorOffersSettings = true
+            return
+        }
+        if let id = selectedID {
+            do { try await searcher.setSearch(conversationID: id, enabled: true) }
+            catch { errorMessage = "无法开启联网搜索"; return }
+        }
+        searchEnabled = true
+    }
 
     public var title: String {
         conversations.first { $0.id == selectedID }.map { $0.title.isEmpty ? "新对话" : $0.title } ?? "新对话"
@@ -133,6 +169,7 @@ public final class WorkspaceModel {
     public func start() async {
         let before = generation
         async let list: Void = reloadList()
+        await refreshSearchStatus()
         do {
             agents = try await provider.agents()
             selectedAgentID = selectedAgentID ?? agents.first?.id
@@ -169,6 +206,7 @@ public final class WorkspaceModel {
         stop()
         generation += 1
         selectedID = nil
+        searchEnabled = false
         turns = []
         errorMessage = nil
         activity = nil
@@ -206,6 +244,7 @@ public final class WorkspaceModel {
             guard generation == mine else { return }
             selectedID = id
             selectedAgentID = detail.agentID
+            searchEnabled = detail.search
             turns = detail.messages.map { message in
                 // Lookup results shown when the answer was first given come back as the same openable items.
                 let steps = message.toolResults.enumerated().compactMap { index, saved -> ToolStep? in
@@ -369,6 +408,7 @@ public final class WorkspaceModel {
         if let selectedID { return selectedID }
         let id = try await provider.createConversation(agentID: selectedAgentID, seed: [])
         selectedID = id
+        if searchEnabled { try? await searcher?.setSearch(conversationID: id, enabled: true) }
         return id
     }
 

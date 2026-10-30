@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = QuickPanelModel(provider: client, ask: client)
         let controller = QuickPanelController(model: model, reader: SelectionReader())
         self.controller = controller
-        let workspace = WorkspaceWindowController(model: WorkspaceModel(provider: client))
+        let workspace = WorkspaceWindowController(model: WorkspaceModel(provider: client, search: client))
         self.workspace = workspace
         let hotkeys = HotkeySettings { [weak self] combo in
             guard let registered = Hotkey(combo, action: { Task { @MainActor in controller.toggle() } }) else { return false }
@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await onboarding.showIfNeeded()
         }
         let settings = SettingsWindowController(
-            model: SettingsModel(provider: client), hotkey: hotkeys, system: system,
+            model: SettingsModel(provider: client), hotkey: hotkeys, system: system, search: SearchSettingsModel(provider: client),
             version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版")
         self.settings = settings
         workspace.model.onOpenSettings = { settings.show() }
