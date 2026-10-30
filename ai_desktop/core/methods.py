@@ -30,10 +30,12 @@ def build_handlers(emit) -> dict:
     from ai_desktop.core.conversations import ConversationService
     from ai_desktop.core.preferences import PreferencesService
     from ai_desktop.core.runs import RunService
+    from ai_desktop.core.system import SystemService
 
     runs = RunService(emit)
     chats = ConversationService(runs)
     prefs = PreferencesService(runs)
+    system = SystemService(emit)
     return {
         "ping": ping, "health": health,
         "actions.list": runs.list_actions, "run.start": runs.start, "run.cancel": runs.cancel,
@@ -46,4 +48,7 @@ def build_handlers(emit) -> dict:
         "agents.list": chats.agents, "agents.save": prefs.save_agent, "agents.delete": prefs.delete_agent,
         "settings.get": prefs.get, "settings.set": prefs.set, "settings.test_connection": prefs.test_connection,
         "models.list": chats.models, "models.select": chats.select_model,
+        "models.detail": system.models_detail, "models.pull": system.models_pull,
+        "export.conversations": system.export, "diagnostics.report": system.diagnostics,
+        "updates.check": system.check_update,
     }
