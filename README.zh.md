@@ -1,292 +1,141 @@
 <h1 align="center">Aide</h1>
-<p align="center"><em>macOS 原生的本地 AI 入口：按 <code>⌘⌃L</code> 说出想做的事，或先选中文字再按——Aide 来完成。本地 Ollama 模型，零上传。</em></p>
+<p align="center"><strong>你的 Mac 上的本地 AI 入口。</strong><br>
+按 <code>⌘⌃L</code>，说出想做的事——或先选中文字——它就帮你办好。<br>
+只用你自己的 Ollama 模型，零上传。</p>
 
 <p align="center"><strong>中文</strong> | <a href="README.md">English</a></p>
 
-[![macOS](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey.svg)]()
-[![Ollama](https://img.shields.io/badge/LLM-Ollama-orange.svg)](https://ollama.com)
-[![Swift](https://img.shields.io/badge/UI-SwiftUI%20%2F%20AppKit-blue.svg)]()
+<p align="center">
+<img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-lightgrey.svg">
+<img alt="Apple silicon" src="https://img.shields.io/badge/Apple%20silicon-arm64-lightgrey.svg">
+<img alt="Ollama" src="https://img.shields.io/badge/LLM-Ollama-orange.svg">
+<img alt="SwiftUI" src="https://img.shields.io/badge/UI-SwiftUI%20%2F%20AppKit-blue.svg">
+</p>
+
+<p align="center">
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/quick-panel-actions-dark.png"><img alt="选中文字后的快捷面板与快捷动作" src="docs/assets/screenshots/quick-panel-actions.png" width="440"></picture>&nbsp;&nbsp;<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/quick-panel-results-dark.png"><img alt="快捷面板里找到的文件" src="docs/assets/screenshots/quick-panel-results.png" width="440"></picture>
+<br><sub>选中文字，选一个动作 &nbsp;·&nbsp; 说出想做的事，直接打开找到的文件</sub>
+</p>
 
 ---
 
-## Aide（原生版）
+## 为什么用 Aide
 
-原生版是 SwiftUI/AppKit 外壳（`macos/`），下面是和旧版 Qt 应用共用的无界面 Python 核心（`ai_desktop/core`）。目前只提供 Apple 芯片版本。
+多数 AI 工具要你去找它：开网页、粘贴、等待、再复制回来。Aide 反过来——它常驻菜单栏，直接在你正在用的应用上方打开，做完再把结果交还给原来的应用。
 
-| 你做什么 | 发生什么 |
+- **默认私密。** 只连本机的 [Ollama](https://ollama.com)。没有账号、没有云端、没有数据回传，对话只存在你 Mac 上的数据库里。
+- **一个快捷键，两种用法。** 直接输入要做的事，或选中文字再选动作，都只要一次按键。
+- **能动手，但不会瞒着你。** Aide 能找应用和文件、打开它们、读取和修改备忘录与提醒事项。凡是会改动数据的操作，都会先显示确切内容，等你同意才执行。
+- **原生而安静。** SwiftUI/AppKit 应用，跟随浅色/深色模式和系统强调色。不占 Dock，不需要时不出现窗口。
+
+## 你可以做什么
+
+| 你 | Aide |
 |---|---|
-| 按 `⌘⌃L`，直接输入要做的事（“打开备忘录”“找最近修改的 PDF”“查看备忘录有多少条”） | **快捷面板**用本地桌面工具执行；找到的应用和文件会显示成可直接打开、可在 Finder 中显示的条目 |
-| 选中文字后按 `⌘⌃L` | 选一个动作（翻译、解释、摘要、改写或你自己的——数字键、方向键、回车）或输入自己的要求；`⌘↩` 转入工作区继续，`↩` 复制并回到原应用 |
-| 按 `⌘⌃S` 并框选区域 | 打开工作区新对话并附上截图（需要支持看图的模型） |
-| 菜单栏打开**工作区** | 历史与搜索、流式 Markdown 回答（表格、列表、可复制代码）、重新生成、编辑上一条提问、切换助手与模型 |
-| 让 Aide 修改数据（删除备忘录或提醒、追加备忘录等） | 先弹出确认，显示将要执行的确切操作；未经你同意不会执行 |
+| 按 `⌘⌃L`，输入“打开备忘录”“找最近修改的 PDF”“备忘录有多少条” | 用本地桌面工具执行。找到的应用和文件显示成可直接打开、可在 Finder 中显示的条目。 |
+| 在任意应用里选中文字，按 `⌘⌃L` | 选择**翻译**、**解释**、**摘要**、**改写**或你自己的动作；也可以直接输入自己的要求。 |
+| 在回答上按 `⌘↩` | 转入工作区继续对话。 |
+| 在回答上按 `↩` | 复制并回到原来的应用。 |
+| 按 `⌘⌃S` 并框选区域 | 打开工作区新对话并附上截图（需要支持看图的模型）。 |
+| 让它删除备忘录、追加备忘录内容或修改提醒 | 先显示将要执行的确切操作，你允许后才会执行。 |
 
-设置（菜单栏 → 设置…，`⌘,`）：Ollama 地址与思考模式、可录制的快捷面板快捷键、自定义助手与自定义快捷动作；采样参数在“高级”里。
+### 快捷面板
 
-**原生版暂未包含：**桌面宠物、联网搜索、Bash 工具，这些仍在旧版 Qt 应用中（见下）。
+最快的路径。一个小面板会在当前应用上方打开。
 
-### 安装
+- 随意输入，中文等输入法不会被打断；输入时数字键和方向键就是普通文字。
+- 用鼠标、`⌘1`–`⌘9`，或 `⌘↑` / `⌘↓` 加 `↩` 选择快捷动作。
+- `Esc` 立刻停止正在生成的回答，输入框随即回来，可以马上问别的；旧回答不会混进新回答。
+- 每次输入的请求都是独立的，不会带着前面的上下文。
+- 如果在任务已经改动过数据后停止，Aide 会明确告诉你：已完成的操作不会撤销。
 
-1. 从 [Releases](https://github.com/liamamilin/aide/releases) 下载 `Aide-<版本>-arm64.dmg`，把 `Aide` 拖进“应用程序”。
-2. 目前**未经 Apple 公证**（没有 Developer ID 证书）：先打开一次，再到 系统设置 → 隐私与安全性 点“仍要打开”，或执行 `xattr -dr com.apple.quarantine /Applications/Aide.app`。
-3. 安装 [Ollama](https://ollama.com)，运行 `ollama serve` 并拉取模型（`ollama pull qwen3:14b`）。
-4. 允许**辅助功能**（读取选中文字）、**屏幕录制**（第一次 `⌘⌃S` 时 macOS 若询问），以及需要时的备忘录/提醒事项**自动化**权限。
+### 工作区
 
-签名：本地构建在钥匙串里有稳定的本地证书时会用它签名（这样重新构建后权限不丢），否则为临时签名。Release 的 DMG 是临时签名、未公证。
+从菜单栏打开的完整窗口。
 
-### 从源码构建
+- 带搜索的历史对话，重新打开时原样恢复，包括找到的文件和应用。
+- 流式 Markdown：表格、列表、带复制按钮的代码块。
+- 重新生成回答、编辑上一条提问，按对话切换助手和模型。
+- 长回答跟得上流式输出，窗口不卡顿。
+
+### 助手与自定义动作
+
+内置 5 个助手，也可以创建自己的：各自的系统提示词、模型、思考模式和采样参数。把常用的提示词做成自定义快捷动作，就是快捷面板上的一个按键。
+
+## 安装
+
+**要求：**macOS 14 或更高、Apple 芯片、已安装 [Ollama](https://ollama.com)。
+
+1. 从 [Releases](https://github.com/liamamilin/aide/releases) 下载 `Aide-<版本>-arm64.dmg`，把 **Aide** 拖进“应用程序”。
+2. 启动 Ollama 并拉取模型：
+   ```bash
+   ollama serve
+   ollama pull qwen3:14b
+   ```
+3. 打开 Aide，它会出现在菜单栏。第一次使用时 macOS 会请求权限（见下）。
+
+> **尚未公证。**目前没有 Developer ID 证书，下载的副本第一次会被 Gatekeeper 拦截。先打开一次，再到 系统设置 → 隐私与安全性 点**“仍要打开”**。或执行：
+> ```bash
+> xattr -dr com.apple.quarantine /Applications/Aide.app
+> ```
+
+暂无自动更新。更新时退出 Aide，用新版本替换“应用程序”里的旧版本即可。
+
+### 权限
+
+| 权限 | 用途 | 何时询问 |
+|---|---|---|
+| 辅助功能 | 读取你在其他应用里选中的文字 | 第一次带选区按 `⌘⌃L`。直接输入请求不需要它。 |
+| 屏幕录制 | 截取你框选的区域 | 第一次按 `⌘⌃S` |
+| 自动化（备忘录、提醒事项） | 你要求时读取或修改它们 | 第一次提出相关请求时 |
+
+Release 的 DMG 是临时签名，更新后 macOS 可能再次询问。使用稳定身份签名的构建，权限在更新后会保留。
+
+## 设置
+
+菜单栏 → **设置…**（`⌘,`）
+
+- Ollama 地址与思考模式
+- 可录制的快捷面板快捷键
+- 自定义助手与自定义快捷动作
+- “高级”里的采样参数
+
+## 隐私与安全
+
+- **只在本地。**请求只发往你配置的 Ollama 地址，默认是你自己的电脑。
+- **数据留在原地。**历史与附件位于 `~/Library/Application Support/ai-desktop-assistant/`，删除这个文件夹即清除全部。
+- **改动前先确认。**删除或修改备忘录、提醒事项，都会先显示确切操作并等你同意。
+- **结果如实呈现。**找到的文件和应用直接来自工具，不是模型的转述；文件已被移走时，打开会明确提示失败，而不是假装成功。
+
+## 原生版暂未包含
+
+桌面宠物、联网搜索和 Bash 工具目前仍在[旧版 Qt 应用](docs/legacy-qt.zh.md)中，两者共用同一份历史记录。
+
+## 从源码构建
 
 ```bash
 pip install -r requirements-dev.txt && pip install -e .
 ./scripts/build_native.sh --smoke      # dist/Aide.app 与 dist/Aide-<版本>-arm64.dmg
-cd macos && swift test                  # Swift 测试（会用假的 Ollama 启动真实核心）
+cd macos && swift test                 # Swift 测试，使用真实核心和假的 Ollama
 ```
 
-详情见 [macos/README.md](macos/README.md)。历史记录与旧版共用（`~/Library/Application Support/ai-desktop-assistant/`）。
-
----
-
-## 旧版 Qt 应用
-
-最初的 PyQt5 应用（悬浮按钮、桌面宠物、联网搜索、Bash 工具）仍可使用，说明如下。
-
-## 三入口
-
-| 入口 | 交互 |
-|------|------|
-| **快捷键** `⌘⌃L` | 任意 App 选中文字 → 按快捷键 → 自动填入对话框 |
-| **悬浮按钮** | 屏幕右侧圆形图标，左键开关对话框，右键菜单 |
-| **菜单栏图标** | macOS 菜单栏常驻，左键开关对话框，右键快速切换 Agent；宠物隐藏后从这里恢复 |
-
----
-
-## 下载安装
-
-### 方式一：DMG 安装（推荐）
-
-1. 前往 [Releases](https://github.com/liamamilin/aide/releases) 下载最新 `AI桌面助手-*.dmg`
-2. 双击 DMG，将 `AI桌面助手` 拖入 Applications
-3. 首次启动需在系统设置 → 隐私与安全性中允许运行
-4. 确保 [Ollama](https://ollama.com) 已安装并运行
-
-### 方式二：源码安装
-
-**前置条件**：[Ollama](https://ollama.com) 已安装并拉取模型：
+需要 Xcode 15+ 和 Python 3.10+。从源码运行：`cd macos && swift run Aide`。
 
 ```bash
-ollama serve
-ollama pull qwen3:14b
+ruff check ai_desktop/ tests/ scripts/release_check.py
+QT_QPA_PLATFORM=offscreen pytest tests/ -q
 ```
 
-**安装**：
+### 结构
 
-```bash
-cd /path/to/AI桌面助手
-pip install -e .
-```
+原生 SwiftUI/AppKit 外壳（`macos/`）通过 stdio 上的 NDJSON 与不含 Qt 的 Python 核心（`ai_desktop/core`）通信。不开放任何网络端口，核心随应用退出。每一次模型对话和工具调用都走同一个运行引擎，每个工具有风险上限，任何破坏性操作都需确认。
 
-**开发**（运行测试需要）：
+更多：[macos/README.md](macos/README.md) · [`docs/` 设计笔记](docs/) · [CHANGELOG](CHANGELOG.md)
 
-```bash
-pip install -r requirements-dev.txt
-```
+## 常见问题
 
-**启动**：
-
-```bash
-aide
-```
-
-**构建 `.app` 安装包**（需要 PyInstaller）：
-
-```bash
-# 快速构建（清理 → 构建 → 签名）
-./scripts/build.sh
-
-# 构建前跑 ruff + pytest
-./scripts/build.sh --test
-
-# 构建 + 冒烟测试
-./scripts/build.sh --smoke
-
-# 构建 + 生成 DMG 安装包
-./scripts/build.sh --dmg
-
-# 全套
-./scripts/build.sh --test --smoke --dmg
-```
-
-`ai_desktop/version.py` 是 Python 包、运行时、`Info.plist` 与 DMG 文件名的唯一版本来源。构建会优先使用本机可用的稳定代码签名身份（Developer ID、Apple Development 或项目本地证书 `AI Desktop Assistant`），找不到时才退回 ad-hoc。也可以通过 `AIDE_SIGN_IDENTITY` 显式指定签名身份；设置为 `-` 才强制使用 ad-hoc。稳定签名能让 macOS 持续识别同一个应用，避免每次重建都重新申请辅助功能、输入监控和录屏权限。只读预检不会提交、打标签或推送：
-
-```bash
-python scripts/release_check.py --version 1.5.0 --require-new-tag
-```
-
----
-
-## 功能特性
-
-### 对话
-- **流式输出** — token 级实时渲染，50ms 批量刷新
-- **思考过程** — LLM 推理过程实时展示，完成后折叠为 `💭 思考过程`
-- **Markdown 渲染** — 代码块、列表、粗体、标题完整支持，标题使用强调色蓝色
-- **多轮对话** — 追问、修正，SQLite 持久化
-- **安全选取文字** — 保留剪贴板中可枚举的文本、富文本和图片格式，捕获期间出现用户新复制时不覆盖
-- **快捷动作** — 选中文字后可用数字键、方向键和 Enter 直接执行翻译、解释、摘要或改写
-- **图片理解（多模态）** — 粘贴 / 拖拽 / 📎 附件 / `⌘⌃S` 框选截图四种方式发图，附件经过真实解码校验和受管生命周期处理，历史缺图可识别，并显示当前模型的图片能力状态
-- **设备端 OCR** — 使用 Apple Vision 提取任一待发送图片的文字，可编辑或复制结果，并在发送前明确选择仅用文字或文字加原图
-- **中断 ⏹** — 流式生成时可随时停止
-- **编辑 ✏️** — 用户消息 hover 可见编辑按钮，点击回填输入框重新发送
-- **复制 📋** — 助手回复 hover 可见复制按钮
-- **输入框自动伸缩** — 多行输入时高度自动从 36px 扩至 120px，超长可滚动
-- **导出** — 一键复制整段对话为 Markdown
-- **通知** — 回复完成时，若窗口在后台则弹 macOS 通知
-
-### Agent
-- **工具任务（候选版）** — 任意对话 Agent 输入区启用 Bash / Parallel / Exa，设置沿用到新对话、其他 Agent 并在重启后保留；工具跟随顶栏所选模型，每次任务前检查工具能力；命令确认、停止、来源与运行记录见 [工具设置与继承](docs/工具设置继承-2026-10-07.md)
-- **5 个内置 Agent**：代码专家 💻 / 翻译 🌐 / 通用助手 🤖 / 摘要 📄 / 润色 ✍️
-- **自定义 Agent** — 新增/编辑/删除，自定义 emoji 图标和 prompt
-- **任务模型配置** — 为每个 Agent 绑定可复用的模型、思考模式、温度和输出上限；每一项都可继承全局设置
-- **菜单栏快速切换** — 菜单栏图标右键菜单直接切换 Agent
-
-### 历史
-- **对话浏览** — 稳定分页访问全部对话并显示消息数
-- **全文搜索** — 搜索对话标题和消息内容，300ms 防抖
-- **重命名/删除/加载** — 校验并修改标题，从历史加载对话，或删除不需要的
-
-### 设置
-- **运行时配置** — 右键悬浮按钮 → 设置… → 修改 Ollama 地址、超时、上下文窗口、快捷键
-- **持久化** — 设置、Agent、模型选择、聊天窗口尺寸位置和悬浮按钮位置重启后保留；屏幕变化时自动恢复到可用区域
-- **自动恢复** — 启动时自动加载上次对话，保留用户选择的 Agent
-
-### 数据库升级与恢复
-
-升级已有的无版本数据库前，应用会通过 SQLite Backup API 在数据目录的 `backups/` 中创建一致备份。全部结构变更在同一事务提交；迁移失败时保留原 schema 和数据。恢复匹配旧版本的备份前先退出应用：
-
-```bash
-python scripts/restore_database.py "/path/to/backup.sqlite3"
-```
-
-恢复工具会先把当前数据库另存为 `before-restore` 安全副本。恢复旧 schema 后若再次启动新版应用，它会重新执行升级；需要降级时，应启动与该备份匹配的旧版应用。
-
----
-
-## 配置
-
-运行时通过**设置面板**修改，或编辑 `ai_desktop/config.py`：
-
-| 配置项 | 默认值 | 说明 |
-|--------|--------|------|
-| `OLLAMA_MODEL` | `sorc/qwen3.5-instruct-uncensored:9b` | 默认模型（不存在时自动切到第一个可用模型） |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama 服务地址 |
-| `HOTKEY` | `<cmd>+<ctrl>+l` | 全局快捷键 |
-| `OLLAMA_NUM_PREDICT` | `20480` | 最大输出 token |
-| `OLLAMA_NUM_CTX` | `8192` | 上下文窗口 |
-| `OLLAMA_TEMPERATURE` | `0.7` | 生成温度（0.0 ~ 2.0） |
-| `OLLAMA_TOP_P` | `0.9` | 核采样阈值 |
-| `OLLAMA_TOP_K` | `40` | Top-K 采样 |
-| `OLLAMA_REPEAT_PENALTY` | `1.1` | 重复惩罚系数 |
-| `OLLAMA_THINK` | `True` | 模型思考推理开关 |
-| `OLLAMA_MAX_ROUNDS` | `10` | 保留的最大对话轮次 |
-| `OLLAMA_KEEP_ALIVE` | `30m` | 模型驻留时长 |
-| `OLLAMA_TIMEOUT` | `120` | HTTP 超时（秒） |
-| `SCREENSHOT_HOTKEY` | `<cmd>+<ctrl>+s` | 框选截图并发送到对话（需屏幕录制权限） |
-
-快捷键格式：`<cmd>`, `<shift>`, `<ctrl>`, `<alt>`。不要用 `<fn>` 或 `<option>`。
-
----
-
-## 故障排除
-
-### 弹窗出现但输入框为空
-
-日志中出现 `This process is not trusted!` 或 `Clipboard unchanged after Cmd+C`：
-
-> macOS 辅助功能权限未授权。
-
-**解决**：系统设置 → 隐私与安全性 → 辅助功能 → 勾选终端应用，必要时取消重勾刷新缓存。
-
-### 启动后无响应
-
-检查 Ollama：`curl http://localhost:11434/api/tags`，或输入栏右侧状态灯 🔴 → 🟢。
-
-### 截图失败或无截图
-
-点击 📎 → 截图或按 `⌘⌃S` 后提示「截图失败」/无反应：
-
-> macOS 屏幕录制权限未授权。
-
-**解决**：系统设置 → 隐私与安全性 → 屏幕录制 → 勾选「AI 桌面助手」（开发模式为「终端」），重启应用后生效。未授权时应用会弹窗引导并可直接跳转设置页。
-
-### 发图后模型不识别图片内容
-
-当前模型不支持视觉（多模态）。**解决**：在下拉框切换为视觉模型（如 `llava`、`qwen2.5vl`）后重发。
-
----
-
-## 项目结构
-
-```
-ai_desktop/
-├── main.py                     # 入口 + ChatController
-├── config.py                   # LLM/快捷键/Agent 配置
-├── __main__.py                 # python -m ai_desktop 支持
-├── version.py                  # 应用唯一版本来源
-├── settings_manager.py         # 配置持久化加载/应用
-├── agent_manager.py            # Agent 列表管理/切换/保存
-├── capture/
-│   ├── hotkey_listener.py      # pynput 全局快捷键（dev 模式）
-│   ├── nsevent_monitor.py      # NSEvent 全局监听（frozen 模式）
-│   ├── screenshot.py           # screencapture 框选截图（权限错误识别）
-│   ├── clipboard_monitor.py    # ⌘C 模拟 → 读取 → 恢复（双回退）
-│   └── text_normalizer.py      # 文本清洗 + 截断
-├── llm/
-│   └── chat_client.py          # Ollama /api/chat（流式 + thinking + 多模态 images）
-├── services/
-│   └── ocr_service.py          # Apple Vision OCR + 可取消后台任务 + 版面合并
-├── ui/
-│   ├── float_button.py         # 悬浮圆形按钮（拖拽/跨屏/右键）
-│   ├── menubar_icon.py         # macOS 菜单栏图标 + Agent 菜单
-│   ├── chat_dialog.py          # 多轮对话 + 快捷键 + 复制/编辑/中断 + 图片收发
-│   ├── ocr_preview_dialog.py   # 可编辑 OCR 预览 + 原图保留选择
-│   ├── history_dialog.py       # 历史浏览 + 全文搜索
-│   ├── agent_editor.py         # Agent 管理（增删改 + emoji 选择）
-│   ├── settings_dialog.py      # 运行时设置面板
-│   ├── markdown.py             # Markdown → HTML
-│   ├── styles.py               # QSS 常量（48 条集中管理，懒加载）
-│   ├── theme.py                # ColorSet 显式亮/暗色值
-│   ├── frameless_mixin.py      # FramelessDragMixin + TitleBar
-│   └── __init__.py
-├── utils/
-│   ├── images.py               # 图片存储/base64/类型判断
-│   ├── logging.py              # 日志配置
-│   ├── storage.py              # SQLite 持久化（对话/消息/设置/Agent/图片路径）
-│   └── permissions.py          # AX + 输入监听权限检测/请求
-scripts/
-├── aide.spec                   # 本地与 CI 共用的 PyInstaller 定义
-├── build.sh                    # 构建、签名、验证、冒烟、打包
-├── build_dmg.sh                # 生成带版本号的 DMG
-├── release_check.py            # 只读源码/应用包预检
-└── smoke_test.sh               # 隔离启动打包应用
-tests/
-├── conftest.py                 # 共享 fixture（qapp、存储、替身）
-├── fake_ollama.py              # 本地 HTTP 测试服务
-└── test_*.py                   # UI、生命周期、传输、数据与发布测试
-```
-
----
-
-## 测试
-
-自动化测试覆盖 UI 状态、请求/会话生命周期、可取消传输、捕获、持久化、主题、入口和发布打包：
-
-```bash
-# 安装开发依赖
-pip install -r requirements-dev.txt
-
-# 运行与 CI 相同的检查
-python -m ruff check ai_desktop/ tests/ scripts/release_check.py
-QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q
-```
-
-测试使用 `pytest-qt` 进行真实的 PyQt5 窗口渲染，外部依赖（Ollama HTTP、剪贴板、macOS ctypes、screencapture）均通过 mock 隔离。
+- **“连不上 Ollama”**——运行 `ollama serve`，再检查设置里的地址。
+- **`⌘⌃L` 没反应**——可能被其他应用占用，在设置里录制一个新的快捷键。
+- **选中的文字没被读取**——到 系统设置 → 隐私与安全性 授予辅助功能权限；直接输入请求不需要它。
+- **截图提问时模型无视图片**——换一个支持看图的模型。
+- **更新后又询问权限**——临时签名的构建会这样，属正常现象。
