@@ -29,13 +29,17 @@ public enum ToolLabels {
         case "list_reminders": "查看提醒"
         case "complete_reminder": "完成提醒"
         case "delete_reminder": "删除提醒"
+        case "bash": "运行命令"
+        case "list_events": "查看日程"
+        case "create_event": "新建日程"
+        case "read_clipboard": "读取剪贴板"
         default: "使用工具"
         }
     }
 
     /// Lookups change nothing; every other tool does something that stays done after a cancel.
     public static func isLookup(_ name: String) -> Bool {
-        name.hasPrefix("find_") || name.hasPrefix("list_") || name == "web_search"
+        name.hasPrefix("find_") || name.hasPrefix("list_") || name == "web_search" || name == "read_clipboard"
     }
 
     public static func running(_ name: String) -> String {
@@ -46,6 +50,9 @@ public enum ToolLabels {
         case "list_windows", "arrange_window": "正在处理窗口…"
         case "create_note", "list_notes", "append_note", "delete_note": "正在操作备忘录…"
         case "create_reminder", "list_reminders", "complete_reminder", "delete_reminder": "正在操作提醒事项…"
+        case "bash": "正在运行命令…"
+        case "list_events", "create_event": "正在操作日历…"
+        case "read_clipboard": "正在读取剪贴板…"
         default: "正在使用工具…"
         }
     }
@@ -124,7 +131,77 @@ public final class WorkspaceModel {
     private var sentToCore = false
     private var pendingQuestion: (text: String, image: URL?)?
 
-    public init(provider: WorkspaceProviding) { self.provider = provider }
+    /// Web search is off for every conversation until the person turns it on here, and needs a saved key.
+    public private(set) var searchEnabled = false
+    public private(set) var searchHasKey = false
+    private let searcher: SearchProviding?
+
+    /// The command line is off for every conversation until switched on, and needs a chosen folder.
+    public private(set) var bashEnabled = false
+    public private(set) var bashHasFolder = false
+    private let shell: ShellProviding?
+
+    public init(provider: WorkspaceProviding, search: SearchProviding? = nil, shell: ShellProviding? = nil) {
+        self.provider = provider
+        self.searcher = search
+        self.shell = shell
+    }
+
+    public var bashAvailable: Bool { shell != nil }
+
+    public func refreshShellStatus() async {
+        guard let shell else { return }
+        bashHasFolder = (try? await shell.shellStatus().usable) ?? false
+        if !bashHasFolder { bashEnabled = false }
+    }
+
+    public func toggleBash() async {
+        guard let shell else { return }
+        if bashEnabled {
+            bashEnabled = false
+            if let id = selectedID { try? await shell.setBash(conversationID: id, enabled: false) }
+            return
+        }
+        await refreshShellStatus()
+        guard bashHasFolder else {
+            errorMessage = "命令行需要先在设置的「命令行」页选择一个工作文件夹。"
+            errorOffersSettings = true
+            return
+        }
+        if let id = selectedID {
+            do { try await shell.setBash(conversationID: id, enabled: true) }
+            catch { errorMessage = "无法开启命令行"; return }
+        }
+        bashEnabled = true
+    }
+
+    public var searchAvailable: Bool { searcher != nil }
+
+    public func refreshSearchStatus() async {
+        guard let searcher else { return }
+        searchHasKey = (try? await searcher.searchStatus().hasKey) ?? false
+        if !searchHasKey { searchEnabled = false }
+    }
+
+    public func toggleSearch() async {
+        guard let searcher else { return }
+        if searchEnabled {
+            searchEnabled = false
+            if let id = selectedID { try? await searcher.setSearch(conversationID: id, enabled: false) }
+            return
+        }
+        await refreshSearchStatus()
+        guard searchHasKey else {
+            errorMessage = "联网搜索需要先在设置的「联网搜索」页保存 API 密钥。"
+            errorOffersSettings = true
+            return
+        }
+        if let id = selectedID {
+            do { try await searcher.setSearch(conversationID: id, enabled: true) }
+            catch { errorMessage = "无法开启联网搜索"; return }
+        }
+        searchEnabled = true
+    }
 
     public var title: String {
         conversations.first { $0.id == selectedID }.map { $0.title.isEmpty ? "新对话" : $0.title } ?? "新对话"
@@ -133,6 +210,8 @@ public final class WorkspaceModel {
     public func start() async {
         let before = generation
         async let list: Void = reloadList()
+        await refreshSearchStatus()
+        await refreshShellStatus()
         do {
             agents = try await provider.agents()
             selectedAgentID = selectedAgentID ?? agents.first?.id
@@ -169,6 +248,8 @@ public final class WorkspaceModel {
         stop()
         generation += 1
         selectedID = nil
+        searchEnabled = false
+        bashEnabled = false
         turns = []
         errorMessage = nil
         activity = nil
@@ -206,6 +287,8 @@ public final class WorkspaceModel {
             guard generation == mine else { return }
             selectedID = id
             selectedAgentID = detail.agentID
+            searchEnabled = detail.search
+            bashEnabled = detail.bash
             turns = detail.messages.map { message in
                 // Lookup results shown when the answer was first given come back as the same openable items.
                 let steps = message.toolResults.enumerated().compactMap { index, saved -> ToolStep? in
@@ -369,6 +452,8 @@ public final class WorkspaceModel {
         if let selectedID { return selectedID }
         let id = try await provider.createConversation(agentID: selectedAgentID, seed: [])
         selectedID = id
+        if searchEnabled { try? await searcher?.setSearch(conversationID: id, enabled: true) }
+        if bashEnabled { try? await shell?.setBash(conversationID: id, enabled: true) }
         return id
     }
 

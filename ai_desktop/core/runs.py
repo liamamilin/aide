@@ -116,11 +116,17 @@ class RunService:
     def new_broker(self) -> ConfirmationBroker:
         return ConfirmationBroker(self._emit_confirmation)
 
+    @staticmethod
+    def _preview(request: CommandConfirmation) -> str:
+        if request.workspace:    # a command: show where it runs and for how long, not just the text
+            return f"在 {request.workspace} 中运行（最长 {request.timeout} 秒）：\n{request.command}"
+        return request.command
+
     def _emit_confirmation(self, request: CommandConfirmation) -> None:
         # The preview is the exact action text built by trusted code, never model-written prose.
         self._emit("run.confirm_request", {
             "run_id": request.run_id, "confirmation_id": request.id, "call_id": request.tool_call_id,
-            "preview": request.command, "reason": request.reason, "expires_in": 600,
+            "preview": self._preview(request), "reason": request.reason, "expires_in": 600,
         })
 
     def confirm(self, params: dict[str, Any]) -> dict[str, Any]:

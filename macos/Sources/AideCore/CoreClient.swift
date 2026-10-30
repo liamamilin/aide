@@ -23,6 +23,7 @@ public actor CoreClient {
     private var router = RunRouter()
     private var flushScheduled = false
     private var eventContinuation: AsyncStream<CoreEvent>.Continuation?
+    var pullObserver: (@Sendable (PullProgress) -> Void)?
 
     /// Core-originated notifications (`core.ready`, run events, ...).
     public nonisolated let events: AsyncStream<CoreEvent>
@@ -107,6 +108,11 @@ public actor CoreClient {
         guard let message = try? JSONDecoder().decode(WireMessage.self, from: line) else { return }
         if let name = message.event {
             let event = CoreEvent(name: name, data: message.data ?? .null)
+            if name == "models.pull", let observer = pullObserver, let data = message.data {
+                observer(PullProgress(model: data["model"]?.stringValue ?? "", status: data["status"]?.stringValue ?? "",
+                                      completed: Int64(data["completed"]?.doubleValue ?? 0),
+                                      total: Int64(data["total"]?.doubleValue ?? 0)))
+            }
             if router.route(event), !flushScheduled {
                 flushScheduled = true
                 Task { try? await Task.sleep(nanoseconds: 40_000_000); self.flushDeltas() }

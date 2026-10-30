@@ -2,11 +2,12 @@
 import json
 import time
 from contextlib import nullcontext
+from datetime import timedelta
 
 from ai_desktop.desktop import opener, windows
 from ai_desktop.desktop.runner import Runner, cancellable, run_command
 from ai_desktop.desktop.search import find_apps, find_files
-from ai_desktop.integrations import apple
+from ai_desktop.integrations import apple, calendar_app, clipboard
 from ai_desktop.llm.run_types import ToolOutput
 from ai_desktop.llm.tool_registry import ToolRisk, get_definition
 from ai_desktop.services.command_confirmation import CommandConfirmation, ConfirmationBroker, ConfirmationOutcome
@@ -156,6 +157,52 @@ class DesktopToolbox:
                          json.dumps({"result": "已删除这条提醒。", "title": title}, ensure_ascii=False),
                          "无法删除提醒。")
 
+    def list_events(self, args, context):
+        if context.cancelled.is_set():
+            return ToolOutput("已取消。", error=True)
+        try:
+            events = calendar_app.list_events(args.get("days_ahead", 7), runner=self._runner)
+        except (OSError, ValueError):
+            return ToolOutput("无法读取日历；请允许控制日历。", error=True)
+        return ToolOutput(json.dumps({
+            "total_events": len(events),
+            "events": [{"title": e.title, "start": e.start.strftime("%Y-%m-%d %H:%M"), "minutes": e.minutes,
+                        "calendar": e.calendar} for e in events[:50]],
+        }, ensure_ascii=False))
+
+    def create_event(self, args, context):
+        if context.cancelled.is_set():
+            return ToolOutput("已取消。", error=True)
+        try:
+            start = calendar_app.parse_start(args["start"])
+            minutes = args.get("duration_minutes", 60)
+            ends = start + timedelta(minutes=minutes)
+        except (ValueError, OverflowError):
+            return ToolOutput("开始时间格式应为 2026-11-02 15:00。", error=True)
+        try:
+            calendar_app.validate_event(args["title"], start, minutes)
+        except ValueError:
+            return ToolOutput("开始时间超出范围（只支持昨天起五年内），请核对日期。", error=True)
+        weekday = "一二三四五六日"[start.weekday()]
+        preview = (f"新建日历事件：{args['title']}\n{start:%Y-%m-%d} 周{weekday} {start:%H:%M}–{ends:%H:%M}"
+                   f"（{minutes} 分钟）")
+        refused = self._confirm(context, "create_event", preview, "请核对日期和时间；确认后才会写入日历。")
+        if refused is not None:
+            return refused
+        return self._created(lambda: calendar_app.create_event(args["title"], start, minutes,
+                                                               runner=self._runner),
+                             context, args["title"], "已在日历中新建事件。", "无法创建事件；请允许控制日历。")
+
+    def read_clipboard(self, args, context):
+        if context.cancelled.is_set():
+            return ToolOutput("已取消。", error=True)
+        try:
+            text = clipboard.read_text(runner=self._runner)
+        except OSError:
+            return ToolOutput("剪贴板里没有可读取的文字。", error=True)
+        shown = text[:4000]
+        return ToolOutput(json.dumps({"text": shown, "truncated": len(text) > len(shown)}, ensure_ascii=False))
+
     def append_note(self, args, context):
         if context.cancelled.is_set():
             return ToolOutput("已取消。", error=True)
@@ -213,7 +260,9 @@ class DesktopToolbox:
                  "create_note": self.create_note, "create_reminder": self.create_reminder,
                  "list_notes": self.list_notes, "list_reminders": self.list_reminders,
                  "complete_reminder": self.complete_reminder, "delete_reminder": self.delete_reminder,
-                 "append_note": self.append_note, "delete_note": self.delete_note}
+                 "append_note": self.append_note, "delete_note": self.delete_note,
+                 "list_events": self.list_events, "create_event": self.create_event,
+                 "read_clipboard": self.read_clipboard}
         return {name: self._guarded(name, execute) for name, execute in tools.items()}
 
     def _guarded(self, name, execute):

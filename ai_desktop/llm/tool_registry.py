@@ -7,6 +7,7 @@ not grant it. Admission, approval and execution stay with the run context.
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -58,7 +59,7 @@ def registered_names() -> frozenset[str]:
     return frozenset(_DEFINITIONS)
 
 
-NATIVE_GROUPS = frozenset({"desktop", "windows", "notes"})
+NATIVE_GROUPS = frozenset({"desktop", "windows", "notes", "calendar", "clipboard"})
 
 
 def native_tool_names() -> frozenset[str]:
@@ -247,8 +248,7 @@ ARRANGE_WINDOW = register(ToolDefinition(
     name="arrange_window",
     group="windows",
     risk=ToolRisk.REVERSIBLE,
-    description=("Move and resize an app's front window: left_half, right_half, maximize, center. "
-                 "For side by side, call twice."),
+    description="Move and resize an app's front window. For side by side, call twice.",
     properties={"app": {"type": "string", "minLength": 1, "maxLength": 200},
                 "layout": {"type": "string", "enum": ["left_half", "right_half", "maximize", "center"]}},
     required=("app", "layout"),
@@ -304,8 +304,8 @@ DELETE_REMINDER = register(ToolDefinition(
     name="delete_reminder",
     group="notes",
     risk=ToolRisk.DESTRUCTIVE,
-    description=("Permanently delete a reminder by id from list_reminders or create_reminder. The user "
-                 "confirms the title; it cannot be undone. Only when asked to delete, not to finish."),
+    description=("Permanently delete a reminder by id. The user confirms; it cannot be undone. "
+                 "Only when asked to delete, not to finish."),
     properties={"id": {"type": "string", "minLength": 1, "maxLength": 500}},
     required=("id",),
     validate=_validate_reminder_id,
@@ -324,8 +324,7 @@ APPEND_NOTE = register(ToolDefinition(
     name="append_note",
     group="notes",
     risk=ToolRisk.DESTRUCTIVE,
-    description=("Add text at the end of an existing note by id from list_notes or create_note. Never "
-                 "replaces content. The user confirms the title and the added text."),
+    description="Append text to a note by id (from list_notes or create_note). The user confirms.",
     properties={"id": {"type": "string", "minLength": 1, "maxLength": 500},
                 "text": {"type": "string", "minLength": 1, "maxLength": 8000}},
     required=("id", "text"),
@@ -352,4 +351,59 @@ CREATE_REMINDER = register(ToolDefinition(
                 "notes": {"type": "string", "maxLength": 8000}},
     required=("title",),
     validate=_validate_text_item("title", "notes"),
+))
+
+
+def _validate_list_events(args: dict) -> None:
+    if set(args) - {"days_ahead"}:
+        raise ValueError("Unexpected argument")
+    days = args.get("days_ahead", 7)
+    if type(days) is not int or not 1 <= days <= 31:
+        raise ValueError("Invalid day range")
+
+
+def _validate_create_event(args: dict) -> None:
+    if set(args) - {"title", "start", "duration_minutes"} or not {"title", "start"} <= set(args):
+        raise ValueError("A title and a start time are required")
+    title = args["title"]
+    if not isinstance(title, str) or not title.strip() or len(title) > 200 or "\x00" in title:
+        raise ValueError("Invalid title")
+    start = args["start"]
+    if not isinstance(start, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}", start.strip()):
+        raise ValueError("Invalid start time")
+    minutes = args.get("duration_minutes", 60)
+    if type(minutes) is not int or not 5 <= minutes <= 1440:
+        raise ValueError("Invalid duration")
+
+
+LIST_EVENTS = register(ToolDefinition(
+    name="list_events",
+    group="calendar",
+    risk=ToolRisk.READ,
+    description="List Calendar (日历) events, next days_ahead days (default 7).",
+    properties={"days_ahead": {"type": "integer", "minimum": 1, "maximum": 31}},
+    required=(),
+    validate=_validate_list_events,
+))
+
+CREATE_EVENT = register(ToolDefinition(
+    name="create_event",
+    group="calendar",
+    risk=ToolRisk.DESTRUCTIVE,
+    description="Add an event to Calendar (日历); start like 2026-11-02 15:00.",
+    properties={"title": {"type": "string", "maxLength": 200},
+                "start": {"type": "string"},
+                "duration_minutes": {"type": "integer", "minimum": 5, "maximum": 1440}},
+    required=("title", "start"),
+    validate=_validate_create_event,
+))
+
+READ_CLIPBOARD = register(ToolDefinition(
+    name="read_clipboard",
+    group="clipboard",
+    risk=ToolRisk.READ,
+    description="Read the clipboard text, only when asked.",
+    properties={},
+    required=(),
+    validate=_validate_no_arguments,
 ))

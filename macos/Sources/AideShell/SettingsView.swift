@@ -4,8 +4,16 @@ import SwiftUI
 public struct SettingsView: View {
     @Bindable var model: SettingsModel
     let hotkey: HotkeySettings?
+    let system: SystemModel?
+    let search: SearchSettingsModel?
+    let shell: ShellSettingsModel?
+    let version: String
 
-    public init(model: SettingsModel, hotkey: HotkeySettings? = nil) { self.model = model; self.hotkey = hotkey }
+    public init(model: SettingsModel, hotkey: HotkeySettings? = nil, system: SystemModel? = nil,
+                search: SearchSettingsModel? = nil, shell: ShellSettingsModel? = nil, version: String = "") {
+        self.model = model; self.hotkey = hotkey; self.system = system; self.search = search
+        self.shell = shell; self.version = version
+    }
 
     public var body: some View {
         TabView {
@@ -15,6 +23,20 @@ public struct SettingsView: View {
                 .tabItem { Label("助手", systemImage: "person.crop.square") }
             ActionsPane(model: model)
                 .tabItem { Label("动作", systemImage: "bolt") }
+            if let system {
+                ModelsPane(model: system)
+                    .tabItem { Label("模型", systemImage: "cpu") }
+                if let search {
+                    SearchPane(model: search)
+                        .tabItem { Label("联网搜索", systemImage: "globe") }
+                }
+                if let shell {
+                    ShellPane(model: shell)
+                        .tabItem { Label("命令行", systemImage: "terminal") }
+                }
+                AboutPane(model: system, version: version)
+                    .tabItem { Label("关于", systemImage: "info.circle") }
+            }
         }
         .frame(width: 560, height: 480)
         .tint(Theme.accent)

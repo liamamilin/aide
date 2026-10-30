@@ -52,8 +52,11 @@ public struct ConversationDetail: Sendable, Equatable {
     public let title: String
     public let agentID: String
     public let messages: [ChatMessage]
-    public init(id: Int, title: String, agentID: String, messages: [ChatMessage]) {
+    public let search: Bool
+    public let bash: Bool
+    public init(id: Int, title: String, agentID: String, messages: [ChatMessage], search: Bool = false, bash: Bool = false) {
         self.id = id; self.title = title; self.agentID = agentID; self.messages = messages
+        self.search = search; self.bash = bash
     }
 }
 
@@ -105,7 +108,8 @@ extension CoreClient: WorkspaceProviding {
                                })
         }
         return ConversationDetail(id: id, title: result["title"]?.stringValue ?? "",
-                                  agentID: result["agent_id"]?.stringValue ?? "", messages: messages)
+                                  agentID: result["agent_id"]?.stringValue ?? "", messages: messages,
+                                  search: result["search"]?.boolValue ?? false, bash: result["bash"]?.boolValue ?? false)
     }
 
     public func createConversation(agentID: String?, seed: [(role: ChatMessage.Role, content: String)]) async throws -> Int {

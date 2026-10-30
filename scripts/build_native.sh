@@ -74,7 +74,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
-    <key>NSAppleEventsUsageDescription</key><string>用于按你的要求操作备忘录、提醒事项和窗口。</string>
+    <key>NSAppleEventsUsageDescription</key><string>用于按你的要求操作备忘录、提醒事项、日历和窗口。</string>
     <key>NSRemindersUsageDescription</key><string>用于按你的要求查看、完成或删除提醒事项。</string>
     <key>NSRemindersFullAccessUsageDescription</key><string>用于按你的要求查看、完成或删除提醒事项。</string>
 </dict>

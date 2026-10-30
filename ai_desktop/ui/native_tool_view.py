@@ -6,6 +6,7 @@ _LAYOUTS = {"left_half": "左半屏", "right_half": "右半屏", "maximize": "�
 NATIVE_TOOLS = frozenset({
     "find_apps", "find_files", "open_path", "list_windows", "arrange_window", "create_note", "create_reminder",
     "list_notes", "list_reminders", "complete_reminder", "delete_reminder", "append_note", "delete_note",
+    "list_events", "create_event", "read_clipboard",
 })
 AUTOMATION_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
 ACCESSIBILITY_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
@@ -44,6 +45,12 @@ def describe_call(tool_name: str, args: dict) -> str:
         return f"追加到笔记末尾：{get('text', '')[:60]}"
     if tool_name == "delete_note":
         return "删除这条笔记"
+    if tool_name == "list_events":
+        return f"查看未来 {get('days_ahead', 7)} 天的日程"
+    if tool_name == "create_event":
+        return f"新建日程：{get('title', '')}（{get('start', '')}）"
+    if tool_name == "read_clipboard":
+        return "读取剪贴板"
     return ""
 
 
@@ -81,6 +88,12 @@ def describe_result(tool_name: str, text: str, error: bool) -> str:
         return f"已删除：{record.get('title', '')}"[:40]
     if tool_name == "append_note":
         return "已追加"
+    if tool_name == "list_events":
+        return f"{record.get('total_events', 0)} 个日程"
+    if tool_name == "create_event":
+        return "已添加到日历"
+    if tool_name == "read_clipboard":
+        return "已读取"
     return "已完成"
 
 

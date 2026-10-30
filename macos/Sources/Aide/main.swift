@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: QuickPanelController?
     private var workspace: WorkspaceWindowController?
     private var settings: SettingsWindowController?
+    private var onboarding: OnboardingWindowController?
     private var statusItem: NSStatusItem?
     private var panelItem: NSMenuItem?
 
@@ -23,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = QuickPanelModel(provider: client, ask: client)
         let controller = QuickPanelController(model: model, reader: SelectionReader())
         self.controller = controller
-        let workspace = WorkspaceWindowController(model: WorkspaceModel(provider: client))
+        let workspace = WorkspaceWindowController(model: WorkspaceModel(provider: client, search: client, shell: client))
         self.workspace = workspace
         let hotkeys = HotkeySettings { [weak self] combo in
             guard let registered = Hotkey(combo, action: { Task { @MainActor in controller.toggle() } }) else { return false }
@@ -31,7 +32,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.panelItem?.title = "快捷面板  \(combo.display)"
             return true
         }
-        let settings = SettingsWindowController(model: SettingsModel(provider: client), hotkey: hotkeys)
+        let system = SystemModel(provider: client)
+        let onboarding = OnboardingWindowController(model: system)
+        self.onboarding = onboarding
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 600_000_000)   // let the core finish starting
+            await onboarding.showIfNeeded()
+        }
+        let settings = SettingsWindowController(
+            model: SettingsModel(provider: client), hotkey: hotkeys, system: system, search: SearchSettingsModel(provider: client), shell: ShellSettingsModel(provider: client),
+            version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版")
         self.settings = settings
         workspace.model.onOpenSettings = { settings.show() }
         model.onOpenConversation = { id in Task { @MainActor in workspace.show(conversationID: id) } }
@@ -56,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.activate()
         menu.addItem(withTitle: "打开 Aide", action: #selector(showWorkspace), keyEquivalent: "").target = self
         menu.addItem(withTitle: "设置…", action: #selector(showSettings), keyEquivalent: ",").target = self
+        menu.addItem(withTitle: "新手引导…", action: #selector(showOnboarding), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "退出 Aide", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
@@ -83,6 +94,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showWorkspace() { workspace?.show() }
 
     @objc private func showSettings() { settings?.show() }
+
+    @objc private func showOnboarding() { onboarding?.show() }
 
     @objc private func showPanel() { controller?.toggle() }
 
