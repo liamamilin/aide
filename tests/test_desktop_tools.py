@@ -71,7 +71,10 @@ def test_worker_grants_desktop_tools_only_in_admitted_runs(qtbot, monkeypatch):
                   options={"num_ctx": 16384, "num_predict": 1024})
     messages = [Message('user', 'hi')]
     admitted = RunWorker(messages, "sys", "m", tools_admitted=True, **kwargs)
-    assert [t.name for t in admitted.context.tools] == ["web_search", *DesktopToolbox().executors()]
+    # With search on, read_clipboard is withheld on purpose, and a 16K window drops the calendar tools first.
+    withheld = {"read_clipboard", "list_events", "create_event"}
+    assert [t.name for t in admitted.context.tools] == [
+        "web_search", *(name for name in DesktopToolbox().executors() if name not in withheld)]
     assert "find_apps" in admitted.request.system_prompt
     plain = RunWorker(messages, "sys", "m", agent_id="general_assistant")
     assert plain.context.tools == ()

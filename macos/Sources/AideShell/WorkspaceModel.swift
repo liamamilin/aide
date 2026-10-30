@@ -29,13 +29,16 @@ public enum ToolLabels {
         case "list_reminders": "查看提醒"
         case "complete_reminder": "完成提醒"
         case "delete_reminder": "删除提醒"
+        case "list_events": "查看日程"
+        case "create_event": "新建日程"
+        case "read_clipboard": "读取剪贴板"
         default: "使用工具"
         }
     }
 
     /// Lookups change nothing; every other tool does something that stays done after a cancel.
     public static func isLookup(_ name: String) -> Bool {
-        name.hasPrefix("find_") || name.hasPrefix("list_") || name == "web_search"
+        name.hasPrefix("find_") || name.hasPrefix("list_") || name == "web_search" || name == "read_clipboard"
     }
 
     public static func running(_ name: String) -> String {
@@ -46,6 +49,8 @@ public enum ToolLabels {
         case "list_windows", "arrange_window": "正在处理窗口…"
         case "create_note", "list_notes", "append_note", "delete_note": "正在操作备忘录…"
         case "create_reminder", "list_reminders", "complete_reminder", "delete_reminder": "正在操作提醒事项…"
+        case "list_events", "create_event": "正在操作日历…"
+        case "read_clipboard": "正在读取剪贴板…"
         default: "正在使用工具…"
         }
     }

@@ -1,5 +1,6 @@
 """The tool-use rules appended to an agent's system prompt when tools are granted."""
 from collections.abc import Iterable
+from datetime import datetime
 
 from ai_desktop.llm.run_types import counts_as_search
 
@@ -28,13 +29,17 @@ def tool_rules(tool_names: Iterable[str]) -> str:
     rules = _BASE
     if 'find_files' in names:
         rules += _DESKTOP
+    if 'create_event' in names or 'list_events' in names:
+        now = datetime.now()
+        rules += f'现在：{now:%Y-%m-%d} 周{"一二三四五六日"[now.weekday()]} {now:%H:%M}。'
     if any(counts_as_search(name) for name in names):
         rules += _SOURCES
     return rules
 
 
 # Least essential first: a small context window keeps the core tools instead of failing the whole run.
-_DROP_ORDER = ("append_note", "delete_reminder", "complete_reminder", "list_reminders", "delete_note", "list_notes",
+_DROP_ORDER = ("read_clipboard", "list_events", "create_event", "append_note", "delete_reminder",
+               "complete_reminder", "list_reminders", "delete_note", "list_notes",
                "create_reminder", "arrange_window", "list_windows")
 _FIXED_SHARE = 0.5  # of the input budget, for tool schemas and rules
 

@@ -145,3 +145,13 @@ def test_core_modules_stay_qt_free():
     assert out.stdout.strip() == "False"
 
 
+def test_clipboard_read_is_not_offered_in_a_chat_with_web_search(env):
+    chats, search, _keys, llm, _web, events = env
+    convo = chats.create({"agent_id": "general_assistant"})["id"]
+    llm.enqueue(*_final("ok"))
+    assert "read_clipboard" in chats.send({"conversation_id": convo, "text": "hi"})["tools"]
+    _next(events, "run.finished")
+    search.set_conversation({"conversation_id": convo, "enabled": True})
+    llm.enqueue(*_final("ok"))
+    tools = chats.send({"conversation_id": convo, "text": "hi again"})["tools"]
+    assert "web_search" in tools and "read_clipboard" not in tools

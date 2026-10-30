@@ -51,7 +51,10 @@ def assemble_tool_run(request: RequestContext, system_prompt: str, *, tools_admi
         tools += (ToolSpec.create('web_search', search_executor),)
     if allowed and (tools or native_tools) and config.DESKTOP_TOOLS_ENABLED:
         toolbox = DesktopToolbox(runner=desktop_runner, confirmations=confirmations)
-        tools += tuple(ToolSpec.create(name, execute) for name, execute in toolbox.executors().items())
+        searching = any(tool.name == 'web_search' for tool in tools)
+        # A page a model reads online must not be able to make it forward what is on the clipboard.
+        tools += tuple(ToolSpec.create(name, execute) for name, execute in toolbox.executors().items()
+                       if not (searching and name == 'read_clipboard'))
         tools = fit_tools(tools, dict(request.options))
     context = RunContext.create(request, tools=tools, tools_admitted=tools_admitted,
                                 limits=RunLimits.from_config() if tools_admitted else None,
