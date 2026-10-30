@@ -124,3 +124,41 @@ public final class SearchSettingsModel {
         } catch { errorMessage = SystemModel.describe(error) }
     }
 }
+
+/// "命令行" settings: the one folder commands may run in, and how much runs without asking.
+@MainActor @Observable
+public final class ShellSettingsModel {
+    public private(set) var status: ShellStatus?
+    public var policy: ShellPolicy = .readonlyAuto
+    public private(set) var errorMessage: String?
+
+    private let provider: ShellProviding
+
+    public init(provider: ShellProviding) { self.provider = provider }
+
+    public func load() async {
+        do {
+            let current = try await provider.shellStatus()
+            status = current
+            policy = current.policy
+            errorMessage = nil
+        } catch { errorMessage = SystemModel.describe(error) }
+    }
+
+    public func choose(_ path: String) async {
+        do {
+            status = try await provider.setShellWorkspace(path: path, policy: policy)
+            errorMessage = nil
+        } catch { errorMessage = SystemModel.describe(error) }
+    }
+
+    public func applyPolicy() async {
+        guard let folder = status?.workspace, !folder.isEmpty else { return }
+        await choose(folder)
+    }
+
+    public func clear() async {
+        do { status = try await provider.clearShellWorkspace(); errorMessage = nil }
+        catch { errorMessage = SystemModel.describe(error) }
+    }
+}

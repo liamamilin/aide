@@ -180,3 +180,59 @@ struct SearchPane: View {
         .task { await model.load() }
     }
 }
+
+/// "命令行" tab. Off in every conversation until switched on in the Workspace toolbar.
+struct ShellPane: View {
+    @Bindable var model: ShellSettingsModel
+
+    var body: some View {
+        Form {
+            Section {
+                Text("默认关闭。在 Workspace 的某个对话里打开「命令行」后，模型才能在下面选定的文件夹里运行命令。命令不会继承你的环境变量和密钥。")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            Section("工作文件夹") {
+                if let status = model.status, !status.workspace.isEmpty {
+                    LabeledContent("位置") {
+                        Text(status.workspace).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+                    }
+                    if !status.usable {
+                        Label("这个文件夹已不存在或已变更，请重新选择。", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                } else {
+                    Text("还没有选择").foregroundStyle(.secondary)
+                }
+                HStack {
+                    Button("选择文件夹…") { pick() }
+                    Button("清除") { Task { await model.clear() } }
+                        .disabled((model.status?.workspace ?? "").isEmpty)
+                }
+                Text("请选一个具体的项目文件夹，不能选根目录或整个个人文件夹。").font(.caption).foregroundStyle(.secondary)
+            }
+            Section("确认方式") {
+                Picker("策略", selection: $model.policy) {
+                    Text("只读命令自动运行，其余先确认").tag(ShellPolicy.readonlyAuto)
+                    Text("每条命令都先确认").tag(ShellPolicy.confirmAll)
+                }
+                .pickerStyle(.radioGroup)
+                .onChange(of: model.policy) { _, _ in Task { await model.applyPolicy() } }
+                Text("自动运行的只有 pwd、ls、cat、head、tail、wc，且只读取工作文件夹里的文件。其余命令会显示完整命令和所在文件夹，你批准后才运行。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if let error = model.errorMessage { Text(error).foregroundStyle(.red).font(.callout) }
+        }
+        .formStyle(.grouped)
+        .task { await model.load() }
+    }
+
+    private func pick() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "选择"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await model.choose(url.path) }
+    }
+}

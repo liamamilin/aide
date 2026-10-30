@@ -31,11 +31,13 @@ def build_handlers(emit) -> dict:
     from ai_desktop.core.preferences import PreferencesService
     from ai_desktop.core.runs import RunService
     from ai_desktop.core.search import SearchService
+    from ai_desktop.core.shell import ShellService
     from ai_desktop.core.system import SystemService
 
     runs = RunService(emit)
     search = SearchService()
-    chats = ConversationService(runs, search)
+    shell = ShellService()
+    chats = ConversationService(runs, search, shell)
     prefs = PreferencesService(runs)
     system = SystemService(emit)
     return {
@@ -55,4 +57,6 @@ def build_handlers(emit) -> dict:
         "updates.check": system.check_update,
         "search.status": search.status, "search.save_key": search.save_key, "search.delete_key": search.delete_key,
         "conversations.set_search": search.set_conversation,
+        "shell.status": shell.status, "shell.set_workspace": shell.set_workspace,
+        "shell.clear_workspace": shell.clear_workspace, "conversations.set_bash": shell.set_conversation,
     }

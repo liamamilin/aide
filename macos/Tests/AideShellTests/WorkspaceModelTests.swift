@@ -552,3 +552,45 @@ final class WorkspaceSearchTests: XCTestCase {
         XCTAssertFalse(WorkspaceModel(provider: StubWorkspace()).searchAvailable)
     }
 }
+
+private final class StubShell: ShellProviding, @unchecked Sendable {
+    var usable = true
+    private(set) var calls: [(Int, Bool)] = []
+    func shellStatus() async throws -> ShellStatus { ShellStatus(workspace: "/p", usable: usable, policy: .readonlyAuto) }
+    func setShellWorkspace(path: String, policy: ShellPolicy) async throws -> ShellStatus { try await shellStatus() }
+    func clearShellWorkspace() async throws -> ShellStatus { try await shellStatus() }
+    func setBash(conversationID: Int, enabled: Bool) async throws { calls.append((conversationID, enabled)) }
+}
+
+@MainActor
+final class WorkspaceBashTests: XCTestCase {
+    func testOffByDefaultAndNeedsAFolder() async {
+        let shell = StubShell()
+        shell.usable = false
+        let model = WorkspaceModel(provider: StubWorkspace(), shell: shell)
+        await model.start()
+        XCTAssertFalse(model.bashEnabled)
+        await model.toggleBash()
+        XCTAssertFalse(model.bashEnabled)
+        XCTAssertTrue(model.errorOffersSettings)
+        XCTAssertTrue(shell.calls.isEmpty)
+    }
+
+    func testToggleReachesTheCoreAndNewChatStartsOff() async {
+        let shell = StubShell()
+        let model = WorkspaceModel(provider: StubWorkspace(), shell: shell)
+        await model.start()
+        await model.toggleBash()
+        XCTAssertTrue(model.bashEnabled)
+        XCTAssertEqual(shell.calls.map(\.1), [true])
+        model.newChat()
+        XCTAssertFalse(model.bashEnabled)
+        await model.toggleBash()                  // no conversation yet: remembered locally only
+        XCTAssertTrue(model.bashEnabled)
+        XCTAssertEqual(shell.calls.count, 1)
+    }
+
+    func testToggleIsHiddenWithoutAShellProvider() {
+        XCTAssertFalse(WorkspaceModel(provider: StubWorkspace()).bashAvailable)
+    }
+}

@@ -6,11 +6,13 @@ public struct SettingsView: View {
     let hotkey: HotkeySettings?
     let system: SystemModel?
     let search: SearchSettingsModel?
+    let shell: ShellSettingsModel?
     let version: String
 
     public init(model: SettingsModel, hotkey: HotkeySettings? = nil, system: SystemModel? = nil,
-                search: SearchSettingsModel? = nil, version: String = "") {
-        self.model = model; self.hotkey = hotkey; self.system = system; self.search = search; self.version = version
+                search: SearchSettingsModel? = nil, shell: ShellSettingsModel? = nil, version: String = "") {
+        self.model = model; self.hotkey = hotkey; self.system = system; self.search = search
+        self.shell = shell; self.version = version
     }
 
     public var body: some View {
@@ -27,6 +29,10 @@ public struct SettingsView: View {
                 if let search {
                     SearchPane(model: search)
                         .tabItem { Label("联网搜索", systemImage: "globe") }
+                }
+                if let shell {
+                    ShellPane(model: shell)
+                        .tabItem { Label("命令行", systemImage: "terminal") }
                 }
                 AboutPane(model: system, version: version)
                     .tabItem { Label("关于", systemImage: "info.circle") }

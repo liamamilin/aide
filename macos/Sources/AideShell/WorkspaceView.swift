@@ -24,6 +24,7 @@ public struct WorkspaceView: View {
                     .help("新对话 ⌘N")
                     .keyboardShortcut("n")
             }
+            ToolbarItem(placement: .primaryAction) { bashToggle }
             ToolbarItem(placement: .primaryAction) { searchToggle }
             ToolbarItem(placement: .primaryAction) { agentMenu }
             ToolbarItem(placement: .primaryAction) { modelMenu }
@@ -165,6 +166,20 @@ public struct WorkspaceView: View {
         }
         .disabled(model.isSending)
         .help(model.isSending ? "正在回答，完成后可切换助手" : "选择助手，下一条消息起生效")
+    }
+
+    @ViewBuilder private var bashToggle: some View {
+        if model.bashAvailable {
+            Button { Task { await model.toggleBash() } } label: {
+                Label(model.bashEnabled ? "命令行：开" : "命令行", systemImage: "terminal")
+                    .font(.system(size: 12))
+                    .foregroundStyle(model.bashEnabled ? Theme.accent : Color.secondary)
+            }
+            .disabled(model.isSending)
+            .help(model.bashEnabled
+                  ? "已开启：这个对话里模型可以在你选定的文件夹里运行命令。除一小部分只读命令外，每条命令都会先问你。点击关闭。"
+                  : "默认关闭。开启后，模型可以在设置里选定的文件夹运行命令，需要你逐条确认。")
+        }
     }
 
     @ViewBuilder private var searchToggle: some View {
