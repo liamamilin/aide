@@ -8,12 +8,16 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
 
     private let hotkey: HotkeySettings?
+    private let system: SystemModel?
+    private let version: String
 
-    public init(model: SettingsModel, hotkey: HotkeySettings? = nil) { self.model = model; self.hotkey = hotkey }
+    public init(model: SettingsModel, hotkey: HotkeySettings? = nil, system: SystemModel? = nil, version: String = "") {
+        self.model = model; self.hotkey = hotkey; self.system = system; self.version = version
+    }
 
     public func show() {
         if window == nil {
-            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(model: model, hotkey: hotkey)))
+            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(model: model, hotkey: hotkey, system: system, version: version)))
             window.styleMask = [.titled, .closable]
             window.title = "Aide 设置"
             window.isReleasedWhenClosed = false

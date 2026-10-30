@@ -4,8 +4,12 @@ import SwiftUI
 public struct SettingsView: View {
     @Bindable var model: SettingsModel
     let hotkey: HotkeySettings?
+    let system: SystemModel?
+    let version: String
 
-    public init(model: SettingsModel, hotkey: HotkeySettings? = nil) { self.model = model; self.hotkey = hotkey }
+    public init(model: SettingsModel, hotkey: HotkeySettings? = nil, system: SystemModel? = nil, version: String = "") {
+        self.model = model; self.hotkey = hotkey; self.system = system; self.version = version
+    }
 
     public var body: some View {
         TabView {
@@ -15,6 +19,12 @@ public struct SettingsView: View {
                 .tabItem { Label("助手", systemImage: "person.crop.square") }
             ActionsPane(model: model)
                 .tabItem { Label("动作", systemImage: "bolt") }
+            if let system {
+                ModelsPane(model: system)
+                    .tabItem { Label("模型", systemImage: "cpu") }
+                AboutPane(model: system, version: version)
+                    .tabItem { Label("关于", systemImage: "info.circle") }
+            }
         }
         .frame(width: 560, height: 480)
         .tint(Theme.accent)
