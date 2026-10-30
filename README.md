@@ -38,6 +38,8 @@ Most AI tools make you go to them: open a tab, paste, wait, copy back. Aide goes
 | Press `↩` on an answer | Copy it and return to the app you came from. |
 | Press `⌘⌃S` and drag a region | Starts a Workspace chat with the screenshot attached (needs a vision-capable model). |
 | Ask it to delete a note, append to a note, or change a reminder | Shows exactly what will happen. Nothing runs until you allow it. |
+| *"What's on my calendar this week?"*, *"book dentist Tuesday 3pm"* | Reads your Calendar. A new event shows the exact date and time first and is only added after you approve. |
+| *"Summarize what I just copied"* | Reads the text on the clipboard, only when you ask. |
 
 ### Quick Panel
 
@@ -57,6 +59,14 @@ The full window, opened from the menu bar.
 - Streaming Markdown: tables, lists, and code blocks with a copy button.
 - Regenerate an answer, edit your last question, switch agent or model per conversation.
 - Long answers keep up with the stream without freezing the window.
+
+### Opt-in tools: web search and command line
+
+Both are **off in every conversation** until you switch them on in the Workspace toolbar. The Quick Panel never uses them.
+
+- **Web search** needs an API key (Parallel or Exa) saved in Settings, kept in the macOS Keychain and never shown again. When it is on, the model may send *its own search query* to that provider. Your conversation, clipboard and selected text are not sent.
+- **Command line** runs inside one folder you choose in Settings, never your whole home folder. Only `pwd`, `ls`, `cat`, `head`, `tail` and `wc` on files in that folder run on their own; every other command shows the exact text and folder and waits for you. Commands do not inherit your environment variables or keys.
+- Search and command line can be on together. A model that reads a file could in principle put its contents in a search query, so turn search off in conversations that touch sensitive files.
 
 ### Agents and custom actions
 
@@ -79,7 +89,7 @@ Five built-in agents, plus your own with their own system prompt, model, thinkin
 > xattr -dr com.apple.quarantine /Applications/Aide.app
 > ```
 
-There is no auto-update yet. To update, quit Aide and replace it in Applications.
+The first time you open Aide it walks you through Ollama, a model (with a one-click download) and permissions. There is no auto-update: **Settings → About → Check for updates** tells you when a new version exists and links to the download. Replace the app in Applications to update.
 
 ### Permissions
 
@@ -87,7 +97,7 @@ There is no auto-update yet. To update, quit Aide and replace it in Applications
 |---|---|---|
 | Accessibility | Read the text you selected in other apps | First `⌘⌃L` with a selection. Typing a request works without it. |
 | Screen Recording | Capture the region you drag | First `⌘⌃S` |
-| Automation (Notes, Reminders) | Read or change them when you ask | First time you ask for it |
+| Automation (Notes, Reminders, Calendar) | Read or change them when you ask | First time you ask for it |
 
 Release DMGs are ad-hoc signed, so macOS may ask again after an update. A build signed with a stable identity keeps its permissions across updates.
 
@@ -96,6 +106,9 @@ Release DMGs are ad-hoc signed, so macOS may ask again after an update. A build 
 Menu bar → **设置…** (`⌘,`)
 
 - Ollama address and thinking mode
+- **Models**: what is installed (and which can see images, use tools, think), and download new ones
+- **Web search** key and **command line** folder (both off until you switch them on per conversation)
+- **About**: check for updates, export all conversations to Markdown or JSON, copy a diagnostics summary (versions only, no conversation text)
 - A recordable Quick Panel hotkey
 - Custom agents and custom quick actions
 - Sampling parameters under "Advanced"
@@ -104,12 +117,12 @@ Menu bar → **设置…** (`⌘,`)
 
 - **Local only.** Requests go to the Ollama address you configure, which defaults to your own machine.
 - **Your data stays put.** History and attachments live in `~/Library/Application Support/ai-desktop-assistant/`. Delete that folder to remove everything.
-- **Confirm before changing.** Deleting or editing Notes and Reminders always shows the exact action and waits for you.
+- **Confirm before changing.** Deleting or editing Notes and Reminders, adding a calendar event, and running any command outside the short read-only list always show the exact action and wait for you.
 - **Honest results.** Found files and apps come straight from the tool, not from the model's wording. If a file has moved, opening it fails with a clear message instead of pretending.
 
 ## Not in the native app yet
 
-The desktop pet, web search and the Bash tool still live in the [legacy Qt app](docs/legacy-qt.md), which shares the same history.
+The desktop pet still lives in the [legacy Qt app](docs/legacy-qt.md), which shares the same history.
 
 ## Build from source
 
