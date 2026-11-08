@@ -5,13 +5,14 @@ import SwiftUI
 @MainActor
 public final class WorkspaceWindowController: NSObject, NSWindowDelegate {
     public let model: WorkspaceModel
+    private let speech: SpeechReader?
     private var window: NSWindow?
 
-    public init(model: WorkspaceModel) { self.model = model }
+    public init(model: WorkspaceModel, speech: SpeechReader? = nil) { self.model = model; self.speech = speech }
 
     public func show(conversationID: Int? = nil) {
         if window == nil {
-            let host = NSHostingController(rootView: WorkspaceView(model: model))
+            let host = NSHostingController(rootView: WorkspaceView(model: model).environment(speech))
             let window = NSWindow(contentViewController: host)
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
             window.toolbarStyle = .unified

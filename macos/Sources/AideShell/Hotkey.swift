@@ -17,6 +17,8 @@ public final class Hotkey {
         public static let quickPanel = Combo(keyCode: UInt32(kVK_ANSI_L), modifiers: UInt32(cmdKey | controlKey), label: "L")
         /// ⌘⌃S: capture a screen region and ask about it.
         public static let screenshot = Combo(keyCode: UInt32(kVK_ANSI_S), modifiers: UInt32(cmdKey | controlKey), label: "S")
+        /// ⌘⌃R: read the selection aloud (press again to stop).
+        public static let readAloud = Combo(keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(cmdKey | controlKey), label: "R")
 
         /// "⌃⌥⌘L" in the order macOS menus use.
         public var display: String {

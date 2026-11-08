@@ -231,7 +231,9 @@ private struct StepRow: View {
 private struct TurnView: View {
     let turn: Turn
     let model: WorkspaceModel
+    @Environment(SpeechReader.self) private var speech: SpeechReader?
     @State private var copied = false
+    @State private var hovering = false
     @State private var editing = false
     @State private var editText = ""
 
@@ -254,6 +256,10 @@ private struct TurnView: View {
             } else {
                 HStack(alignment: .center, spacing: 6) {
                     Spacer(minLength: 60)
+                    if let speech, !turn.content.isEmpty, hovering || speech.isReading(speechID) {
+                        speakButton(speech).labelStyle(.iconOnly)
+                            .buttonStyle(.plain).foregroundStyle(.secondary)
+                    }
                     if isLastQuestion {
                         Button { editText = turn.content; editing = true } label: { Image(systemName: "pencil") }
                             .buttonStyle(.plain).foregroundStyle(.secondary).help("编辑并重新发送")
@@ -268,6 +274,7 @@ private struct TurnView: View {
                     .padding(.horizontal, 12).padding(.vertical, 8)
                     .background(Theme.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
                 }
+                .onHover { hovering = $0 }
             }
         case .assistant:
             VStack(alignment: .leading, spacing: 6) {
@@ -287,6 +294,7 @@ private struct TurnView: View {
                             copied = true
                             Task { try? await Task.sleep(nanoseconds: 1_500_000_000); copied = false }
                         } label: { Label(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc") }
+                        if let speech { speakButton(speech) }
                         if isLast && model.canRedo {
                             Button { model.regenerate() } label: { Label("重新生成", systemImage: "arrow.clockwise") }
                         }
@@ -296,6 +304,23 @@ private struct TurnView: View {
             }
             .font(.system(size: 14))
         }
+    }
+
+    private var speechID: String { "turn-\(turn.id)" }
+
+    private func speakButton(_ speech: SpeechReader) -> some View {
+        let reading = speech.isReading(speechID)
+        return Button {
+            if reading { speech.stop(); return }
+            // Part of the message selected → read just that; otherwise the whole message.
+            let selection = InAppSelection.read()
+            NSLog("Aide speech: button, in-app selection %d chars", selection?.count ?? 0)
+            speech.toggle(markdown: turn.content, selection: selection, source: speechID)
+        } label: {
+            Label(reading ? "停止" : "朗读", systemImage: reading ? "stop.circle" : "speaker.wave.2")
+        }
+        .foregroundStyle(reading ? Theme.accent : .secondary)
+        .help(reading ? "停止朗读" : "朗读这条消息；先选中其中一部分，就只读选中的")
     }
 }
 

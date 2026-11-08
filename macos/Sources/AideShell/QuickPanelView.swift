@@ -5,10 +5,12 @@ import SwiftUI
 /// light/dark and the user's accent. Brand styling is applied elsewhere, never committed here.
 public struct QuickPanelView: View {
     @Bindable var model: QuickPanelModel
+    /// Read-aloud for the selection; nil hides the button.
+    var speech: SpeechReader?
     private enum Field { case input, panel }
     @FocusState private var focus: Field?
 
-    public init(model: QuickPanelModel) { self.model = model }
+    public init(model: QuickPanelModel, speech: SpeechReader? = nil) { self.model = model; self.speech = speech }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -97,6 +99,15 @@ public struct QuickPanelView: View {
                 .truncationMode(.tail)
                 .foregroundStyle(model.selection.isEmpty && !model.isAsk ? .secondary : .primary)
             Spacer(minLength: 0)
+            if let speech, !model.selection.isEmpty {
+                Button { speech.toggle(model.selection) } label: {
+                    Image(systemName: speech.isSpeaking ? "stop.circle" : "speaker.wave.2")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(speech.isSpeaking ? Theme.accent : .secondary)
+                .help(speech.isSpeaking ? "停止朗读" : "朗读选中的文字（⌘⌃R）")
+                .accessibilityLabel(speech.isSpeaking ? "停止朗读" : "朗读选中的文字")
+            }
         }
         .font(.system(size: 13))
         .padding(.horizontal, 16)
