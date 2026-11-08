@@ -6,6 +6,8 @@ GitHub Release.
 
 ## Unreleased — M3 development
 
+- Native app: added the main menu with Edit and Window commands. ⌘C / ⌘V / ⌘X / ⌘A / ⌘Z now work in text
+  fields (they used to only beep), including in the Quick Panel.
 - Native app: read aloud with macOS system voices (`AVSpeechSynthesizer`, fully local). Use `⌘⌃R` on a
   selection in any app, the menu bar item, or the speaker buttons in the Quick Panel and under Workspace
   messages. A message's button reads only the part you selected, if any. Mixed Chinese/English text uses one
