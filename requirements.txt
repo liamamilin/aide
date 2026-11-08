@@ -4,6 +4,9 @@ PyQt5-Frameless-Window==0.8.2
 pynput>=1.7.6,<2.0.0
 requests>=2.31.0,<3.0.0
 urllib3>=1.26.0,<3.0.0
+# PyQt5-Frameless-Window depends on the unpinned "pyobjc" meta package; pyobjc 13 pins every framework to 13.x,
+# which clashes with the <13 caps below and makes pip backtrack to ancient pyobjc 2.x (Python 2 setup.py). Cap it too.
+pyobjc>=12.2.2,<13.0.0; sys_platform == "darwin"
 pyobjc-framework-Vision>=12.2.2,<13.0.0; sys_platform == "darwin"
 pyobjc-framework-Security>=12.2.2,<13.0.0; sys_platform == "darwin"
 pyobjc-framework-EventKit>=12.2.2,<13.0.0; sys_platform == "darwin"
