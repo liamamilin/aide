@@ -14,7 +14,7 @@ public final class QuickPanelController {
     private let panel: KeyPanel
     private var previousApp: NSRunningApplication?
 
-    public init(model: QuickPanelModel, reader: SelectionReading) {
+    public init(model: QuickPanelModel, reader: SelectionReading, speech: SpeechReader? = nil) {
         self.model = model
         self.reader = reader
         panel = KeyPanel(contentRect: NSRect(x: 0, y: 0, width: 560, height: 200),
@@ -27,7 +27,7 @@ public final class QuickPanelController {
         panel.isMovableByWindowBackground = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.hidesOnDeactivate = false
-        let host = NSHostingController(rootView: QuickPanelView(model: model))
+        let host = NSHostingController(rootView: QuickPanelView(model: model, speech: speech))
         host.sizingOptions = [.preferredContentSize]
         host.view.wantsLayer = true
         host.view.layer?.cornerRadius = 14

@@ -6,6 +6,11 @@ GitHub Release.
 
 ## Unreleased — M3 development
 
+- Native app: read aloud with macOS system voices (`AVSpeechSynthesizer`, fully local). Use `⌘⌃R` on a
+  selection in any app, the menu bar item, or the speaker buttons in the Quick Panel and under Workspace
+  messages. A message's button reads only the part you selected, if any. Mixed Chinese/English text uses one
+  voice per language, and the best installed (Premium/Enhanced) voice is chosen automatically.
+
 - Added the personal-computer entry point: native tools (app/file discovery and open, window layout, Notes,
   Reminders) are offered to every role on every message, with the model deciding when to use them. Destructive
   tools (delete/append note, delete reminder) always ask for exact confirmation and fail closed without it.

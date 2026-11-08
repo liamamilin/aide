@@ -4,10 +4,14 @@ import AppKit
 
 /// Spawns the Python core: the frozen helper inside the .app when packaged, else from the source tree (dev).
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var core: CoreClient?
     private var hotkey: Hotkey?
     private var shotKey: Hotkey?
+    private var readKey: Hotkey?
+    private let speech = SpeechReader()
+    private let selectionReader = SelectionReader()
+    private var readItem: NSMenuItem?
     private var controller: QuickPanelController?
     private var workspace: WorkspaceWindowController?
     private var settings: SettingsWindowController?
@@ -22,9 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             do { try await client.start() } catch { NSLog("Aide core failed to start: \(error)") }
         }
         let model = QuickPanelModel(provider: client, ask: client)
-        let controller = QuickPanelController(model: model, reader: SelectionReader())
+        let controller = QuickPanelController(model: model, reader: selectionReader, speech: speech)
         self.controller = controller
-        let workspace = WorkspaceWindowController(model: WorkspaceModel(provider: client, search: client, shell: client))
+        let workspace = WorkspaceWindowController(model: WorkspaceModel(provider: client, search: client, shell: client), speech: speech)
         self.workspace = workspace
         let hotkeys = HotkeySettings { [weak self] combo in
             guard let registered = Hotkey(combo, action: { Task { @MainActor in controller.toggle() } }) else { return false }
@@ -55,6 +59,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         shotKey = Hotkey(.screenshot, id: 2) { Task { @MainActor in self.askAboutScreen() } }
         if shotKey == nil { NSLog("Aide: ⌘⌃S is already taken by another app") }
+        readKey = Hotkey(.readAloud, id: 3) { Task { @MainActor in self.readSelectionAloud() } }
+        if readKey == nil { NSLog("Aide: ⌘⌃R is already taken by another app") }
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "sparkle", accessibilityDescription: "Aide")
@@ -62,6 +68,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let panelItem = menu.addItem(withTitle: "快捷面板  \(hotkeys.combo.display)", action: #selector(showPanel), keyEquivalent: "")
         panelItem.target = self
         menu.addItem(withTitle: "截图提问  ⌘⌃S", action: #selector(askAboutScreenFromMenu), keyEquivalent: "").target = self
+        let readItem = menu.addItem(withTitle: Self.readTitle(speaking: false), action: #selector(readSelectionFromMenu), keyEquivalent: "")
+        readItem.target = self
+        self.readItem = readItem
+        menu.delegate = self
         self.panelItem = panelItem
         hotkeys.activate()
         menu.addItem(withTitle: "打开 Aide", action: #selector(showWorkspace), keyEquivalent: "").target = self
@@ -81,6 +91,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func askAboutScreenFromMenu() { askAboutScreen() }
+
+    @objc private func readSelectionFromMenu() { readSelectionAloud() }
+
+    func menuWillOpen(_ menu: NSMenu) { readItem?.title = Self.readTitle(speaking: speech.isSpeaking) }
+
+    private static func readTitle(speaking: Bool) -> String { speaking ? "停止朗读  ⌘⌃R" : "朗读选中文字  ⌘⌃R" }
+
+    /// Reads the front app's selection aloud with a system voice; pressed again while reading, it stops.
+    /// Without Accessibility permission the Quick Panel opens, since it explains how to grant it.
+    private func readSelectionAloud() {
+        if speech.isSpeaking { speech.stop(); return }
+        Task { @MainActor in
+            switch await selectionReader.read() {
+            case .text(let text): speech.speak(text)
+            case .empty: NSSound.beep()
+            case .needsAccessibility: controller?.toggle()
+            }
+        }
+    }
 
     /// Region screenshot → a new Workspace chat with the picture attached, ready for the question.
     private func askAboutScreen() {

@@ -37,6 +37,7 @@ Most AI tools make you go to them: open a tab, paste, wait, copy back. Aide goes
 | Press `⌘↩` on an answer | Continue the conversation in the Workspace. |
 | Press `↩` on an answer | Copy it and return to the app you came from. |
 | Press `⌘⌃S` and drag a region | Starts a Workspace chat with the screenshot attached (needs a vision-capable model). |
+| Select text in any app, press `⌘⌃R` | Reads it aloud with a system voice, on your Mac. Press again to stop. |
 | Ask it to delete a note, append to a note, or change a reminder | Shows exactly what will happen. Nothing runs until you allow it. |
 | *"What's on my calendar this week?"*, *"book dentist Tuesday 3pm"* | Reads your Calendar. A new event shows the exact date and time first and is only added after you approve. |
 | *"Summarize what I just copied"* | Reads the text on the clipboard, only when you ask. |
@@ -58,6 +59,7 @@ The full window, opened from the menu bar.
 - Conversation history with search, restored exactly as you left it, including found files and apps.
 - Streaming Markdown: tables, lists, and code blocks with a copy button.
 - Regenerate an answer, edit your last question, switch agent or model per conversation.
+- **朗读** under every answer (and on hover over your own messages) reads it aloud. Select part of it first to hear just that sentence or word.
 - Long answers keep up with the stream without freezing the window.
 
 ### Opt-in tools: web search and command line
@@ -100,6 +102,15 @@ The first time you open Aide it walks you through Ollama, a model (with a one-cl
 | Automation (Notes, Reminders, Calendar) | Read or change them when you ask | First time you ask for it |
 
 Release DMGs are ad-hoc signed, so macOS may ask again after an update. A build signed with a stable identity keeps its permissions across updates.
+
+### Read aloud
+
+Aide speaks with the macOS system voices (`AVSpeechSynthesizer`). Nothing is downloaded by Aide and no text leaves your Mac.
+
+- Three ways in: `⌘⌃R` on a selection in any app, the menu bar item **朗读选中文字**, or the speaker button in the Quick Panel and under Workspace messages. Each one stops the reading when pressed again.
+- Mixed Chinese and English is read with one voice per language, so an English example inside a Chinese explanation gets an English voice.
+- For each language Aide uses the best voice installed. For a natural English voice, download one marked **高音质 (Premium)**, such as *Ava*: System Settings → 辅助功能 → 阅读与朗读 → 系统声音 → ⓘ → 英语 → 声音. You don't need to make it the default voice, and Aide picks it up without a restart.
+- Siri voices can't be used by other apps, so Aide skips them.
 
 ## Settings
 
@@ -151,4 +162,6 @@ More: [macos/README.md](macos/README.md) · [design notes in `docs/`](docs/) · 
 - **`⌘⌃L` does nothing** — another app may own the shortcut. Record a different one in Settings.
 - **Selected text is not picked up** — grant Accessibility in System Settings → Privacy & Security. Typing a request does not need it.
 - **Screenshot answers ignore the image** — pick a model that supports images.
+- **Read aloud sounds robotic** — install a Premium/Enhanced voice for that language (see [Read aloud](#read-aloud)).
+- **`⌘⌃R` does nothing** — another app may own the shortcut. Use the menu bar item or the speaker buttons instead.
 - **Permissions asked again after an update** — expected with ad-hoc signed builds.

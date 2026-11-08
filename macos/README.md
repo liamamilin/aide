@@ -3,7 +3,7 @@
 SwiftUI/AppKit shell around the headless Python core (`python -m ai_desktop.core`, NDJSON over stdio).
 
 - `AideCore` — `CoreClient` (spawns the core, request/response + events) and run streaming.
-- `AideShell` — Quick Panel (⌘⌃L: typed requests with or without a selection, actions, openable results), Workspace window (conversations, streaming Markdown chat, screenshots via ⌘⌃S), Settings, selection reader, global hotkeys.
+- `AideShell` — Quick Panel (⌘⌃L: typed requests with or without a selection, actions, openable results), Workspace window (conversations, streaming Markdown chat, screenshots via ⌘⌃S), Settings, selection reader, global hotkeys, read-aloud (`SpeechReader`: system voices, one voice per language in mixed text; ⌘⌃R / menu bar / message buttons).
 - `Aide` — menu-bar executable. Packaged: starts the frozen core in `Contents/Resources/aide-core`; from `swift run`: runs the core from this source tree.
 
 ```bash
