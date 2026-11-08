@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var panelItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppMenu.install()   // Edit menu: without it ⌘C / ⌘V in text fields only beep
         let client = CoreClient(launch: Self.coreLaunch())
         core = client
         Task { @MainActor in
